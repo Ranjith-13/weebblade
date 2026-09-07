@@ -1,5 +1,13 @@
+# fastapi/uvicorn/httpx/slowapi are duplicated from backend/requirements.txt rather
+# than `-r`'d in, since that would also pull chromadb/sentence-transformers again
+# (already covered via airflow/requirements.txt below) - keep this list in sync
+# with backend/requirements.txt by hand when it changes. This has bitten twice
+# already (pyarrow, then slowapi): CI caught both because it actually installs
+# from this file, unlike ad hoc local venvs that happened to have the package
+# already present from something else.
 -r airflow/requirements.txt
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 httpx==0.28.1
+slowapi==0.1.9
 pytest==8.3.4
