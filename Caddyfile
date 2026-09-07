@@ -3,7 +3,7 @@
 # HTTPS automatically — and consider splitting Airflow/API onto subdomains instead
 # of path prefixes at that point, since it's a cleaner setup than base_url proxying.
 :80 {
-	handle_path /airflow* {
+	handle /airflow* {
 		reverse_proxy airflow-webserver:8080
 	}
 
