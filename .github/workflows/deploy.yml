@@ -1,0 +1,70 @@
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   WEEBBLADE_SSH_KEY  - private half of the EC2 key pair (contents of
+#                        weebblade-key.pem), used only within this workflow run
+#   WEEBBLADE_HOST     - the server's public IP or hostname
+#   WEEBBLADE_USER     - ubuntu
+#
+# Without these set, the deploy job's SSH step fails cleanly (bad host/auth) -
+# it doesn't silently do nothing or fall back to some other behavior.
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements-dev.txt
+
+      - run: pytest tests/ -v
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.WEEBBLADE_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.WEEBBLADE_HOST }}" >> ~/.ssh/known_hosts
+
+      # Same tar/scp approach used for every manual deploy this project has had so
+      # far - not git-clone-on-server, since the repo is private and that would
+      # need a second credential (a deploy key or PAT) just for the server to read
+      # its own code. The GitHub Actions runner already has the code checked out;
+      # this just ships it over.
+      - name: Sync code to server
+        run: |
+          tar --exclude='.git' --exclude='.github' --exclude='PROGRESS.md' \
+              --exclude='data' --exclude='.pytest_cache' --exclude='__pycache__' \
+              -czf /tmp/weebblade.tar.gz .
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              /tmp/weebblade.tar.gz \
+              "${{ secrets.WEEBBLADE_USER }}@${{ secrets.WEEBBLADE_HOST }}:/home/${{ secrets.WEEBBLADE_USER }}/weebblade.tar.gz"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              "${{ secrets.WEEBBLADE_USER }}@${{ secrets.WEEBBLADE_HOST }}" '
+                tar -xzf ~/weebblade.tar.gz -C ~/weebblade &&
+                rm ~/weebblade.tar.gz &&
+                find ~/weebblade -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+              '
+
+      - name: Rebuild and restart the stack
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              "${{ secrets.WEEBBLADE_USER }}@${{ secrets.WEEBBLADE_HOST }}" '
+                cd ~/weebblade &&
+                sudo docker compose up -d --build
+              '
