@@ -26,7 +26,9 @@ build/
 *.tfstate
 *.tfstate.*
 *.tfvars
-.terraform.lock.hcl
+# .terraform.lock.hcl is deliberately NOT ignored - it should be committed to pin
+# provider versions for reproducible plans/applies. terraform.tfvars.example isn't
+# matched by *.tfvars above (that only matches files ending in exactly .tfvars).
 
 # Data
 *.parquet

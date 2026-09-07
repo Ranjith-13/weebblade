@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars and fill in. Never commit the real terraform.tfvars
+# (already gitignored).
+
+allowed_ssh_cidr = "YOUR_CURRENT_IP/32" # check via: curl ifconfig.me
