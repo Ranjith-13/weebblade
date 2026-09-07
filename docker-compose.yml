@@ -1,5 +1,17 @@
+# Docker's json-file log driver has no size cap by default - the scheduler in
+# particular runs forever and logs on every heartbeat/DAG-bag scan, so without this
+# every service's stdout/stderr would grow unbounded on disk indefinitely. 10MB x 3
+# files per service is plenty for debugging recent behavior without ever becoming a
+# real disk concern.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-airflow-common: &airflow-common
   image: weebblade-airflow:2.10.4
+  logging: *default-logging
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres/airflow
@@ -28,6 +40,7 @@ x-airflow-common: &airflow-common
 services:
   postgres:
     image: postgres:16-alpine
+    logging: *default-logging
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -82,6 +95,7 @@ services:
 
   backend:
     build: ./backend
+    logging: *default-logging
     environment:
       PYTHONPATH: /app
       DATA_DIR: /data
@@ -99,6 +113,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    logging: *default-logging
     ports:
       - "80:80"
       - "443:443"
