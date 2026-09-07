@@ -32,7 +32,11 @@ jobs:
 
       - run: pip install -r requirements-dev.txt
 
-      - run: pytest tests/ -v
+      # python -m pytest (not bare `pytest`): -m prepends the repo root to
+      # sys.path, which is what makes the top-level ingestion/processing/ai/backend
+      # packages importable - matches how every local test run this project has
+      # had was actually invoked.
+      - run: python -m pytest tests/ -v
 
   deploy:
     needs: test
