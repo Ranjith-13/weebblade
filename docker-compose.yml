@@ -78,8 +78,19 @@ services:
 
   backend:
     build: ./backend
+    environment:
+      PYTHONPATH: /app
+      DATA_DIR: /app/data
+    volumes:
+      - ./ai:/app/ai
+      - ./data:/app/data:ro
     expose:
       - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped
 
   caddy:
@@ -92,8 +103,10 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - backend
-      - airflow-webserver
+      backend:
+        condition: service_healthy
+      airflow-webserver:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
