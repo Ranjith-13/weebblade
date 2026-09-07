@@ -1,0 +1,50 @@
+from ingestion.kitsu.transform import flatten_media
+
+
+def test_flatten_media():
+    media = {
+        "id": "44042",
+        "type": "anime",
+        "attributes": {
+            "canonicalTitle": "Kimetsu no Yaiba",
+            "titles": {"en": "Demon Slayer", "en_jp": "Kimetsu no Yaiba", "ja_jp": "鬼滅の刃"},
+            "subtype": "TV",
+            "status": "finished",
+            "episodeCount": 26,
+            "episodeLength": 23,
+            "startDate": "2019-04-06",
+            "averageRating": "84.5",
+            "popularityRank": 15,
+            "favoritesCount": 9000,
+        },
+        # attached by fetch_season._attach_metadata, not native Kitsu fields
+        "_genre_names": ["Action", "Fantasy"],
+        "_season": "SPRING",
+        "_season_year": 2019,
+    }
+
+    row = flatten_media(media)
+
+    assert row["source"] == "kitsu"
+    assert row["source_id"] == "44042"
+    assert row["title_english"] == "Demon Slayer"
+    assert row["season"] == "SPRING"
+    assert row["season_year"] == 2019
+    assert row["genres"] == ["Action", "Fantasy"]
+    assert row["average_score"] == 84.5
+    assert row["start_year"] == 2019
+    assert row["start_month"] == 4
+    assert row["start_day"] == 6
+    assert row["studios"] == []
+
+
+def test_flatten_media_handles_missing_optional_fields():
+    media = {"id": "1", "attributes": {}}
+
+    row = flatten_media(media)
+
+    assert row["source_id"] == "1"
+    assert row["title_english"] is None
+    assert row["genres"] == []
+    assert row["average_score"] is None
+    assert row["start_year"] is None

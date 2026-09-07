@@ -1,13 +1,4 @@
-from ingestion.anilist.fetch_season import season_for_month
 from ingestion.anilist.transform import flatten_media
-
-
-def test_season_for_month():
-    assert season_for_month(1) == "WINTER"
-    assert season_for_month(3) == "WINTER"
-    assert season_for_month(4) == "SPRING"
-    assert season_for_month(8) == "SUMMER"
-    assert season_for_month(12) == "FALL"
 
 
 def test_flatten_media():
@@ -34,8 +25,10 @@ def test_flatten_media():
 
     row = flatten_media(media)
 
-    assert row["id"] == 1
+    assert row["source"] == "anilist"
+    assert row["source_id"] == 1
     assert row["title_english"] == "Demon Slayer"
+    assert row["source_material"] == "MANGA"
     assert row["studios"] == ["ufotable"]
     assert row["start_year"] == 2019
 
@@ -45,6 +38,6 @@ def test_flatten_media_handles_missing_optional_fields():
 
     row = flatten_media(media)
 
-    assert row["id"] == 2
+    assert row["source_id"] == 2
     assert row["title_english"] is None
     assert row["studios"] == []

@@ -10,8 +10,9 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     studios = [s["name"] for s in (media.get("studios") or {}).get("nodes", [])]
 
     return {
-        "id": media["id"],
-        "id_mal": media.get("idMal"),
+        "source": "anilist",
+        "source_id": media["id"],
+        "mal_id": media.get("idMal"),
         "title_romaji": title.get("romaji"),
         "title_english": title.get("english"),
         "title_native": title.get("native"),
@@ -22,7 +23,7 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "episodes": media.get("episodes"),
         "duration": media.get("duration"),
         "genres": media.get("genres") or [],
-        "source": media.get("source"),
+        "source_material": media.get("source"),
         "average_score": media.get("averageScore"),
         "mean_score": media.get("meanScore"),
         "popularity": media.get("popularity"),

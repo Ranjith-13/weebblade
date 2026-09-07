@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..seasons import season_for_month
 from .client import AniListClient
 from .queries import SEASONAL_MEDIA_QUERY
 
@@ -10,16 +11,7 @@ logger = logging.getLogger(__name__)
 
 PER_PAGE = 50
 
-
-def season_for_month(month: int) -> str:
-    """Map a calendar month to AniList's quarterly season enum (WINTER = Jan-Mar)."""
-    if month in (1, 2, 3):
-        return "WINTER"
-    if month in (4, 5, 6):
-        return "SPRING"
-    if month in (7, 8, 9):
-        return "SUMMER"
-    return "FALL"
+__all__ = ["fetch_season", "season_for_month"]
 
 
 def fetch_season(
@@ -56,6 +48,6 @@ if __name__ == "__main__":
     season = sys.argv[1] if len(sys.argv) > 1 else season_for_month(now.month)
     year = int(sys.argv[2]) if len(sys.argv) > 2 else now.year
 
-    print(f"Fetching {season} {year}...")
+    print(f"Fetching {season} {year} from AniList...")
     titles = fetch_season(season, year)
     print(f"Fetched {len(titles)} titles")
