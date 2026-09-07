@@ -1,0 +1,13 @@
+# No domain pointed at the server yet, so this serves plain HTTP on the box's IP.
+# Once a domain exists, replace ":80" with the domain name and Caddy will handle
+# HTTPS automatically — and consider splitting Airflow/API onto subdomains instead
+# of path prefixes at that point, since it's a cleaner setup than base_url proxying.
+:80 {
+	handle_path /airflow* {
+		reverse_proxy airflow-webserver:8080
+	}
+
+	handle {
+		reverse_proxy backend:8000
+	}
+}
