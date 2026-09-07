@@ -12,7 +12,11 @@ from ingestion.storage import write_parquet, write_raw_json
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path("/opt/airflow/data")
+# Not /opt/airflow/data: DuckDB bakes this absolute path into each view's SQL at
+# CREATE VIEW time (processing/duckdb_catalog.py), and the backend container - which
+# opens the same warehouse.duckdb file over its own bind mount - needs to see the
+# data directory at this exact same path for those views to resolve there too.
+DATA_DIR = Path("/data")
 
 
 def _partition(season: str, season_year: int) -> str:

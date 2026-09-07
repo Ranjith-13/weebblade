@@ -9,7 +9,7 @@ from ..schemas import SearchResponse, SearchResult
 
 router = APIRouter(prefix="/search", tags=["search"])
 
-DATA_DIR = Path(os.environ.get("DATA_DIR", "/app/data"))
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 CHROMA_DIR = DATA_DIR / "chroma"
 
 

@@ -15,7 +15,11 @@ x-airflow-common: &airflow-common
     - ./ingestion:/opt/airflow/ingestion
     - ./processing:/opt/airflow/processing
     - ./ai:/opt/airflow/ai
-    - ./data:/opt/airflow/data
+    # /data (not /opt/airflow/data): DuckDB bakes the absolute path into each view's
+    # SQL at CREATE VIEW time (see processing/duckdb_catalog.py), so the backend
+    # container - which opens the same warehouse.duckdb file - needs to see the data
+    # directory at this exact same path, not just the same content.
+    - ./data:/data
     - airflow-logs:/opt/airflow/logs
   depends_on:
     postgres:
@@ -80,10 +84,10 @@ services:
     build: ./backend
     environment:
       PYTHONPATH: /app
-      DATA_DIR: /app/data
+      DATA_DIR: /data
     volumes:
       - ./ai:/app/ai
-      - ./data:/app/data:ro
+      - ./data:/data:ro
     expose:
       - "8000"
     healthcheck:

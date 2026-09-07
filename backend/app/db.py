@@ -7,7 +7,7 @@ from typing import Any, Iterator
 import duckdb
 from fastapi import HTTPException
 
-DATA_DIR = Path(os.environ.get("DATA_DIR", "/app/data"))
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 DB_PATH = DATA_DIR / "warehouse.duckdb"
 
 

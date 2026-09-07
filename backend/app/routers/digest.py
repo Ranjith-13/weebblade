@@ -9,7 +9,7 @@ from ..schemas import DigestResponse
 
 router = APIRouter(prefix="/digest", tags=["digest"])
 
-DATA_DIR = Path(os.environ.get("DATA_DIR", "/app/data"))
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 DIGESTS_DIR = DATA_DIR / "digests"
 
 
