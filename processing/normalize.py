@@ -18,6 +18,7 @@ _STRING_COLUMNS = [
     "title_romaji",
     "title_english",
     "title_native",
+    "synopsis",
     "format",
     "status",
     "season",

@@ -10,10 +10,12 @@ x-airflow-common: &airflow-common
     AIRFLOW__WEBSERVER__BASE_URL: http://${SERVER_HOST}/airflow
     AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "true"
     PYTHONPATH: /opt/airflow
+    GROQ_API_KEY: ${GROQ_API_KEY:-}
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./ingestion:/opt/airflow/ingestion
     - ./processing:/opt/airflow/processing
+    - ./ai:/opt/airflow/ai
     - ./data:/opt/airflow/data
     - airflow-logs:/opt/airflow/logs
   depends_on:

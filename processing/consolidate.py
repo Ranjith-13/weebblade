@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
 
 from .normalize import standardize_schema
 from .spark import get_spark_session
@@ -44,6 +45,11 @@ def consolidate_partition(data_dir: Path, partition: str, run_date: str) -> Path
     consolidated = frames[0]
     for df in frames[1:]:
         consolidated = consolidated.unionByName(df)
+
+    # run_date as a real column, not just a path component - lets the DuckDB catalog
+    # pick the latest snapshot per title once multiple weekly runs have landed (see
+    # duckdb_catalog.anime_media_latest), and supports trend-over-time queries later.
+    consolidated = consolidated.withColumn("run_date", F.lit(run_date))
 
     out_dir = data_dir / "processed" / "anime_media_consolidated" / partition / run_date
     consolidated.coalesce(1).write.mode("overwrite").parquet(str(out_dir))

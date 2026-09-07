@@ -7,6 +7,7 @@ def test_flatten_media():
         "title": "Kimetsu no Yaiba",
         "title_english": "Demon Slayer",
         "title_japanese": "鬼滅の刃",
+        "synopsis": "A boy named Tanjiro fights demons.",
         "type": "TV",
         "status": "Finished Airing",
         "season": "spring",
@@ -34,6 +35,7 @@ def test_flatten_media():
     assert row["start_year"] == 2019
     assert row["start_month"] == 4
     assert row["start_day"] == 6
+    assert row["synopsis"] == "A boy named Tanjiro fights demons."
 
 
 def test_flatten_media_handles_missing_optional_fields():

@@ -12,6 +12,7 @@ query ($season: MediaSeason, $seasonYear: Int, $page: Int, $perPage: Int) {
         english
         native
       }
+      description(asHtml: false)
       format
       status
       season

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..text import clean_synopsis
+
 
 def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     """Flatten a raw Jikan anime object into a flat row suitable for a table/DataFrame."""
@@ -20,6 +22,7 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "title_romaji": media.get("title"),
         "title_english": media.get("title_english"),
         "title_native": media.get("title_japanese"),
+        "synopsis": clean_synopsis(media.get("synopsis")),
         "format": media.get("type"),
         "status": media.get("status"),
         "season": (media.get("season") or "").upper() or None,

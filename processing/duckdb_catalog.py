@@ -38,6 +38,21 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
                 logger.info("Refreshed view %s -> %s", view_name, glob_path)
             except duckdb.IOException:
                 logger.warning("No files yet for view %s (%s), skipping", view_name, glob_path)
+
+        if "anime_media" in created:
+            # anime_media accumulates one row per title per weekly run - fine for
+            # trend-over-time analysis, but the digest and search index want just the
+            # most recent snapshot of each title, not one copy per week it's been seen.
+            con.execute(
+                "CREATE OR REPLACE VIEW anime_media_latest AS "
+                "SELECT * EXCLUDE (_rn) FROM ("
+                "  SELECT *, ROW_NUMBER() OVER ("
+                "    PARTITION BY source, source_id ORDER BY run_date DESC"
+                "  ) AS _rn FROM anime_media"
+                ") WHERE _rn = 1"
+            )
+            created.append("anime_media_latest")
+            logger.info("Refreshed view anime_media_latest (deduped to latest run per title)")
     finally:
         con.close()
     return created

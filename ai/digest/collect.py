@@ -1,0 +1,24 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import duckdb
+
+from .queries import STATS_QUERIES
+
+
+def collect_stats(db_path: Path) -> dict[str, list[dict[str, Any]]]:
+    """Run each stats query against the warehouse and return rows as plain dicts.
+
+    Uses pyarrow's to_pylist() rather than pulling in pandas just for this - pyarrow
+    is already a dependency of the ingestion layer.
+    """
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        return {
+            name: con.execute(sql).fetch_arrow_table().to_pylist()
+            for name, sql in STATS_QUERIES.items()
+        }
+    finally:
+        con.close()

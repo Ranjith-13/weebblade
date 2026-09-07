@@ -6,6 +6,7 @@ def test_flatten_media():
         "id": 1,
         "idMal": 1,
         "title": {"romaji": "Kimetsu no Yaiba", "english": "Demon Slayer", "native": "鬼滅の刃"},
+        "description": "A boy named Tanjiro<br>fights demons.",
         "format": "TV",
         "status": "FINISHED",
         "season": "SPRING",
@@ -31,6 +32,7 @@ def test_flatten_media():
     assert row["source_material"] == "MANGA"
     assert row["studios"] == ["ufotable"]
     assert row["start_year"] == 2019
+    assert row["synopsis"] == "A boy named Tanjiro fights demons."
 
 
 def test_flatten_media_handles_missing_optional_fields():
@@ -41,3 +43,4 @@ def test_flatten_media_handles_missing_optional_fields():
     assert row["source_id"] == 2
     assert row["title_english"] is None
     assert row["studios"] == []
+    assert row["synopsis"] is None

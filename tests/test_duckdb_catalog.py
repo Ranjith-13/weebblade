@@ -45,3 +45,47 @@ def test_refresh_catalog_handles_no_data_at_all(tmp_path):
     created = refresh_catalog(data_dir, db_path)
 
     assert created == []
+
+
+def test_anime_media_latest_dedupes_to_most_recent_run(tmp_path):
+    data_dir = tmp_path / "data"
+    # Same title (source="anilist", source_id="1") appears in two different weekly
+    # runs with a different score each time - anime_media_latest should keep only
+    # the most recent one, not both.
+    _write_parquet(
+        data_dir
+        / "processed"
+        / "anime_media_consolidated"
+        / "2026-SUMMER"
+        / "2026-08-31"
+        / "part-0.parquet",
+        [{"source": "anilist", "source_id": "1", "score_100": 70.0, "run_date": "2026-08-31"}],
+    )
+    _write_parquet(
+        data_dir
+        / "processed"
+        / "anime_media_consolidated"
+        / "2026-SUMMER"
+        / "2026-09-07"
+        / "part-0.parquet",
+        [{"source": "anilist", "source_id": "1", "score_100": 75.0, "run_date": "2026-09-07"}],
+    )
+
+    db_path = tmp_path / "warehouse.duckdb"
+    created = refresh_catalog(data_dir, db_path)
+
+    assert "anime_media_latest" in created
+
+    import duckdb
+
+    con = duckdb.connect(str(db_path))
+    try:
+        all_rows = con.execute("SELECT COUNT(*) FROM anime_media").fetchone()
+        latest_rows = con.execute(
+            "SELECT score_100, run_date FROM anime_media_latest"
+        ).fetchall()
+    finally:
+        con.close()
+
+    assert all_rows == (2,)
+    assert latest_rows == [(75.0, "2026-09-07")]

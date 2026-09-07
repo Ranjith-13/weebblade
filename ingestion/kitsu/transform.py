@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..text import clean_synopsis
+
 
 def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     """Flatten a raw Kitsu anime resource (as returned by fetch_season) into a flat row."""
@@ -23,6 +25,7 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "title_romaji": titles.get("en_jp") or attrs.get("canonicalTitle"),
         "title_english": titles.get("en"),
         "title_native": titles.get("ja_jp"),
+        "synopsis": clean_synopsis(attrs.get("synopsis")),
         "format": attrs.get("subtype"),
         "status": attrs.get("status"),
         "season": media.get("_season"),
