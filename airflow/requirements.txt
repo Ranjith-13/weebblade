@@ -4,3 +4,12 @@ pyspark==3.5.4
 duckdb==1.1.3
 sentence-transformers==3.3.1
 chromadb==0.5.23
+
+# The base apache/airflow image ships pandas 2.1.4, compiled against numpy<2.
+# sentence-transformers/chromadb's own dependency chain pulls in numpy 2.x, which
+# breaks pandas' compiled C extensions at import time (ValueError: numpy.dtype size
+# changed...) - and pyarrow.Table.from_pylist() opportunistically imports pandas
+# internally even though we never import it ourselves, so this silently broke every
+# Parquet write in the project. Pin pandas forward to a numpy-2-compatible release
+# instead of trying to hold numpy back (numpy 2.x is what the ML deps actually want).
+pandas>=2.2.3

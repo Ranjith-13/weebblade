@@ -53,3 +53,27 @@ def test_collect_stats_reads_from_consolidated_view(tmp_path):
     assert {row["genre"] for row in stats["genre_counts"]} == {"Action", "Fantasy", "Drama"}
     assert stats["format_counts"] == [{"format": "TV", "title_count": 2}]
     assert stats["season_summary"][0]["title_count"] == 2
+
+
+def test_collect_stats_handles_missing_warehouse_file(tmp_path):
+    # Every source failed and consolidate/refresh_catalog never even created the
+    # warehouse file - collect_stats should degrade gracefully, not raise.
+    stats = collect_stats(tmp_path / "does-not-exist.duckdb")
+
+    assert stats == {
+        "top_rated": [],
+        "genre_counts": [],
+        "format_counts": [],
+        "season_summary": [],
+    }
+
+
+def test_collect_stats_handles_missing_view(tmp_path):
+    # Warehouse file exists (refresh_catalog ran) but every source failed that run,
+    # so anime_media/anime_media_latest were never created.
+    db_path = tmp_path / "warehouse.duckdb"
+    refresh_catalog(tmp_path / "data", db_path)
+
+    stats = collect_stats(db_path)
+
+    assert stats["top_rated"] == []

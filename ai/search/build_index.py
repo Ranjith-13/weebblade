@@ -24,10 +24,21 @@ def build_index(db_path: Path, chroma_dir: Path) -> int:
     Reads from anime_media_latest (one row per title, not per weekly run - see
     processing/duckdb_catalog.py) so re-running this doesn't index the same title
     multiple times once a few weeks of data have accumulated.
+
+    Returns 0 (rather than raising) if the warehouse file or the anime_media_latest
+    view don't exist yet - a legitimate state whenever every source has failed on a
+    given run, not just before the very first successful one.
     """
+    if not db_path.exists():
+        logger.warning("Warehouse file %s doesn't exist yet - nothing to index", db_path)
+        return 0
+
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         rows: list[dict[str, Any]] = con.execute(_SELECT_FOR_INDEX).fetch_arrow_table().to_pylist()
+    except duckdb.CatalogException:
+        logger.warning("anime_media_latest view doesn't exist yet - nothing to index")
+        return 0
     finally:
         con.close()
 
