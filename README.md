@@ -1,37 +1,69 @@
 # WeebBlade
 
-Anime/manga trend-tracking platform built as an end-to-end data engineering project: ingestion,
-orchestration, storage, and two AI-assisted features on top of real pipeline infrastructure
-rather than a one-off notebook.
+Anime/manga trend-tracking platform built as an end-to-end data engineering project —
+ingestion, orchestration, processing, storage, an API, and two AI-assisted features on
+real pipeline infrastructure, not a one-off notebook.
 
 ## What it does
 
-Tracks anime/manga trends (seasonal releases, studio output, genre shifts over time) sourced from
-the [AniList GraphQL API](https://anilist.co/graphiql). Two AI features sit on top of the
-pipeline output:
+Tracks anime trends (seasonal releases, genre shifts, studio output) pulled weekly from
+three independent sources — [AniList](https://anilist.co/graphiql),
+[Jikan](https://docs.api.jikan.moe/) (MyAnimeList), and [Kitsu](https://kitsu.docs.apiary.io/) —
+reconciled into one queryable warehouse. Two AI features sit on top:
 
 1. A weekly LLM-generated natural-language trend digest.
-2. Semantic "find similar titles" search using local embeddings + a vector store — not just
-   tag-matching.
+2. Semantic "find similar titles" search over local embeddings + a vector store — not
+   just tag-matching.
+
+## Architecture
+
+```
+AniList ──┐
+Jikan  ────┼──► Airflow ingestion tasks ──► raw JSON + per-source Parquet
+Kitsu  ────┘         │
+                      ▼
+              PySpark consolidation (schema reconciliation, score normalization)
+                      │
+                      ▼
+              DuckDB warehouse (dated snapshots + a "latest per title" view)
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+   LLM digest   Chroma search   FastAPI (/anime, /digest, /search)
+      (Groq)   (sentence-transformers)
+```
+
+Each ingestion source runs as an independent Airflow task — one API being down doesn't
+block the others from landing data, and the downstream processing/digest/search tasks
+run over whatever actually arrived that week rather than requiring every source to
+succeed.
+
+## API
+
+- `GET /anime` — filter by season, genre, format, minimum score; sortable, paginated.
+- `GET /anime/{source}/{source_id}` — single title detail.
+- `GET /digest`, `/digest/latest`, `/digest/{run_date}` — the weekly LLM trend digest.
+- `GET /search?q=...` — semantic similarity search over indexed titles.
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
-| Infra | Terraform → AWS EC2 |
-| Orchestration | Apache Airflow (self-hosted) |
-| Ingestion | Python + AniList GraphQL API |
+| Infra | AWS EC2 (Terraform config written, not yet applied) |
+| Orchestration | Apache Airflow (self-hosted, Docker) |
+| Ingestion | Python — AniList (GraphQL), Jikan + Kitsu (REST) |
 | Processing | PySpark (single-node) |
 | Storage | DuckDB + Parquet |
 | Backend | FastAPI |
-| Frontend | React (GitHub Pages) |
+| AI | Groq (digest) + sentence-transformers/Chroma (semantic search) |
 | Reverse proxy / HTTPS | Caddy |
-| CI/CD | GitHub Actions → GHCR → deploy to VM |
-| AI | Groq/Gemini free-tier API (digest) + sentence-transformers/Chroma (semantic search) |
+| CI/CD | GitHub Actions — test on every push, auto-deploy `main` |
+| Frontend | React (GitHub Pages) — not yet built |
 
 ## Status
 
-Early scaffolding — infra is up, pipeline and app code are being built out incrementally.
+Ingestion → processing → storage → both AI features → API → CI/CD are all live and
+verified end-to-end against real data. The frontend is the one piece not yet built.
 
 ## License
 
