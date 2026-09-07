@@ -120,6 +120,11 @@ services:
     volumes:
       - caddy-data:/data
       - caddy-config:/config
+      # A directory bind mount, not a single file - Caddy itself creates and
+      # continuously appends to access.log inside it, nothing external ever
+      # replaces the file, so this doesn't have the inode-swap problem a
+      # deploy-overwritten single-file mount had (see PROGRESS.md).
+      - ./caddy-logs:/var/log/caddy
     depends_on:
       backend:
         condition: service_healthy

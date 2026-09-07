@@ -15,6 +15,18 @@ weebblade.duckdns.org {
 		X-Frame-Options SAMEORIGIN
 	}
 
+	# Structured per-request access log to a file (not just container stdout) so
+	# fail2ban on the host can tail it and ban IPs making abusive request volumes -
+	# a second layer below the app-level rate limiting (slowapi), at the firewall
+	# instead of inside the app. Caddy handles its own rotation here.
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		format json
+	}
+
 	handle /airflow* {
 		reverse_proxy airflow-webserver:8080
 	}
