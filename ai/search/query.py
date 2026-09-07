@@ -11,12 +11,9 @@ def find_similar(chroma_dir: Path, query_text: str, n_results: int = 10) -> list
     """Embed a free-text query (a title, a vibe, a description) and return the most
     semantically similar indexed titles, nearest first.
     """
-    import chromadb
-    from chromadb.config import Settings
+    from .client import get_chroma_client
 
-    client = chromadb.PersistentClient(
-        path=str(chroma_dir), settings=Settings(anonymized_telemetry=False)
-    )
+    client = get_chroma_client(chroma_dir)
     collection = client.get_collection(COLLECTION_NAME)
 
     [query_embedding] = embed_texts([query_text])

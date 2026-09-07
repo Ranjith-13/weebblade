@@ -46,12 +46,9 @@ def build_index(db_path: Path, chroma_dir: Path) -> int:
         logger.warning("No data in anime_media_latest - nothing to index")
         return 0
 
-    import chromadb
-    from chromadb.config import Settings
+    from .client import get_chroma_client
 
-    client = chromadb.PersistentClient(
-        path=str(chroma_dir), settings=Settings(anonymized_telemetry=False)
-    )
+    client = get_chroma_client(chroma_dir)
     existing_names = {c.name for c in client.list_collections()}
     if COLLECTION_NAME in existing_names:
         client.delete_collection(COLLECTION_NAME)  # full rebuild, not an incremental upsert
