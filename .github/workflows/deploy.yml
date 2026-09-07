@@ -23,6 +23,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      # sentence-transformers pulls torch as a dependency, and PyPI's default wheel
+      # is the CUDA/GPU build - several GB of unnecessary nvidia-*/triton packages
+      # that exhausted disk on both the EC2 build and (found here) the Actions
+      # runner's smaller disk too ("No space left on device"). Same fix as the
+      # Airflow/backend Dockerfiles: install the CPU wheel first.
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
       - run: pip install -r requirements-dev.txt
 
       - run: pytest tests/ -v
