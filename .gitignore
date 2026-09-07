@@ -1,0 +1,38 @@
+# Secrets / keys
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+
+# Internal working notes (contains infra IPs, instance IDs, key paths)
+PROGRESS.md
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+
+# Data
+*.parquet
+*.duckdb
+data/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
