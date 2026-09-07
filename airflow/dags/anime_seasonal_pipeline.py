@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pendulum
 from airflow.decorators import dag, task
+from airflow.utils.trigger_rule import TriggerRule
 
 from ingestion.seasons import season_for_month
 from ingestion.storage import write_parquet, write_raw_json
@@ -19,16 +20,16 @@ def _partition(season: str, season_year: int) -> str:
 
 
 @dag(
-    dag_id="anime_seasonal_ingest",
+    dag_id="anime_seasonal_pipeline",
     schedule="@weekly",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     catchup=False,
-    tags=["ingestion", "anime"],
+    tags=["ingestion", "processing", "anime"],
 )
-def anime_seasonal_ingest():
+def anime_seasonal_pipeline():
     # One task per source, deliberately not chained together: if one API is down (as
-    # AniList currently is) the others should still land data rather than the whole
-    # DAG run blocking on it.
+    # AniList and Jikan currently are) the others should still land data rather than
+    # the whole DAG run blocking on it.
 
     @task
     def fetch_anilist(logical_date=None):
@@ -87,9 +88,30 @@ def anime_seasonal_ingest():
             run_date,
         )
 
-    fetch_anilist()
-    fetch_jikan()
-    fetch_kitsu()
+    # trigger_rule=ALL_DONE: run even if some (or all but one) of the fetch tasks
+    # above failed - consolidate whatever snapshots actually landed rather than
+    # blocking the whole pipeline on every source being healthy at once.
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def consolidate(logical_date=None):
+        from processing.consolidate import consolidate_partition
+
+        season = season_for_month(logical_date.month)
+        season_year = logical_date.year
+        run_date = logical_date.to_date_string()
+        partition = _partition(season, season_year)
+
+        result = consolidate_partition(DATA_DIR, partition, run_date)
+        logger.info("Consolidated output: %s", result)
+
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def refresh_catalog():
+        from processing.duckdb_catalog import refresh_catalog as _refresh_catalog
+
+        views = _refresh_catalog(DATA_DIR, DATA_DIR / "warehouse.duckdb")
+        logger.info("Refreshed views: %s", views)
+
+    fetches = [fetch_anilist(), fetch_jikan(), fetch_kitsu()]
+    fetches >> consolidate() >> refresh_catalog()
 
 
-anime_seasonal_ingest()
+anime_seasonal_pipeline()

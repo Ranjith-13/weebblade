@@ -13,6 +13,7 @@ x-airflow-common: &airflow-common
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./ingestion:/opt/airflow/ingestion
+    - ./processing:/opt/airflow/processing
     - ./data:/opt/airflow/data
     - airflow-logs:/opt/airflow/logs
   depends_on:
