@@ -47,8 +47,11 @@ def build_index(db_path: Path, chroma_dir: Path) -> int:
         return 0
 
     import chromadb
+    from chromadb.config import Settings
 
-    client = chromadb.PersistentClient(path=str(chroma_dir))
+    client = chromadb.PersistentClient(
+        path=str(chroma_dir), settings=Settings(anonymized_telemetry=False)
+    )
     existing_names = {c.name for c in client.list_collections()}
     if COLLECTION_NAME in existing_names:
         client.delete_collection(COLLECTION_NAME)  # full rebuild, not an incremental upsert
