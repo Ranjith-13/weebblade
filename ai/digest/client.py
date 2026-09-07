@@ -5,7 +5,10 @@ import os
 import requests
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+# Groq's model lineup rotates - llama-3.3-70b-versatile (the obvious pick from
+# training-era knowledge) has since been retired; verified live against
+# /openai/v1/models that this one is actually available as of 2026-09.
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 
 
 class GroqClient:
