@@ -3,6 +3,16 @@
 # HTTPS automatically — and consider splitting Airflow/API onto subdomains instead
 # of path prefixes at that point, since it's a cleaner setup than base_url proxying.
 :80 {
+	# Cheap defense-in-depth, applies to every response regardless of route. No CSP
+	# here deliberately - Airflow's own UI (proxied at /airflow) loads its own
+	# inline scripts/styles, and a strict CSP written for our JSON API would break
+	# it; revisit if/when Airflow gets split onto its own subdomain.
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+	}
+
 	handle /airflow* {
 		reverse_proxy airflow-webserver:8080
 	}

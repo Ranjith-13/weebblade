@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -39,6 +40,18 @@ app = FastAPI(title="WeebBlade API", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+# Wide open deliberately, not an oversight: this is a fully public, unauthenticated,
+# read-only JSON API (no cookies, no sessions, nothing CORS would meaningfully be
+# protecting here) and the eventual frontend's origin isn't decided yet (Vercel?
+# GitHub Pages? something else?). Tighten to a specific origin once that's settled,
+# and definitely before any endpoint ever handles credentials or mutations.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 app.include_router(anime.router)
 app.include_router(digest.router)
