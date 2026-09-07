@@ -14,9 +14,15 @@ PAGE_LIMIT = 20
 def fetch_season(
     season: str, season_year: int, client: KitsuClient | None = None
 ) -> list[dict[str, Any]]:
-    """Fetch every anime airing in a given season from Kitsu, including genre/category names."""
+    """Fetch every anime airing in a given season from Kitsu, including genre/category names.
+
+    Deduplicates by id across pages - confirmed live that Kitsu's own pagination is not
+    reliable (an offset=20 request returned byte-identical data to offset=0 for the
+    same query), so trusting page boundaries alone silently doubles some rows.
+    """
     client = client or KitsuClient()
     results: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
 
     url = f"{KITSU_API_URL}/anime"
     params = {
@@ -28,7 +34,11 @@ def fetch_season(
 
     while url:
         payload = client.get(url, params=params)
-        results.extend(_attach_metadata(payload, season, season_year))
+        for item in _attach_metadata(payload, season, season_year):
+            if item["id"] in seen_ids:
+                continue
+            seen_ids.add(item["id"])
+            results.append(item)
         logger.info("Fetched %s titles so far", len(results))
 
         url = (payload.get("links") or {}).get("next")

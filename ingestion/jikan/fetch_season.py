@@ -12,14 +12,24 @@ logger = logging.getLogger(__name__)
 def fetch_season(
     season: str, season_year: int, client: JikanClient | None = None
 ) -> list[dict[str, Any]]:
-    """Fetch every anime airing in a given season from Jikan (MyAnimeList wrapper)."""
+    """Fetch every anime airing in a given season from Jikan (MyAnimeList wrapper).
+
+    Deduplicates by mal_id across pages as a defensive measure - Kitsu's pagination was
+    confirmed to return duplicate pages live (see ingestion/kitsu/fetch_season.py), so
+    this doesn't assume any external API's page boundaries are perfectly reliable.
+    """
     client = client or JikanClient()
     results: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
     page = 1
 
     while True:
         payload = client.get(f"/seasons/{season_year}/{season.lower()}", params={"page": page})
-        results.extend(payload["data"])
+        for media in payload["data"]:
+            if media["mal_id"] in seen_ids:
+                continue
+            seen_ids.add(media["mal_id"])
+            results.append(media)
         logger.info("Fetched page %s (%s titles so far)", page, len(results))
 
         if not payload.get("pagination", {}).get("has_next_page"):

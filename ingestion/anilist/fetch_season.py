@@ -17,9 +17,15 @@ __all__ = ["fetch_season", "season_for_month"]
 def fetch_season(
     season: str, season_year: int, client: AniListClient | None = None
 ) -> list[dict[str, Any]]:
-    """Fetch every anime airing in a given AniList season, paginating until exhausted."""
+    """Fetch every anime airing in a given AniList season, paginating until exhausted.
+
+    Deduplicates by id across pages as a defensive measure - Kitsu's pagination was
+    confirmed to return duplicate pages live (see ingestion/kitsu/fetch_season.py), so
+    this doesn't assume any external API's page boundaries are perfectly reliable.
+    """
     client = client or AniListClient()
     results: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
     page = 1
 
     while True:
@@ -28,7 +34,11 @@ def fetch_season(
             {"season": season, "seasonYear": season_year, "page": page, "perPage": PER_PAGE},
         )
         media_page = data["Page"]
-        results.extend(media_page["media"])
+        for media in media_page["media"]:
+            if media["id"] in seen_ids:
+                continue
+            seen_ids.add(media["id"])
+            results.append(media)
         logger.info("Fetched page %s (%s titles so far)", page, len(results))
 
         if not media_page["pageInfo"]["hasNextPage"]:
