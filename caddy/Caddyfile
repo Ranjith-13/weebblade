@@ -1,8 +1,10 @@
-# No domain pointed at the server yet, so this serves plain HTTP on the box's IP.
-# Once a domain exists, replace ":80" with the domain name and Caddy will handle
-# HTTPS automatically — and consider splitting Airflow/API onto subdomains instead
-# of path prefixes at that point, since it's a cleaner setup than base_url proxying.
-:80 {
+# weebblade.duckdns.org (free DuckDNS subdomain, points at the EC2 IP) - giving
+# Caddy a real hostname instead of ":80" is the entire HTTPS setup: it requests and
+# renews a real Let's Encrypt cert automatically and redirects HTTP -> HTTPS on its
+# own, no extra config needed. Consider splitting Airflow/API onto subdomains
+# instead of the /airflow path-prefix hack at some point - a cleaner setup than
+# base_url proxying, just not required for HTTPS itself.
+weebblade.duckdns.org {
 	# Cheap defense-in-depth, applies to every response regardless of route. No CSP
 	# here deliberately - Airflow's own UI (proxied at /airflow) loads its own
 	# inline scripts/styles, and a strict CSP written for our JSON API would break
