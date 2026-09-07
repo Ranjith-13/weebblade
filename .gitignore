@@ -39,3 +39,6 @@ data/
 .DS_Store
 .vscode/
 .idea/
+
+# Claude Code local tool state (not project code)
+.claude/

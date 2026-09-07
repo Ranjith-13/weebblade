@@ -3,8 +3,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
+from ..limiter import limiter
 from ..schemas import SearchResponse, SearchResult
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -14,7 +15,10 @@ CHROMA_DIR = DATA_DIR / "chroma"
 
 
 @router.get("", response_model=SearchResponse)
-def search(q: str = Query(..., min_length=1), n: int = Query(10, ge=1, le=50)) -> SearchResponse:
+@limiter.limit("20/minute")
+def search(
+    request: Request, q: str = Query(..., min_length=1), n: int = Query(10, ge=1, le=50)
+) -> SearchResponse:
     if not CHROMA_DIR.exists():
         raise HTTPException(503, "Search index not built yet")
 

@@ -4,7 +4,11 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
+from .limiter import limiter
 from .routers import anime, digest, search
 
 logger = logging.getLogger(__name__)
@@ -31,6 +35,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="WeebBlade API", lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.include_router(anime.router)
 app.include_router(digest.router)

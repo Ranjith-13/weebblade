@@ -15,4 +15,9 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 COPY app ./app
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers/--forwarded-allow-ips: this container is never reachable except
+# through Caddy (no port published to the host, only `expose`), so trusting
+# X-Forwarded-For from any peer here is safe - it's always Caddy. Without this,
+# request.client.host (and therefore rate limiting, see main.py) would see every
+# request as coming from Caddy's own container IP instead of the real client.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
