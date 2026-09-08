@@ -5,8 +5,10 @@
 .env.*
 !.env.example
 
-# Internal working notes (contains infra IPs, instance IDs, key paths)
+# Internal working notes (contain infra IPs, instance IDs, key paths - no secret
+# values, but more detail than belongs in a public repo)
 PROGRESS.md
+HANDOFF.md
 
 # Python
 __pycache__/
