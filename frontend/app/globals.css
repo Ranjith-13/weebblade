@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/* Design tokens - see DESIGN.md for the intent behind them. Dark-only by
+   deliberate choice: this is a single committed look, not a themed app, so
+   there's no prefers-color-scheme branch to keep in sync. */
+@theme {
+  --color-ground: #0b0b0f;
+  --color-raised: #101016;
+  --color-ink: #f2f2f0;
+  --color-muted: #8a8a92;
+  --color-rule: #22222a;
+  --color-accent: #e23e57;
+
+  --font-display: var(--font-display), ui-serif, Georgia, serif;
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Figures are content in this project (scores, episode counts, similarity
+   distances), so they get tabular numerals everywhere rather than only where
+   someone remembered to ask. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* The small uppercase metadata label used throughout - wide tracking against
+   the oversized display type is most of what carries the editorial hierarchy. */
+.label {
+  font-size: 0.6875rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-muted);
+}
+
+/* Prose for the LLM-written digest. Not @tailwindcss/typography: that plugin's
+   defaults (rounded code blocks, its own color scale) fight the design, and the
+   digest is plain Markdown - headings, paragraphs, lists, emphasis. */
+.digest-prose {
+  max-width: 68ch;
+}
+.digest-prose p {
+  margin-block: 1.15em;
+  line-height: 1.75;
+}
+.digest-prose h1,
+.digest-prose h2,
+.digest-prose h3 {
+  font-family: var(--font-display);
+  line-height: 1.15;
+  margin-block: 1.6em 0.5em;
+  text-wrap: balance;
+}
+.digest-prose h1 {
+  font-size: 1.9rem;
+}
+.digest-prose h2 {
+  font-size: 1.5rem;
+}
+.digest-prose h3 {
+  font-size: 1.2rem;
+}
+.digest-prose ul,
+.digest-prose ol {
+  margin-block: 1.15em;
+  padding-left: 1.25em;
+  line-height: 1.7;
+}
+.digest-prose li {
+  margin-block: 0.4em;
+}
+.digest-prose ul > li {
+  list-style: none;
+  position: relative;
+}
+.digest-prose ul > li::before {
+  content: "";
+  position: absolute;
+  left: -1em;
+  top: 0.72em;
+  width: 0.4em;
+  height: 1px;
+  background: var(--color-accent);
+}
+.digest-prose ol > li {
+  list-style: decimal;
+}
+.digest-prose strong {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+.digest-prose em {
+  color: var(--color-ink);
+}
+.digest-prose a {
+  color: var(--color-accent);
+  text-underline-offset: 3px;
+  text-decoration-line: underline;
+}

@@ -83,8 +83,12 @@ jobs:
       # this just ships it over.
       - name: Sync code to server
         run: |
+          # frontend/ is excluded deliberately: it's deployed by Vercel, not to
+          # this server, and shipping it here would drag node_modules and build
+          # output into every backend deploy for no reason.
           tar --exclude='.git' --exclude='.github' --exclude='PROGRESS.md' \
               --exclude='data' --exclude='.pytest_cache' --exclude='__pycache__' \
+              --exclude='frontend' \
               -czf /tmp/weebblade.tar.gz .
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
               /tmp/weebblade.tar.gz \
