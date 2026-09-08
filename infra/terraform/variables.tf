@@ -38,3 +38,9 @@ variable "ami_id" {
   type        = string
   default     = "ami-03f1d2b3639314198"
 }
+
+variable "subnet_id" {
+  description = "Subnet ID the instance actually launched into (default VPC, ap-south-2c) - pinned for the same reason as ami_id: data.aws_subnets.default.ids[0] returns an arbitrary subnet from the default VPC's multiple AZs, not necessarily this one, which made a fresh `terraform plan` after import propose replacing the running instance just to move it to a different (but equally valid) subnet."
+  type        = string
+  default     = "subnet-0733aa28f9366dbdb"
+}

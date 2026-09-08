@@ -12,8 +12,13 @@ data "aws_subnets" "default" {
 }
 
 resource "aws_security_group" "weebblade" {
-  name        = "weebblade-sg"
-  description = "SSH from a trusted IP only; HTTP/HTTPS open for the public web app"
+  name = "weebblade-sg"
+  # AWS security group description is immutable (ForceNew) - this is the
+  # console's own auto-generated default from when the SG was created by hand
+  # via the launch wizard, kept verbatim so `terraform plan` doesn't propose
+  # destroying and recreating a security group actively attached to a running
+  # instance just to change a cosmetic description string.
+  description = "launch-wizard-1 created 2026-09-07T06:25:43.574Z"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
