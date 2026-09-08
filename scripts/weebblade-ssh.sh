@@ -23,7 +23,7 @@ AWS_PROFILE_NAME="${WEEBBLADE_AWS_PROFILE:-weebblade-ci-sg}"
 REGION="${AWS_DEFAULT_REGION:-ap-south-2}"
 HOST="${WEEBBLADE_HOST:-weebblade.duckdns.org}"
 USER_NAME="${WEEBBLADE_USER:-ubuntu}"
-KEY="${WEEBBLADE_KEY:-$HOME/.ssh/weebblade-key.pem}"
+KEY="${WEEBBLADE_KEY:-}"
 
 # Resolve the AWS CLI. On Windows/Git Bash a pip-installed CLI is `aws.cmd` and
 # often isn't on PATH as plain `aws`, so fall back rather than failing with a
@@ -53,6 +53,30 @@ fi
 aws_sg() {
   "$AWS_BIN" --profile "$AWS_PROFILE_NAME" --region "$REGION" "$@"
 }
+
+# Resolve the SSH key the same way. The key is per-machine and there is no single
+# right name for it: the machine that created the EC2 instance has the original
+# weebblade-key.pem, while any machine added later to authorized_keys has a
+# locally-generated key under whatever name its owner chose. Guessing one path
+# and failing with ssh's opaque "no such identity" is worse than looking.
+if [[ -z "$KEY" ]]; then
+  for candidate in \
+      "$HOME/.ssh/weebblade-key.pem" \
+      "$HOME/.ssh/weebblade" \
+      "$HOME/.ssh/weebblade.pem" \
+      "$HOME/.ssh/id_ed25519_weebblade"; do
+    if [[ -f "$candidate" ]]; then
+      KEY="$candidate"; break
+    fi
+  done
+fi
+if [[ -z "$KEY" || ! -f "$KEY" ]]; then
+  echo "No SSH key found. Looked for weebblade-key.pem / weebblade / weebblade.pem" >&2
+  echo "under ~/.ssh. Set WEEBBLADE_KEY to your key's path, e.g.:" >&2
+  echo "  export WEEBBLADE_KEY=\"\$HOME/.ssh/weebblade\"        # bash/zsh" >&2
+  echo "  set -Ux WEEBBLADE_KEY \"\$HOME/.ssh/weebblade\"       # fish" >&2
+  exit 1
+fi
 
 MY_IP="$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')"
 if [[ -z "$MY_IP" ]]; then
