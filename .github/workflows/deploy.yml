@@ -3,6 +3,13 @@
 #                        weebblade-key.pem), used only within this workflow run
 #   WEEBBLADE_HOST     - the server's public IP or hostname
 #   WEEBBLADE_USER     - ubuntu
+#   CI_AWS_ACCESS_KEY_ID / CI_AWS_SECRET_ACCESS_KEY - a minimally-scoped IAM user
+#                        (weebblade-ci-sg) that can only Authorize/Revoke/Describe
+#                        ingress on the one weebblade security group - used to
+#                        punch a temporary hole for this runner's own IP so SSH
+#                        can stay closed to the internet at large the rest of the
+#                        time (see infra/terraform, allowed_ssh_cidr)
+#   WEEBBLADE_SG_ID    - the security group ID (sg-029497100335e0355)
 #
 # Without these set, the deploy job's SSH step fails cleanly (bad host/auth) -
 # it doesn't silently do nothing or fall back to some other behavior.
@@ -42,8 +49,25 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ap-south-2
     steps:
       - uses: actions/checkout@v4
+
+      # SSH is closed to the internet at large (see infra/terraform,
+      # allowed_ssh_cidr) - runners don't have a fixed IP, so this punches a
+      # /32 hole for just this run's own IP, used only for the SSH steps below.
+      # The "Revoke temporary SSH access" step at the bottom always removes it
+      # again, success or failure - a runner's IP is never left allowed.
+      - name: Authorize this runner's IP for SSH
+        run: |
+          RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
+          echo "RUNNER_IP=$RUNNER_IP" >> "$GITHUB_ENV"
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${{ secrets.WEEBBLADE_SG_ID }}" \
+            --protocol tcp --port 22 --cidr "${RUNNER_IP}/32"
 
       - name: Set up SSH
         run: |
@@ -79,3 +103,13 @@ jobs:
                 cd ~/weebblade &&
                 sudo docker compose up -d --build
               '
+
+      # if: always() - this must run whether the deploy above succeeded or
+      # failed, otherwise a failed run would leave this runner's IP permanently
+      # allowed through SSH until manually cleaned up.
+      - name: Revoke temporary SSH access
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${{ secrets.WEEBBLADE_SG_ID }}" \
+            --protocol tcp --port 22 --cidr "${RUNNER_IP}/32"
