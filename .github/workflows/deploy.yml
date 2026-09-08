@@ -96,12 +96,23 @@ jobs:
                 find ~/weebblade -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
               '
 
+      # docker compose up --build alone reuses whatever base image layers
+      # (python:3.12-slim, postgres:16-alpine, caddy:2-alpine,
+      # apache/airflow:...) already happen to be cached locally - it does NOT
+      # re-pull them just because a newer, patched build of the same tag has
+      # since been published upstream. Confirmed this was real: caddy:2-alpine
+      # on the server was still the copy from over two months earlier. `pull`
+      # (for the postgres image: service) and `build --pull` (for the
+      # Dockerfile-built services) force a fresh check on every deploy so OS-
+      # level security patches in these base images actually get picked up.
       - name: Rebuild and restart the stack
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
               "${{ secrets.WEEBBLADE_USER }}@${{ secrets.WEEBBLADE_HOST }}" '
                 cd ~/weebblade &&
-                sudo docker compose up -d --build
+                sudo docker compose pull postgres &&
+                sudo docker compose build --pull &&
+                sudo docker compose up -d
               '
 
       # if: always() - this must run whether the deploy above succeeded or
