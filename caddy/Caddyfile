@@ -1,14 +1,15 @@
-# weebblade.duckdns.org (free DuckDNS subdomain, points at the EC2 IP) - giving
-# Caddy a real hostname instead of ":80" is the entire HTTPS setup: it requests and
-# renews a real Let's Encrypt cert automatically and redirects HTTP -> HTTPS on its
-# own, no extra config needed. Consider splitting Airflow/API onto subdomains
-# instead of the /airflow path-prefix hack at some point - a cleaner setup than
-# base_url proxying, just not required for HTTPS itself.
+# weebblade.duckdns.org + weebblade-airflow.duckdns.org (both free DuckDNS
+# subdomains, both point at the same EC2 IP) - giving Caddy real hostnames instead
+# of ":80" is the entire HTTPS setup: it requests and renews a real Let's Encrypt
+# cert per hostname automatically and redirects HTTP -> HTTPS on its own, no extra
+# config needed. Split onto separate subdomains (was previously a /airflow
+# path-prefix on the same domain) so each service gets a CSP suited to it, and so
+# Airflow's BASE_URL doesn't need path-rewriting quirks Caddy's handle_path/handle
+# had to work around before.
 weebblade.duckdns.org {
-	# Cheap defense-in-depth, applies to every response regardless of route. No CSP
-	# here deliberately - Airflow's own UI (proxied at /airflow) loads its own
-	# inline scripts/styles, and a strict CSP written for our JSON API would break
-	# it; revisit if/when Airflow gets split onto its own subdomain.
+	# Strict-ish defaults for our own JSON API - safe now that Airflow's UI (which
+	# needs its own inline scripts/styles) lives on its own subdomain instead of
+	# sharing this one.
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
@@ -27,11 +28,23 @@ weebblade.duckdns.org {
 		format json
 	}
 
-	handle /airflow* {
-		reverse_proxy airflow-webserver:8080
+	reverse_proxy backend:8000
+}
+
+weebblade-airflow.duckdns.org {
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
 	}
 
-	handle {
-		reverse_proxy backend:8000
+	log {
+		output file /var/log/caddy/access-airflow.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		format json
 	}
+
+	reverse_proxy airflow-webserver:8080
 }
