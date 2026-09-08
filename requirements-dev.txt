@@ -6,7 +6,7 @@
 # from this file, unlike ad hoc local venvs that happened to have the package
 # already present from something else.
 -r airflow/requirements.txt
-fastapi==0.115.6
+fastapi==0.141.1
 uvicorn[standard]==0.34.0
 httpx==0.28.1
 slowapi==0.1.9
