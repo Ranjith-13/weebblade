@@ -29,8 +29,9 @@ variable "root_volume_size_gb" {
 }
 
 variable "allowed_ssh_cidr" {
-  description = "CIDR allowed to SSH in on port 22 - should be your current IP/32, not 0.0.0.0/0. This changes whenever your IP does (check via `curl ifconfig.me`), so it's a variable rather than hardcoded - set it in terraform.tfvars, not here."
+  description = "CIDR granted a PERMANENT SSH rule. Empty (the default) means no standing rule at all, which is the intended setup: CI and scripts/weebblade-ssh.sh each authorise their own IP for the duration of a run and revoke it after, so nothing has to track a rotating home address. Set this only to deliberately pin a stable address - and never to 0.0.0.0/0."
   type        = string
+  default     = ""
 }
 
 variable "ami_id" {

@@ -21,12 +21,22 @@ resource "aws_security_group" "weebblade" {
   description = "launch-wizard-1 created 2026-09-07T06:25:43.574Z"
   vpc_id      = data.aws_vpc.default.id
 
-  ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.allowed_ssh_cidr]
+  # No standing SSH rule by default. Both ways in open port 22 for one address
+  # and close it again straight after: CI does it per deploy run
+  # (.github/workflows/deploy.yml) and a laptop does it per session
+  # (scripts/weebblade-ssh.sh), both via the narrow weebblade-ci-sg IAM user.
+  # A pinned home CIDR was tried first and lasted hours before the ISP rotated
+  # the address, which broke direct SSH while leaving the site and deploys fine.
+  # Set allowed_ssh_cidr to restore a permanent rule if that's ever wanted.
+  dynamic "ingress" {
+    for_each = var.allowed_ssh_cidr == "" ? [] : [var.allowed_ssh_cidr]
+    content {
+      description = "SSH"
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [ingress.value]
+    }
   }
 
   ingress {
