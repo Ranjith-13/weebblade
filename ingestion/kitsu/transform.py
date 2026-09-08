@@ -25,6 +25,11 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "title_romaji": titles.get("en_jp") or attrs.get("canonicalTitle"),
         "title_english": titles.get("en"),
         "title_native": titles.get("ja_jp"),
+        # "large" rather than "original": originals are full-resolution scans (often
+        # >1MB) and this only ever renders as a grid tile or detail-page poster.
+        # Kitsu's coverImage (the wide banner) is empty for most titles - confirmed
+        # against the live API - so only the poster is worth carrying.
+        "poster_url": (attrs.get("posterImage") or {}).get("large"),
         "synopsis": clean_synopsis(attrs.get("synopsis")),
         "format": attrs.get("subtype"),
         "status": attrs.get("status"),

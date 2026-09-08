@@ -23,6 +23,7 @@ _STRING_COLUMNS = [
     "status",
     "season",
     "source_material",
+    "poster_url",
 ]
 _ARRAY_COLUMNS = ["genres", "studios"]
 
@@ -34,7 +35,16 @@ def standardize_schema(df: DataFrame) -> DataFrame:
     Each source's Parquet file otherwise carries whatever type its own JSON values
     happened to infer as (e.g. AniList's average_score is an int, Jikan's and Kitsu's
     are floats) - Spark's union refuses to reconcile mismatched types on its own.
+
+    Columns this expects but the input doesn't have are added as typed NULLs rather
+    than raising. Snapshots written before a field was introduced genuinely lack it
+    (poster_url was added in 2026-09), and re-consolidating an older run_date - which
+    is exactly what an Airflow backfill does - would otherwise fail on a missing
+    column instead of just carrying nulls forward.
     """
+    for col in _STRING_COLUMNS:
+        if col not in df.columns:
+            df = df.withColumn(col, F.lit(None).cast(StringType()))
     for col in _STRING_COLUMNS:
         df = df.withColumn(col, F.col(col).cast(StringType()))
     for col in _INT_COLUMNS:

@@ -17,6 +17,11 @@ def test_flatten_media():
             "averageRating": "84.5",
             "popularityRank": 15,
             "favoritesCount": 9000,
+            "posterImage": {
+                "tiny": "https://media.kitsu.app/anime/44042/poster_image/tiny.jpg",
+                "large": "https://media.kitsu.app/anime/44042/poster_image/large.jpg",
+                "original": "https://media.kitsu.app/anime/44042/poster_image/original.jpg",
+            },
         },
         # attached by fetch_season._attach_metadata, not native Kitsu fields
         "_genre_names": ["Action", "Fantasy"],
@@ -38,6 +43,9 @@ def test_flatten_media():
     assert row["start_day"] == 6
     assert row["studios"] == []
     assert row["synopsis"] == "A boy named Tanjiro fights demons."
+    # "large", not "original" - originals are full-resolution and this only renders
+    # as a grid tile or detail poster.
+    assert row["poster_url"] == "https://media.kitsu.app/anime/44042/poster_image/large.jpg"
 
 
 def test_flatten_media_handles_missing_optional_fields():
@@ -50,3 +58,4 @@ def test_flatten_media_handles_missing_optional_fields():
     assert row["genres"] == []
     assert row["average_score"] is None
     assert row["start_year"] is None
+    assert row["poster_url"] is None

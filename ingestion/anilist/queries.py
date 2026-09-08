@@ -12,6 +12,10 @@ query ($season: MediaSeason, $seasonYear: Int, $page: Int, $perPage: Int) {
         english
         native
       }
+      coverImage {
+        large
+        medium
+      }
       description(asHtml: false)
       format
       status

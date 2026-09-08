@@ -6,6 +6,10 @@ def test_flatten_media():
         "id": 1,
         "idMal": 1,
         "title": {"romaji": "Kimetsu no Yaiba", "english": "Demon Slayer", "native": "鬼滅の刃"},
+        "coverImage": {
+            "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/1.jpg",
+            "medium": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/1.jpg",
+        },
         "description": "A boy named Tanjiro<br>fights demons.",
         "format": "TV",
         "status": "FINISHED",
@@ -33,6 +37,20 @@ def test_flatten_media():
     assert row["studios"] == ["ufotable"]
     assert row["start_year"] == 2019
     assert row["synopsis"] == "A boy named Tanjiro fights demons."
+    assert row["poster_url"] == "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/1.jpg"
+
+
+def test_flatten_media_falls_back_to_medium_cover():
+    """coverImage sizes aren't guaranteed present - don't lose the poster entirely
+    just because the large variant is missing."""
+    media = {
+        "id": 3,
+        "title": {},
+        "startDate": {},
+        "coverImage": {"medium": "https://s4.anilist.co/medium/3.jpg"},
+    }
+
+    assert flatten_media(media)["poster_url"] == "https://s4.anilist.co/medium/3.jpg"
 
 
 def test_flatten_media_handles_missing_optional_fields():
@@ -44,3 +62,4 @@ def test_flatten_media_handles_missing_optional_fields():
     assert row["title_english"] is None
     assert row["studios"] == []
     assert row["synopsis"] is None
+    assert row["poster_url"] is None

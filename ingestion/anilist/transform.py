@@ -10,6 +10,7 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     title = media.get("title") or {}
     start_date = media.get("startDate") or {}
     studios = [s["name"] for s in (media.get("studios") or {}).get("nodes", [])]
+    cover_image = media.get("coverImage") or {}
 
     return {
         "source": "anilist",
@@ -18,6 +19,9 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "title_romaji": title.get("romaji"),
         "title_english": title.get("english"),
         "title_native": title.get("native"),
+        # AniList's "large" is ~230x345, the same role Kitsu's "large" poster plays -
+        # fall back to "medium" since coverImage sizes aren't guaranteed present.
+        "poster_url": cover_image.get("large") or cover_image.get("medium"),
         "synopsis": clean_synopsis(media.get("description")),
         "format": media.get("format"),
         "status": media.get("status"),

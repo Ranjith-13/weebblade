@@ -10,6 +10,7 @@ class Anime(BaseModel):
     title_romaji: str | None = None
     title_english: str | None = None
     title_native: str | None = None
+    poster_url: str | None = None
     synopsis: str | None = None
     format: str | None = None
     status: str | None = None

@@ -22,6 +22,10 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "title_romaji": media.get("title"),
         "title_english": media.get("title_english"),
         "title_native": media.get("title_japanese"),
+        # Jikan nests images by file type; jpg is always populated where webp may not
+        # be, and image_url is the standard poster size (large_image_url is the
+        # full-resolution one, unnecessary for a grid tile).
+        "poster_url": ((media.get("images") or {}).get("jpg") or {}).get("image_url"),
         "synopsis": clean_synopsis(media.get("synopsis")),
         "format": media.get("type"),
         "status": media.get("status"),

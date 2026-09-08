@@ -7,6 +7,13 @@ def test_flatten_media():
         "title": "Kimetsu no Yaiba",
         "title_english": "Demon Slayer",
         "title_japanese": "鬼滅の刃",
+        "images": {
+            "jpg": {
+                "image_url": "https://cdn.myanimelist.net/images/anime/1286/99889.jpg",
+                "large_image_url": "https://cdn.myanimelist.net/images/anime/1286/99889l.jpg",
+            },
+            "webp": {"image_url": "https://cdn.myanimelist.net/images/anime/1286/99889.webp"},
+        },
         "synopsis": "A boy named Tanjiro fights demons.",
         "type": "TV",
         "status": "Finished Airing",
@@ -36,6 +43,9 @@ def test_flatten_media():
     assert row["start_month"] == 4
     assert row["start_day"] == 6
     assert row["synopsis"] == "A boy named Tanjiro fights demons."
+    # jpg over webp (jpg is the always-populated one), and image_url over
+    # large_image_url (full-resolution is unnecessary for a grid tile).
+    assert row["poster_url"] == "https://cdn.myanimelist.net/images/anime/1286/99889.jpg"
 
 
 def test_flatten_media_handles_missing_optional_fields():
@@ -48,3 +58,4 @@ def test_flatten_media_handles_missing_optional_fields():
     assert row["genres"] == []
     assert row["studios"] == []
     assert row["start_year"] is None
+    assert row["poster_url"] is None
