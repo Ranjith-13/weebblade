@@ -71,7 +71,7 @@ if [[ -z "$KEY" ]]; then
   done
 fi
 if [[ -z "$KEY" || ! -f "$KEY" ]]; then
-  echo "No SSH key found. Looked for weebblade-key.pem / weebblade / weebblade.pem" >&2
+  echo "No SSH key found. Looked for weebblade-key.pem / weebblade / weebblade.pem / id_ed25519_weebblade" >&2
   echo "under ~/.ssh. Set WEEBBLADE_KEY to your key's path, e.g.:" >&2
   echo "  export WEEBBLADE_KEY=\"\$HOME/.ssh/weebblade\"        # bash/zsh" >&2
   echo "  set -Ux WEEBBLADE_KEY \"\$HOME/.ssh/weebblade\"       # fish" >&2
