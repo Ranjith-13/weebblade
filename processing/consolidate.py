@@ -215,6 +215,10 @@ def _merge_sources(df: DataFrame) -> DataFrame:
        All five such live pairs agree on the English title. The coalesce matters:
        two of them have no English title on the Kitsu side, and match Kitsu's
        romaji against MAL's English.
+    4. display title + exact premiere date, for pairs the sources file under
+       different formats - `special` against `ONA` for the Re:Zero break-time
+       shorts. See `_premiere_key`; this is the one pass that does not use format,
+       because format is the very thing being disagreed about.
 
     Passes 2 and 3 are deliberately narrow. Each requires an exact (case- and
     whitespace-insensitive) title AND the same format AND the same start year, so
@@ -238,11 +242,10 @@ def _merge_sources(df: DataFrame) -> DataFrame:
             _identity_key()
         ),
     )
+    display_title = F.coalesce(F.col("title_english"), F.col("title_romaji"))
     matched_by_romaji = _merge_on(matched_by_id, _title_key("tr:", F.col("title_romaji")))
-    return _merge_on(
-        matched_by_romaji,
-        _title_key("td:", F.coalesce(F.col("title_english"), F.col("title_romaji"))),
-    )
+    matched_by_title = _merge_on(matched_by_romaji, _title_key("td:", display_title))
+    return _merge_on(matched_by_title, _premiere_key(display_title))
 
 
 def _identity_key() -> "F.Column":
@@ -271,6 +274,47 @@ def _title_key(prefix: str, title: "F.Column") -> "F.Column":
             F.lower(F.col("format")),
             F.lit("|"),
             F.col("season_year").cast("string"),
+        ),
+    ).otherwise(_identity_key())
+
+
+def _premiere_key(title: "F.Column") -> "F.Column":
+    """Exact title + exact premiere date, with no format at all.
+
+    The other title passes require the format to match, which is what stops a
+    series and its compilation film from collapsing into one row. But the sources
+    disagree about format for shows that sit between categories: MAL calls the
+    Re:Zero break-time shorts `special` where Kitsu calls them `ONA`, and there
+    are eight such live pairs, mostly ONA against TV, special or music.
+
+    A same-day premiere under an identical title is strong enough evidence to
+    stand without the format, and stronger than format would be: two different
+    works sharing a title in one year almost never share a release date, while
+    two catalogues describing one work almost always do. Measured over 480 live
+    titles this key produces exactly five groups, every one a Kitsu row paired
+    with its MAL twin, and no two rows from the same source ever collide.
+
+    All three date parts are required. A partial date would match far too much.
+    The three pairs where the sources disagree on the date as well as the format
+    are left alone - by one to four days, which a window could bridge, but not
+    without weakening the key for every other title.
+    """
+    complete_date = (
+        F.col("start_year").isNotNull()
+        & F.col("start_month").isNotNull()
+        & F.col("start_day").isNotNull()
+    )
+    return F.when(
+        title.isNotNull() & complete_date,
+        F.concat(
+            F.lit("tp:"),
+            F.lower(F.trim(title)),
+            F.lit("|"),
+            F.col("start_year").cast("string"),
+            F.lit("-"),
+            F.col("start_month").cast("string"),
+            F.lit("-"),
+            F.col("start_day").cast("string"),
         ),
     ).otherwise(_identity_key())
 

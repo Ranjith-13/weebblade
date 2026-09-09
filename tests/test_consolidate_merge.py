@@ -45,6 +45,9 @@ SCHEMA = StructType(
         StructField("streaming_urls", ArrayType(StringType())),
         StructField("score_100", DoubleType()),
         StructField("season_year", LongType()),
+        StructField("start_year", LongType()),
+        StructField("start_month", LongType()),
+        StructField("start_day", LongType()),
     ]
 )
 
@@ -78,6 +81,10 @@ def _row(source, source_id, mal_id, **overrides):
         # The title passes require a start year, so fixtures need one; a merge
         # across different years is its own test below.
         "season_year": 2026,
+        # The premiere pass needs a complete date; fixtures that care override it.
+        "start_year": None,
+        "start_month": None,
+        "start_day": None,
     }
     fmt = overrides.pop("fmt", "TV")
     row.update(overrides)
@@ -489,6 +496,9 @@ def _write_source(spark, data_dir, dir_name, partition, run_date, rows):
             StructField("format", StringType()),
             StructField("season", StringType()),
             StructField("season_year", LongType()),
+        StructField("start_year", LongType()),
+        StructField("start_month", LongType()),
+        StructField("start_day", LongType()),
         ]
     )
     out = data_dir / "processed" / dir_name / partition / f"{run_date}.parquet"
@@ -537,3 +547,78 @@ def test_the_catalogue_keeps_titles_that_are_genuinely_distinct(tmp_path):
     rows = _fresh_session().read.parquet(str(out_dir)).collect()
 
     assert sorted(r["title_romaji"] for r in rows) == ["Spring Show", "Summer Show"]
+
+
+def test_sources_that_disagree_about_the_format_still_merge(spark):
+    """The eight live pairs the format guard blocked. MAL files the Re:Zero
+    break-time shorts as `special` and Kitsu as `ONA`, so every pass that keys on
+    format misses them, and neither side carries a mal_id to match on.
+
+    An identical title premiering on the identical day is the evidence here.
+    """
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "50665", None,
+                 title_romaji="Re:Zero kara Hajimeru Kyuukei Jikan (Break Time) 4th Season",
+                 title_english="Re:ZERO ~Starting Break Time From Zero~ Season 4",
+                 fmt="ONA", start_year=2026, start_month=4, start_day=8),
+            _row("mal", "63830", 63830,
+                 title_romaji="Re:Zero kara Hajimeru Break Time 4th Season",
+                 title_english="Re:ZERO ~Starting Break Time From Zero~ Season 4",
+                 fmt="special", start_year=2026, start_month=4, start_day=8,
+                 studios=["White Fox"]),
+        ],
+        SCHEMA_F,
+    )
+    out = _merge_sources(df)
+
+    assert out.count() == 1
+    row = out.collect()[0]
+    assert row["source"] == "kitsu"
+    assert row["studios"] == ["White Fox"]  # MAL's, kept through the merge
+
+
+def test_the_premiere_pass_will_not_merge_titles_that_premiered_on_different_days(spark):
+    """Three of the eight disagree on the date as well as the format, by one to
+    four days. Left alone deliberately: a window wide enough to bridge them is
+    wide enough to join a series to its compilation film."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "1", None, title_english="The Food Diary of Miss Maid",
+                 fmt="ONA", start_year=2026, start_month=4, start_day=1),
+            _row("mal", "2", 999, title_english="The Food Diary of Miss Maid",
+                 fmt="TV", start_year=2026, start_month=4, start_day=5),
+        ],
+        SCHEMA_F,
+    )
+    assert _merge_sources(df).count() == 2
+
+
+def test_the_premiere_pass_needs_a_complete_date(spark):
+    """A partial date would match far too much - every title that knows only its
+    year would collide with every other one sharing a name."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "1", None, title_english="Same Name", fmt="ONA",
+                 start_year=2026, start_month=None, start_day=None),
+            _row("mal", "2", 999, title_english="Same Name", fmt="special",
+                 start_year=2026, start_month=None, start_day=None),
+        ],
+        SCHEMA_F,
+    )
+    assert _merge_sources(df).count() == 2
+
+
+def test_a_series_and_its_film_sharing_a_title_and_year_stay_separate(spark):
+    """The case the format guard exists for. The premiere pass drops format, so
+    the date has to carry the weight: different works release on different days."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "1", None, title_english="Franchise", fmt="TV",
+                 start_year=2026, start_month=4, start_day=1),
+            _row("kitsu", "2", None, title_english="Franchise", fmt="movie",
+                 start_year=2026, start_month=11, start_day=20),
+        ],
+        SCHEMA_F,
+    )
+    assert _merge_sources(df).count() == 2
