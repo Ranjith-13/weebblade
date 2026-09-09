@@ -55,16 +55,24 @@ SCHEMA = StructType(
 SCHEMA_F = StructType(list(SCHEMA.fields) + [StructField("format", StringType())])
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def spark():
-    session = (
+    """A live session per test, via getOrCreate rather than one cached session.
+
+    consolidate_catalogue stops the session it uses, exactly as the DAG task
+    expects it to. A module-scoped session would therefore be dead for every test
+    that happened to run after the catalogue ones, making the suite depend on
+    declaration order - which it silently did until four tests were appended in
+    the wrong place. getOrCreate revives it, so order stops mattering.
+
+    The JVM goes away with the pytest process, so there is nothing to stop here.
+    """
+    return (
         SparkSession.builder.master("local[1]")
         .appName("weebblade-test-merge")
         .config("spark.ui.enabled", "false")
         .getOrCreate()
     )
-    yield session
-    session.stop()
 
 
 def _row(source, source_id, mal_id, **overrides):
@@ -475,15 +483,16 @@ def test_a_row_with_no_start_year_is_never_title_merged(spark):
     assert _merge_sources(df).count() == 2
 
 
-def _fresh_session():
-    """consolidate_catalogue stops the session it uses, exactly as the DAG task
-    expects. The module fixture cannot survive that, so the catalogue tests own
-    their sessions instead of borrowing it."""
+def _reread(path):
+    """consolidate_catalogue stopped the session, so reading its output needs a
+    new one."""
     return (
         SparkSession.builder.master("local[1]")
-        .appName("weebblade-test-catalogue")
+        .appName("weebblade-test-merge")
         .config("spark.ui.enabled", "false")
         .getOrCreate()
+        .read.parquet(path)
+        .collect()
     )
 
 
@@ -502,46 +511,44 @@ def _write_source(spark, data_dir, dir_name, partition, run_date, rows):
     spark.createDataFrame(rows, schema).write.mode("overwrite").parquet(str(out))
 
 
-def test_sources_that_disagree_about_the_season_still_merge(tmp_path):
+def test_sources_that_disagree_about_the_season_still_merge(spark, tmp_path):
     """The nine live duplicates that survived every per-partition fix.
 
     Kitsu files "Baki-dou Part 2" under Summer 2026 and MAL files it under Spring
     2026, so the two halves land in different partitions and a per-season merge
     never sees them together. Consolidating the catalogue as a whole does.
     """
-    session = _fresh_session()
     _write_source(
-        session, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-09",
+        spark, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-09",
         [("kitsu", "50635", "BAKI-DOU Part 2", "ONA", "SUMMER", 2026)],
     )
     _write_source(
-        session, tmp_path, "mal_media", "2026-SPRING", "2026-09-09",
+        spark, tmp_path, "mal_media", "2026-SPRING", "2026-09-09",
         [("mal", "63833", "Baki-dou Part 2", "ONA", "SPRING", 2026)],
     )
 
     out_dir = consolidate_catalogue(tmp_path, "2026-09-09")
-    rows = _fresh_session().read.parquet(str(out_dir)).collect()
+    rows = _reread(str(out_dir))
 
     assert len(rows) == 1
     assert rows[0]["source"] == "kitsu"  # priority order decides the survivor
     assert rows[0]["season"] == "SUMMER"  # and it keeps its own season
 
 
-def test_the_catalogue_keeps_titles_that_are_genuinely_distinct(tmp_path):
+def test_the_catalogue_keeps_titles_that_are_genuinely_distinct(spark, tmp_path):
     """The merge must not be so eager that consolidating everything at once
     starts deleting separate shows."""
-    session = _fresh_session()
     _write_source(
-        session, tmp_path, "kitsu_media", "2026-SPRING", "2026-09-09",
+        spark, tmp_path, "kitsu_media", "2026-SPRING", "2026-09-09",
         [("kitsu", "1", "Spring Show", "TV", "SPRING", 2026)],
     )
     _write_source(
-        session, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-09",
+        spark, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-09",
         [("kitsu", "2", "Summer Show", "TV", "SUMMER", 2026)],
     )
 
     out_dir = consolidate_catalogue(tmp_path, "2026-09-09")
-    rows = _fresh_session().read.parquet(str(out_dir)).collect()
+    rows = _reread(str(out_dir))
 
     assert sorted(r["title_romaji"] for r in rows) == ["Spring Show", "Summer Show"]
 
