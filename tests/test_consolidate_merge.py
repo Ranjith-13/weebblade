@@ -227,3 +227,33 @@ def test_an_empty_array_loses_to_a_populated_one_from_a_lower_priority_source(sp
         SCHEMA_F,
     )
     assert _merge_sources(df).collect()[0]["studios"] == ["Pierrot"]
+
+
+def test_standardize_schema_survives_an_array_column_that_lost_its_type(spark):
+    """A column that is null for every row in a snapshot loses its type through
+    Parquet and reads back as INT. Scalars cope, because null casts to anything.
+    Arrays do not: Spark refuses "cannot cast INT to ARRAY<STRING>" and the whole
+    consolidation dies.
+
+    This broke a live run the moment MAL started reporting "no streaming data" as
+    null instead of [], which is the correct thing for it to say.
+    """
+    from pyspark.sql.types import IntegerType
+
+    from processing.normalize import standardize_schema
+
+    schema = StructType(
+        [
+            StructField("source", StringType()),
+            StructField("source_id", StringType()),
+            # what an all-null array column looks like after a Parquet round trip
+            StructField("streaming_urls", IntegerType()),
+        ]
+    )
+    df = spark.createDataFrame([("mal", "1", None)], schema)
+
+    out = standardize_schema(df)
+
+    assert isinstance(dict(out.dtypes)["streaming_urls"], str)
+    assert dict(out.dtypes)["streaming_urls"] == "array<string>"
+    assert out.collect()[0]["streaming_urls"] is None

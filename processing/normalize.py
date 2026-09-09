@@ -84,7 +84,21 @@ def standardize_schema(df: DataFrame) -> DataFrame:
         + [(c, DoubleType()) for c in _DOUBLE_COLUMNS]
         + [(c, ArrayType(StringType())) for c in _ARRAY_COLUMNS]
     ):
-        if col not in df.columns:
+        # A column that is null for EVERY row in a snapshot loses its type on the
+        # way through Parquet and reads back as something arbitrary - in practice
+        # INT. Scalars survive that, because null casts to anything, but an array
+        # does not: Spark refuses "cannot cast INT to ARRAY<STRING>" and the whole
+        # consolidation fails.
+        #
+        # This is not hypothetical. It broke the run the moment MAL started
+        # reporting "no streaming data" as null instead of [], which is itself the
+        # correct thing for it to say. A non-array type in an array column can
+        # only mean the column was empty and lost its type, so it is rebuilt as a
+        # typed null rather than cast.
+        existing = dict(df.dtypes).get(col)
+        if col not in df.columns or (
+            isinstance(spark_type, ArrayType) and existing and not existing.startswith("array")
+        ):
             df = df.withColumn(col, F.lit(None).cast(spark_type))
         df = df.withColumn(col, F.col(col).cast(spark_type))
 
