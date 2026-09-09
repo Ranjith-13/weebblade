@@ -8,10 +8,22 @@ from ..schemas import Anime, AnimeListResponse
 
 router = APIRouter(prefix="/anime", tags=["anime"])
 
+# Every sort ends with a unique tiebreaker, and that is load-bearing rather than
+# tidy. Without it, ORDER BY over a large block of equal values has no defined
+# order, so LIMIT/OFFSET slices a differently shuffled result on each call and
+# paging silently serves some rows twice while never serving others.
+#
+# This was not theoretical. 103 of 142 rows have a NULL score, so under the
+# default score_desc sort nearly the whole catalogue was one undifferentiated
+# tie block: three identical two-page fetches returned 126, 116 and 122 distinct
+# titles, differing by 30-40 ids. (source, source_id) is unique per row, so
+# appending it makes every ordering total and paging reproducible.
+_TIEBREAK = "source ASC, source_id ASC"
+
 _SORT_COLUMNS = {
-    "score_desc": "score_100 DESC NULLS LAST",
-    "popularity_desc": "popularity DESC NULLS LAST",
-    "title": "COALESCE(title_english, title_romaji) ASC",
+    "score_desc": f"score_100 DESC NULLS LAST, {_TIEBREAK}",
+    "popularity_desc": f"popularity DESC NULLS LAST, {_TIEBREAK}",
+    "title": f"COALESCE(title_english, title_romaji) ASC, {_TIEBREAK}",
 }
 
 

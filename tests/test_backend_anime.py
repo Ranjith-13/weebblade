@@ -123,3 +123,101 @@ def test_anime_endpoints_503_when_no_warehouse(tmp_path, monkeypatch):
         response = test_client.get("/anime")
 
     assert response.status_code == 503
+
+
+@pytest.fixture
+def tied_client(tmp_path):
+    """A catalogue that is almost entirely one tie block, spread over several
+    parquet files — which is what the real lake looks like, and what it takes to
+    reproduce the bug.
+
+    Both details matter. The default fixture above has two rows with distinct
+    scores in a single file, so it can never exercise ordering stability. A
+    single file does not either: DuckDB reads one small file in a predictable
+    order, and the test passes with or without the fix. It is the parallel scan
+    across MULTIPLE files, over a large block of equal values, that leaves the
+    row order genuinely undefined. Measured here without a tiebreaker: 400 rows
+    paged back as 200-250 distinct ids, differing on every run."""
+    files = 8
+    per_file = 50
+    partition = (
+        tmp_path / "data" / "processed" / "anime_media_consolidated" / "2026-SUMMER" / "2026-09-07"
+    )
+    for f in range(files):
+        _write_parquet(
+            partition / f"part-{f}.parquet",
+            [
+                {
+                    "source": "kitsu",
+                    "source_id": str(f * per_file + i),
+                    "title_english": f"Untitled {f * per_file + i:04d}",
+                    "title_romaji": None,
+                    # All NULL: every row ties with every other under score_desc.
+                    "score_100": None,
+                    "popularity": 1000.0,
+                    "genres": ["Action"],
+                    "format": "TV",
+                    "season": "SUMMER",
+                    "season_year": 2026,
+                    "run_date": "2026-09-07",
+                }
+                for i in range(per_file)
+            ],
+        )
+    db_path = tmp_path / "warehouse.duckdb"
+    refresh_catalog(tmp_path / "data", db_path)
+
+    def override_get_db():
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            yield con
+        finally:
+            con.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+TIED_ROWS = 400
+
+
+def _page_through(client, sort: str, limit: int = 100) -> list[str]:
+    ids: list[str] = []
+    offset = 0
+    while True:
+        response = client.get("/anime", params={"sort": sort, "limit": limit, "offset": offset})
+        assert response.status_code == 200
+        items = response.json()["items"]
+        if not items:
+            break
+        ids.extend(item["source_id"] for item in items)
+        offset += limit
+    return ids
+
+
+@pytest.mark.parametrize("sort", ["score_desc", "popularity_desc", "title"])
+def test_paging_serves_every_row_exactly_once(tied_client, sort):
+    """Regression test for unstable pagination.
+
+    Without a unique tiebreaker, ORDER BY over a tie block has no defined order,
+    so LIMIT/OFFSET re-slices a differently shuffled result on each query: rows
+    get served twice while others are never served at all. Against the live API
+    this was measured as three identical two-page fetches returning 126, 116 and
+    122 distinct titles out of 142."""
+    ids = _page_through(tied_client, sort)
+
+    assert len(ids) == TIED_ROWS, "paging returned a different number of rows than exist"
+    assert sorted(ids, key=int) == [
+        str(i) for i in range(TIED_ROWS)
+    ], "rows were duplicated or skipped while paging"
+
+
+@pytest.mark.parametrize("sort", ["score_desc", "popularity_desc", "title"])
+def test_ordering_is_reproducible_across_identical_queries(tied_client, sort):
+    """The same query must return the same order every time, or a cached client
+    and a fresh one disagree about what page 2 contains."""
+    runs = [_page_through(tied_client, sort) for _ in range(5)]
+
+    assert all(run == runs[0] for run in runs), f"{sort} ordering is not deterministic"
