@@ -1,4 +1,4 @@
-import { getSeason } from "@/lib/api";
+import { getCatalogue } from "@/lib/api";
 import { displayTitle } from "@/lib/types";
 import { SearchClient, type PlateLite } from "./SearchClient";
 
@@ -12,12 +12,18 @@ export default async function SearchPage() {
   /* The /search endpoint returns only title, ids and a distance — no artwork,
    * no score, no format. The old results list was therefore plain text and raw
    * floats, which made the most visual entity in the product its least visual
-   * surface. The whole season is already cached server-side, so we hand the
-   * client a small lookup and join against it locally: real plates, correct
-   * certainty treatment, and not one extra upstream request. */
-  const season = await getSeason();
+   * surface. The catalogue is already cached server-side, so we hand the client
+   * a small lookup and join against it locally: real plates, correct certainty
+   * treatment, and not one extra upstream request.
+   *
+   * The whole catalogue, not getSeason(). The Chroma index is built from
+   * anime_media_latest and has never been season-scoped, so a season-sized
+   * lookup missed every hit from an older season - and a miss does not just lose
+   * the artwork, it renders a scored title as unscored, which is the one thing
+   * the certainty treatment must never do. */
+  const items = await getCatalogue();
   const lookup: Record<string, PlateLite> = {};
-  for (const a of season.items) {
+  for (const a of items) {
     lookup[`${a.source}:${a.source_id}`] = {
       t: displayTitle(a),
       p: a.poster_url,
@@ -41,7 +47,7 @@ export default async function SearchPage() {
         </p>
       </div>
 
-      <SearchClient lookup={lookup} total={season.total} />
+      <SearchClient lookup={lookup} total={items.length} />
     </div>
   );
 }

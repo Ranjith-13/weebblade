@@ -120,7 +120,7 @@ export type Season = {
 /** Every title the warehouse holds, across every season. One fetch, cached, and
  *  the per-season views are derived from it: the whole catalogue is a few
  *  hundred rows, so slicing locally is cheaper than a request per season. */
-async function getCatalogue(): Promise<Anime[]> {
+export async function getCatalogue(): Promise<Anime[]> {
   "use cache";
   cacheLife("hours");
 

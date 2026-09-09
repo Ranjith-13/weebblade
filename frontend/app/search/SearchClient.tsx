@@ -158,7 +158,7 @@ export function SearchClient({
       <div className="mt-9" aria-live="polite" aria-atomic="false">
         {state.status === "idle" && (
           <p className="max-w-[52ch] text-[0.85rem] leading-relaxed text-ink-soft">
-            Nothing searched yet. All {total} titles in the season are indexed.
+            Nothing searched yet. All {total} titles in the catalogue are indexed.
           </p>
         )}
 
@@ -183,8 +183,8 @@ export function SearchClient({
 
         {state.status === "done" && state.results.length === 0 && (
           <p className="max-w-[52ch] leading-relaxed text-ink-soft">
-            Nothing came back for &ldquo;{state.query}&rdquo;. The index only covers this one
-            season, {total} titles, so it is a small pool to match against.
+            Nothing came back for &ldquo;{state.query}&rdquo;. The index covers {total}
+            titles, so it is a small pool to match against.
           </p>
         )}
 
