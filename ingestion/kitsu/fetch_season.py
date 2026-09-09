@@ -10,6 +10,31 @@ logger = logging.getLogger(__name__)
 
 PAGE_LIMIT = 20
 
+# WHY THERE IS NO EPISODE SCHEDULE HERE
+#
+# Air dates and countdowns are the headline feature on LiveChart and AniChart,
+# and they are not buildable from Kitsu. This was implemented and then reverted
+# after measuring, so the numbers are recorded rather than the conclusion alone.
+#
+# Kitsu's `nextRelease` attribute is null for every title in the live season.
+# The /anime/{id}/episodes endpoint does carry per-episode `airdate`, but Kitsu
+# BACKFILLS those after an episode airs: future episodes exist as rows with a
+# null airdate. Measured across all 83 currently-airing titles in Summer 2026:
+#
+#     8 of 83 had any dated episode at all  (episode progress: 10% coverage)
+#     1 of 83 had a date in the future      (a countdown: 1% coverage)
+#
+# That single title is BLEACH, where someone entered dates by hand.
+#
+# The cost side, for whoever revisits this: episodes are one request per title,
+# the endpoint caps page[limit] at 20 (21 returns 400), and `sort=-number` is
+# silently ignored, so reaching the tail needs page[offset] = episodeCount - 20.
+# Roughly 83 extra requests per weekly run to populate a feature on one title.
+#
+# This becomes viable if AniList returns - its nextAiringEpisode carries a real
+# countdown for every airing show. AniList is currently 403 with "temporarily
+# disabled due to severe stability issues", and Jikan 504s behind MAL.
+
 
 def fetch_season(
     season: str, season_year: int, client: KitsuClient | None = None
