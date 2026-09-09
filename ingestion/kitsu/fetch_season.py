@@ -29,7 +29,7 @@ def fetch_season(
         "filter[season]": season.lower(),
         "filter[seasonYear]": season_year,
         "page[limit]": PAGE_LIMIT,
-        "include": "categories",
+        "include": "categories,streamingLinks",
     }
 
     while url:
@@ -59,10 +59,16 @@ def _attach_metadata(
     2026-09 — confirmed against the live API, not just docs — the taxonomy moved to
     "categories" instead (a broader tag set covering genre, setting, and theme).
     """
+    included = payload.get("included", [])
     categories_by_id = {
         item["id"]: item["attributes"]["title"]
-        for item in payload.get("included", [])
+        for item in included
         if item["type"] == "categories"
+    }
+    streaming_by_id = {
+        item["id"]: (item.get("attributes") or {}).get("url")
+        for item in included
+        if item["type"] == "streamingLinks"
     }
 
     items = []
@@ -72,6 +78,14 @@ def _attach_metadata(
         ) or []
         item["_genre_names"] = [
             categories_by_id[c["id"]] for c in category_refs if c["id"] in categories_by_id
+        ]
+        streaming_refs = (
+            item.get("relationships", {}).get("streamingLinks", {}).get("data")
+        ) or []
+        item["_streaming_urls"] = [
+            streaming_by_id[s["id"]]
+            for s in streaming_refs
+            if streaming_by_id.get(s["id"])
         ]
         item["_season"] = season.upper()
         item["_season_year"] = season_year

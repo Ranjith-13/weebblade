@@ -59,3 +59,80 @@ def test_flatten_media_handles_missing_optional_fields():
     assert row["average_score"] is None
     assert row["start_year"] is None
     assert row["poster_url"] is None
+
+
+def test_service_name_maps_known_hosts_and_falls_back_to_the_bare_host():
+    from ingestion.kitsu.transform import _service_name
+
+    assert _service_name("https://www.crunchyroll.com/series/GR9P57W96/x") == "Crunchyroll"
+    assert _service_name("https://www.netflix.com/title/81698957") == "Netflix"
+    # Subdomains must resolve to the same provider, not fall through to the host.
+    assert _service_name("https://beta.crunchyroll.com/series/abc") == "Crunchyroll"
+    # Long-tail regional services have no entry; showing the host beats dropping
+    # the link or labelling everything "Other".
+    assert _service_name("https://www.anime-onegai.com/anime/123") == "anime-onegai.com"
+    assert _service_name("not a url") == "Unknown"
+
+
+def test_flatten_media_carries_streaming_links_as_parallel_arrays():
+    from ingestion.kitsu.transform import flatten_media
+
+    row = flatten_media(
+        {
+            "id": "1",
+            "attributes": {"canonicalTitle": "X", "titles": {}},
+            "_streaming_urls": [
+                "https://www.crunchyroll.com/series/a",
+                "https://www.netflix.com/title/1",
+            ],
+        }
+    )
+
+    # Parallel arrays: index i in one lines up with index i in the other.
+    assert row["streaming_urls"] == [
+        "https://www.crunchyroll.com/series/a",
+        "https://www.netflix.com/title/1",
+    ]
+    assert row["streaming_services"] == ["Crunchyroll", "Netflix"]
+    assert len(row["streaming_services"]) == len(row["streaming_urls"])
+
+
+def test_flatten_media_keeps_the_fields_the_transform_used_to_discard():
+    from ingestion.kitsu.transform import flatten_media
+
+    row = flatten_media(
+        {
+            "id": "49444",
+            "attributes": {
+                "canonicalTitle": "X",
+                "titles": {},
+                "youtubeVideoId": "DLRjhptssns",
+                "slug": "bleach-x",
+                "ratingRank": 28,
+                "userCount": 1262,
+                "ageRating": "R",
+                "coverImage": {"large": "https://media.kitsu.app/cover.jpg"},
+            },
+        }
+    )
+
+    assert row["trailer_id"] == "DLRjhptssns"
+    assert row["slug"] == "bleach-x"
+    assert row["rating_rank"] == 28
+    assert row["user_count"] == 1262
+    assert row["age_rating"] == "R"
+    assert row["cover_url"] == "https://media.kitsu.app/cover.jpg"
+
+
+def test_flatten_media_tolerates_every_new_field_being_absent():
+    """Most of these are sparse: cover art is on 17% of the season, trailers 57%.
+    A row missing all of them must still flatten rather than raise."""
+    from ingestion.kitsu.transform import flatten_media
+
+    row = flatten_media({"id": "1", "attributes": {"canonicalTitle": "X", "titles": {}}})
+
+    assert row["trailer_id"] is None
+    assert row["cover_url"] is None
+    assert row["rating_rank"] is None
+    assert row["streaming_urls"] == []
+    assert row["streaming_services"] == []
