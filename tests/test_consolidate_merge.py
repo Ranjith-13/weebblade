@@ -257,3 +257,23 @@ def test_standardize_schema_survives_an_array_column_that_lost_its_type(spark):
     assert isinstance(dict(out.dtypes)["streaming_urls"], str)
     assert dict(out.dtypes)["streaming_urls"] == "array<string>"
     assert out.collect()[0]["streaming_urls"] is None
+
+
+def test_standardize_schema_tolerates_a_snapshot_missing_the_derived_columns(spark):
+    """mal_id, duration and average_score are used by name, and were never
+    covered by the missing-column guard, so the docstring's promise held for
+    every column except those three. A snapshot predating any of them would
+    raise UNRESOLVED_COLUMN instead of carrying nulls forward - which is exactly
+    the backfill case the guard exists for."""
+    from processing.normalize import standardize_schema
+
+    schema = StructType(
+        [StructField("source", StringType()), StructField("source_id", StringType())]
+    )
+    df = spark.createDataFrame([("kitsu", "1")], schema)
+
+    out = standardize_schema(df).collect()[0]
+
+    assert out["mal_id"] is None
+    assert out["duration_minutes"] is None
+    assert out["score_100"] is None

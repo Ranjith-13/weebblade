@@ -102,6 +102,19 @@ def standardize_schema(df: DataFrame) -> DataFrame:
             df = df.withColumn(col, F.lit(None).cast(spark_type))
         df = df.withColumn(col, F.col(col).cast(spark_type))
 
+    # These three are used by name below and were never covered by the guard
+    # above, so the docstring's promise held for every column except them: a
+    # snapshot written before any of them existed would raise UNRESOLVED_COLUMN
+    # rather than carrying nulls forward. Every current transform emits all
+    # three, which is why it has not bitten yet.
+    for col, spark_type in (
+        ("mal_id", IntegerType()),
+        ("duration", StringType()),
+        ("average_score", DoubleType()),
+    ):
+        if col not in df.columns:
+            df = df.withColumn(col, F.lit(None).cast(spark_type))
+
     df = df.withColumn("mal_id", F.col("mal_id").cast(IntegerType()))
 
     # duration arrives as an int (minutes) from AniList/Kitsu but a free-text string
