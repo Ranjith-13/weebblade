@@ -229,8 +229,27 @@ export function streamingLinks(a: Anime): { service: string; url: string }[] {
 }
 
 /** Kitsu's public page for a title, when we captured the slug. */
-export function sourceUrl(a: Anime): string | null {
-  return a.source === "kitsu" && a.slug ? `https://kitsu.app/anime/${a.slug}` : null;
+/* Where a reader can go to verify or track this title upstream.
+ *
+ * A list rather than one URL, because after the cross-source merge a row can
+ * carry both a Kitsu slug and a MAL id, and they are genuinely different
+ * destinations - Kitsu for the artwork and streaming links this site already
+ * shows, MAL for the list and forum most readers actually use.
+ *
+ * Kitsu leads, matching the source priority everywhere else. Measured over 480
+ * live titles: 260 have a slug, 405 have a mal_id, 185 have both, and none have
+ * neither - so every title gets at least one working link. Only Kitsu ever emits
+ * a slug, so its presence is enough to identify the destination.
+ */
+export function sourceLinks(a: Anime): { label: string; href: string }[] {
+  const links: { label: string; href: string }[] = [];
+  if (a.slug) links.push({ label: "View on Kitsu", href: `https://kitsu.app/anime/${a.slug}` });
+  if (a.mal_id)
+    links.push({
+      label: "View on MyAnimeList",
+      href: `https://myanimelist.net/anime/${a.mal_id}`,
+    });
+  return links;
 }
 
 

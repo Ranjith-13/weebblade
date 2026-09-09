@@ -16,7 +16,7 @@ import {
   broadcastSlotLabel,
   secondaryTitle,
   sourceMaterialLabel,
-  sourceUrl,
+  sourceLinks,
   streamingLinks,
   type Anime,
 } from "@/lib/types";
@@ -117,7 +117,7 @@ async function AnimeDetail({
   ].filter(Boolean) as [string, string][];
 
   const watch = streamingLinks(anime);
-  const kitsu = sourceUrl(anime);
+  const links = sourceLinks(anime);
   const slot = broadcastSlotLabel(anime.broadcast_day, anime.broadcast_time);
 
   return (
@@ -288,15 +288,18 @@ async function AnimeDetail({
         )}
 
         <p className="meta mt-6 flex flex-wrap items-baseline gap-x-5 gap-y-1">
-          {kitsu ? (
-            <a
-              href={kitsu}
-              target="_blank"
-              rel="noreferrer"
-              className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
-            >
-              View on Kitsu
-            </a>
+          {links.length > 0 ? (
+            links.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+              >
+                {link.label}
+              </a>
+            ))
           ) : (
             <span>Source: {anime.source}</span>
           )}

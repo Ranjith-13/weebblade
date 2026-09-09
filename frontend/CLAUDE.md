@@ -67,7 +67,9 @@ fixable:
 3. **Genre facets are derived from the data.** A hardcoded list drifted and shipped a `Sci-Fi` chip
    that matched nothing.
 
-Never render `studios`, `source_material`, `mal_id` (100% null) or `favourites` (0-25, noise).
+Never render `favourites` (0-25, noise). `studios`, `source_material` and `mal_id` were on this
+list when Kitsu was the only source and all three were 100% null; MAL supplies all three, so the
+first two lead the facts list and `mal_id` is what `sourceLinks()` uses to reach MyAnimeList.
 
 ## Seasons
 
