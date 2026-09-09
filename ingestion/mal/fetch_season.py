@@ -55,10 +55,25 @@ def fetch_season(
 
     Deduplicated by id for the same reason Kitsu's is: trusting page boundaries
     blindly has already silently doubled rows once in this project.
+
+    Entries whose `start_season` is not the requested season are DROPPED. MAL's
+    season endpoint answers "what is airing in this season", which includes shows
+    that have been running for decades - One Piece (Fall 1999), Sazae-san (Fall
+    1969), Shin Chan, Doraemon, Anpanman, Case Closed - each still carrying its
+    debut season. Kitsu's answers "what starts in this season", and every stored
+    row already means start season, so keeping MAL's extras would mix two
+    different questions in one column.
+
+    They were not merely redundant, they were unreachable: 36 such rows landed in
+    live data and none could appear in any season view, because no view asks for
+    Fall 1969. What they did do is give the season switcher 30 phantom entries of
+    one to three titles each, since it derives its list from whatever seasons the
+    data contains.
     """
     client = client or MalClient()
     results: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
+    dropped_other_season = 0
 
     url = f"{MAL_API_URL}/anime/season/{season_year}/{season.lower()}"
     params: dict[str, Any] | None = {
@@ -77,13 +92,38 @@ def fetch_season(
             if not node_id or node_id in seen_ids:
                 continue
             seen_ids.add(node_id)
+            if not _starts_this_season(node, season, season_year):
+                dropped_other_season += 1
+                continue
             results.append(node)
         logger.info("Fetched %s titles so far", len(results))
 
         url = (payload.get("paging") or {}).get("next")
         params = None  # the 'next' link already carries limit, fields and sort
 
+    if dropped_other_season:
+        logger.info(
+            "Dropped %s entries airing in %s %s but starting in another season",
+            dropped_other_season,
+            season,
+            season_year,
+        )
     return results
+
+
+def _starts_this_season(node: dict[str, Any], season: str, season_year: int) -> bool:
+    """Whether a MAL entry actually STARTS in the season being fetched.
+
+    An entry with no `start_season` at all is kept: that is missing information
+    rather than evidence of a mismatch, and dropping a title on an absent field
+    would lose real rows to be tidy.
+    """
+    start = node.get("start_season") or {}
+    if not start.get("season") or not start.get("year"):
+        return True
+    return (
+        str(start["season"]).upper() == season.upper() and int(start["year"]) == int(season_year)
+    )
 
 
 if __name__ == "__main__":

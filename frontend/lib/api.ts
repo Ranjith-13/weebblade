@@ -62,6 +62,21 @@ async function getJson<T>(url: string): Promise<T> {
 /** Quarterly order, not alphabetical - FALL sorts last in the year, not first. */
 const SEASON_ORDER = ["WINTER", "SPRING", "SUMMER", "FALL"];
 
+/* A season we offer must be a season we actually ingested.
+ *
+ * The list is derived from the data, which is right, but the data can hold
+ * seasons that were never fetched as seasons: MAL's season endpoint returns
+ * long-running shows still on air, each tagged to its debut, so one Summer 2026
+ * fetch deposited single titles under Fall 1969, Winter 1995 and 28 others. The
+ * switcher offered all 30 - entries no one wants, listing one title each,
+ * crowding out the two real seasons.
+ *
+ * Fixed at the source too (MAL rows that start elsewhere are no longer ingested);
+ * this is the guard that keeps a switcher built from data honest if another
+ * source does the same thing. The threshold has a wide margin in both directions:
+ * real seasons measured 119 and 227 titles, the largest artifact was 3. */
+const MIN_SEASON_TITLES = 10;
+
 export function seasonKey(season: string, year: number): string {
   return `${year}-${season}`;
 }
@@ -146,9 +161,11 @@ export async function getSeasons(): Promise<SeasonRef[]> {
   }
   // Newest first: by year, then by the industry's quarterly order rather than
   // alphabetically, which would put FALL before SPRING before SUMMER.
-  return [...byKey.values()].sort(
-    (a, b) => b.year - a.year || SEASON_ORDER.indexOf(b.season) - SEASON_ORDER.indexOf(a.season),
-  );
+  return [...byKey.values()]
+    .filter((s) => s.count >= MIN_SEASON_TITLES)
+    .sort(
+      (a, b) => b.year - a.year || SEASON_ORDER.indexOf(b.season) - SEASON_ORDER.indexOf(a.season),
+    );
 }
 
 /** One season, deduped, with its counts. Defaults to the newest season present.
