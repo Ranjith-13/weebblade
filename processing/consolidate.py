@@ -142,6 +142,56 @@ def consolidate_partition(data_dir: Path, partition: str, run_date: str) -> Path
     return out_dir
 
 
+def consolidate_catalogue(data_dir: Path, run_date: str) -> Path | None:
+    """Consolidate every season at once, rather than one season at a time.
+
+    Fetching is per season because that is how the upstream APIs are shaped, but
+    entity resolution is not a per-season question: a show is one entity, and the
+    sources do not always agree which season it belongs to. Kitsu placed nine live
+    titles in Summer 2026 that MAL placed in Spring 2026, so each pair sat in a
+    different partition and no per-partition merge could ever collapse them. They
+    were visible as duplicates on the site for exactly that reason.
+
+    Writing one output for the whole catalogue also keeps `anime_media_latest`
+    unambiguous: with per-partition outputs at the same run_date, a title that
+    moved between partitions had two rows with equal run_date and no tiebreak.
+    """
+    spark = get_spark_session("weebblade-consolidate")
+    frames: list[DataFrame] = []
+
+    for source, dir_name in SOURCE_DIR_NAMES.items():
+        base = data_dir / "processed" / dir_name
+        if not base.is_dir():
+            logger.warning("No data at all for %s, skipping", source)
+            continue
+        for partition_dir in sorted(p for p in base.iterdir() if p.is_dir()):
+            df = _current_state(spark, partition_dir, run_date)
+            if df is None:
+                continue
+            logger.info("Loaded %s rows from %s/%s", df.count(), source, partition_dir.name)
+            frames.append(df)
+
+    if not frames:
+        logger.warning("No source data available at all - nothing to consolidate")
+        spark.stop()
+        return None
+
+    consolidated = frames[0]
+    for df in frames[1:]:
+        consolidated = consolidated.unionByName(df)
+
+    before = consolidated.count()
+    consolidated = _merge_sources(consolidated).withColumn("run_date", F.lit(run_date))
+    logger.info("Merged %s source rows into %s titles", before, consolidated.count())
+
+    out_dir = data_dir / "processed" / "anime_media_consolidated" / "_catalogue" / run_date
+    consolidated.coalesce(1).write.mode("overwrite").parquet(str(out_dir))
+    logger.info("Wrote consolidated catalogue to %s", out_dir)
+
+    spark.stop()
+    return out_dir
+
+
 def _merge_sources(df: DataFrame) -> DataFrame:
     """Collapse rows from different sources that describe the same show.
 
@@ -167,11 +217,16 @@ def _merge_sources(df: DataFrame) -> DataFrame:
        romaji against MAL's English.
 
     Passes 2 and 3 are deliberately narrow. Each requires an exact (case- and
-    whitespace-insensitive) title AND the same format, and consolidate already
-    runs per season, so a false merge needs two different shows sharing a title,
-    a format and a season. A false merge silently deletes a title, which is worse
-    than the duplicate it prevents, so anything less certain than that - fuzzy
-    distance, substring, title without format - is left alone.
+    whitespace-insensitive) title AND the same format AND the same start year, so
+    a false merge needs two different shows sharing all three. A false merge
+    silently deletes a title, which is worse than the duplicate it prevents, so
+    anything less certain than that - fuzzy distance, substring, title without
+    format - is left alone.
+
+    The year does the work that season scoping used to. This runs over the whole
+    catalogue now (see `consolidate_catalogue`), because sources disagree about
+    which season a title starts in and a season-scoped merge could never see both
+    halves of such a pair.
 
     The merge is per-column, taking the first non-null value in source-priority
     order, so one output row holds Kitsu's streaming links and MAL's studios at
@@ -197,11 +252,26 @@ def _identity_key() -> "F.Column":
 
 
 def _title_key(prefix: str, title: "F.Column") -> "F.Column":
-    """Case- and whitespace-insensitive title + format, or the row's own identity
-    when either part is missing."""
+    """Case- and whitespace-insensitive title + format + start year, or the row's
+    own identity when any part is missing.
+
+    The year is what lets this run over the whole catalogue instead of one season.
+    Sources disagree about which season a title starts in - Kitsu calls nine live
+    titles Summer 2026 that MAL calls Spring 2026 - so a season-scoped merge can
+    never see both halves. They do agree on the year, and requiring it keeps the
+    pass from collapsing two unrelated shows that share a name across years, which
+    is a real hazard for the generic titles common to music videos and specials.
+    """
     return F.when(
-        title.isNotNull() & F.col("format").isNotNull(),
-        F.concat(F.lit(prefix), F.lower(F.trim(title)), F.lit("|"), F.lower(F.col("format"))),
+        title.isNotNull() & F.col("format").isNotNull() & F.col("season_year").isNotNull(),
+        F.concat(
+            F.lit(prefix),
+            F.lower(F.trim(title)),
+            F.lit("|"),
+            F.lower(F.col("format")),
+            F.lit("|"),
+            F.col("season_year").cast("string"),
+        ),
     ).otherwise(_identity_key())
 
 

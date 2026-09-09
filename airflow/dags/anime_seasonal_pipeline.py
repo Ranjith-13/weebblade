@@ -135,14 +135,20 @@ def anime_seasonal_pipeline():
     # blocking the whole pipeline on every source being healthy at once.
     @task(trigger_rule=TriggerRule.ALL_DONE)
     def consolidate(logical_date=None):
-        from processing.consolidate import consolidate_partition
+        """Consolidate every season, not just the one being fetched.
 
-        season = season_for_month(logical_date.month)
-        season_year = logical_date.year
+        Fetching is per season because the upstream APIs are shaped that way, but
+        a show is one entity regardless of season, and the sources do not always
+        agree which season it starts in - nine live titles were Summer 2026 to
+        Kitsu and Spring 2026 to MAL. Merging per partition left every such pair
+        as a visible duplicate, because the two halves were never in the same
+        place at the same time.
+        """
+        from processing.consolidate import consolidate_catalogue
+
         run_date = logical_date.to_date_string()
-        partition = _partition(season, season_year)
 
-        result = consolidate_partition(DATA_DIR, partition, run_date)
+        result = consolidate_catalogue(DATA_DIR, run_date)
         logger.info("Consolidated output: %s", result)
 
     @task(trigger_rule=TriggerRule.ALL_DONE)

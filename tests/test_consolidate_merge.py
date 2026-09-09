@@ -27,6 +27,7 @@ from processing.consolidate import (  # noqa: E402
     _current_state,
     _merge_sources,
     _snapshots_upto,
+    consolidate_catalogue,
 )
 
 # An explicit schema, because Spark cannot infer a type for a column that is
@@ -43,6 +44,7 @@ SCHEMA = StructType(
         StructField("source_material", StringType()),
         StructField("streaming_urls", ArrayType(StringType())),
         StructField("score_100", DoubleType()),
+        StructField("season_year", LongType()),
     ]
 )
 
@@ -73,6 +75,9 @@ def _row(source, source_id, mal_id, **overrides):
         "source_material": None,
         "streaming_urls": None,
         "score_100": None,
+        # The title passes require a start year, so fixtures need one; a merge
+        # across different years is its own test below.
+        "season_year": 2026,
     }
     fmt = overrides.pop("fmt", "TV")
     row.update(overrides)
@@ -434,3 +439,101 @@ def test_a_title_dropped_from_the_latest_listing_keeps_its_last_seen_row(spark, 
     out = {r["source_id"]: r["title_romaji"] for r in _current_state(spark, tmp_path, "2026-09-09").collect()}
 
     assert out == {"1": "Yami Shibai 17", "2": "Other"}
+
+
+def test_the_title_passes_will_not_merge_across_years(spark):
+    """Catalogue-wide merging removed season as an implicit guard, so the year is
+    an explicit one. Generic names recur - a music video called "Dirty Look" in
+    one year is not the one from another."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "1", None, title_romaji="Dirty Look", fmt="music", season_year=2026),
+            _row("mal", "2", 999, title_romaji="Dirty Look", fmt="music", season_year=2011),
+        ],
+        SCHEMA_F,
+    )
+    assert _merge_sources(df).count() == 2
+
+
+def test_a_row_with_no_start_year_is_never_title_merged(spark):
+    """Missing the guard means the pass cannot be trusted, so the row keeps its
+    own identity rather than merging on a weaker key."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "1", None, title_romaji="Same", fmt="TV", season_year=None),
+            _row("mal", "2", 999, title_romaji="Same", fmt="TV", season_year=None),
+        ],
+        SCHEMA_F,
+    )
+    assert _merge_sources(df).count() == 2
+
+
+def _fresh_session():
+    """consolidate_catalogue stops the session it uses, exactly as the DAG task
+    expects. The module fixture cannot survive that, so the catalogue tests own
+    their sessions instead of borrowing it."""
+    return (
+        SparkSession.builder.master("local[1]")
+        .appName("weebblade-test-catalogue")
+        .config("spark.ui.enabled", "false")
+        .getOrCreate()
+    )
+
+
+def _write_source(spark, data_dir, dir_name, partition, run_date, rows):
+    schema = StructType(
+        [
+            StructField("source", StringType()),
+            StructField("source_id", StringType()),
+            StructField("title_romaji", StringType()),
+            StructField("format", StringType()),
+            StructField("season", StringType()),
+            StructField("season_year", LongType()),
+        ]
+    )
+    out = data_dir / "processed" / dir_name / partition / f"{run_date}.parquet"
+    spark.createDataFrame(rows, schema).write.mode("overwrite").parquet(str(out))
+
+
+def test_sources_that_disagree_about_the_season_still_merge(tmp_path):
+    """The nine live duplicates that survived every per-partition fix.
+
+    Kitsu files "Baki-dou Part 2" under Summer 2026 and MAL files it under Spring
+    2026, so the two halves land in different partitions and a per-season merge
+    never sees them together. Consolidating the catalogue as a whole does.
+    """
+    session = _fresh_session()
+    _write_source(
+        session, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-09",
+        [("kitsu", "50635", "BAKI-DOU Part 2", "ONA", "SUMMER", 2026)],
+    )
+    _write_source(
+        session, tmp_path, "mal_media", "2026-SPRING", "2026-09-09",
+        [("mal", "63833", "Baki-dou Part 2", "ONA", "SPRING", 2026)],
+    )
+
+    out_dir = consolidate_catalogue(tmp_path, "2026-09-09")
+    rows = _fresh_session().read.parquet(str(out_dir)).collect()
+
+    assert len(rows) == 1
+    assert rows[0]["source"] == "kitsu"  # priority order decides the survivor
+    assert rows[0]["season"] == "SUMMER"  # and it keeps its own season
+
+
+def test_the_catalogue_keeps_titles_that_are_genuinely_distinct(tmp_path):
+    """The merge must not be so eager that consolidating everything at once
+    starts deleting separate shows."""
+    session = _fresh_session()
+    _write_source(
+        session, tmp_path, "kitsu_media", "2026-SPRING", "2026-09-09",
+        [("kitsu", "1", "Spring Show", "TV", "SPRING", 2026)],
+    )
+    _write_source(
+        session, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-09",
+        [("kitsu", "2", "Summer Show", "TV", "SUMMER", 2026)],
+    )
+
+    out_dir = consolidate_catalogue(tmp_path, "2026-09-09")
+    rows = _fresh_session().read.parquet(str(out_dir)).collect()
+
+    assert sorted(r["title_romaji"] for r in rows) == ["Spring Show", "Summer Show"]
