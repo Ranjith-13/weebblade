@@ -158,3 +158,11 @@ hierarchy, sequence, feedback, state change — do not add it.
 
 Run the build, then check in a real browser at 390 and 1440. Current gate results: 0 contrast
 failures, 0 tap targets under the WCAG 2.2 24px minimum, CLS 0, visible focus on every control.
+
+**Use the Playwright MCP browser, not the in-app Browser pane.** The pane cannot hydrate a PPR
+page: it leaves React's postponed markers (`<!--$~-->`) unresolved, so every client component below
+a Suspense boundary stays inert. Fibers attach to `body` and the static shell and stop — the
+trailer button does not respond and `NextAiring` renders an empty `<p>`. The same page in Playwright
+resolves to `<!--$-->` and hydrates fully. This cost a long debugging session chasing a component
+that was never broken; if a client component looks dead in the pane, confirm in Playwright before
+touching it.
