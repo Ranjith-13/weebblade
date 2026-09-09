@@ -7,6 +7,7 @@ import { NextAiring } from "@/components/NextAiring";
 import { Trailer } from "@/components/Trailer";
 import { getAnime } from "@/lib/api";
 import {
+  ageRatingLabel,
   ApiError,
   displayTitle,
   formatAirDate,
@@ -100,7 +101,9 @@ async function AnimeDetail({
     anime.episodes ? ["Episodes", String(anime.episodes)] : null,
     anime.duration_minutes ? ["Episode length", `${anime.duration_minutes} min`] : null,
     formatAirDate(anime) ? ["First aired", formatAirDate(anime)!] : null,
-    anime.age_rating ? ["Rating", anime.age_rating] : null,
+    ageRatingLabel(anime.age_rating)
+      ? ["Rating", ageRatingLabel(anime.age_rating)!]
+      : null,
     // userCount is the one interest figure present for essentially the whole
     // season, so it leads. popularity and rating_rank are RANKS (lower is
     // better) and are labelled as such so nobody reads 11,491 as a score.

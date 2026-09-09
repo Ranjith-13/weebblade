@@ -336,6 +336,33 @@ export function broadcastSlotLabel(
 /** MAL reports source material as a snake_case token ("light_novel",
  *  "4_koma_manga"). Rendered as-is it looks like a database field, which on a
  *  page whose whole argument is legibility is the wrong impression. */
+/* Age ratings, where the two sources use different vocabularies AND different
+ * scales. Kitsu says G / PG / R; MAL says g / pg / pg_13 / r / r+ / rx. The
+ * transform reconciles format and status to Kitsu's words, but it cannot do that
+ * here without lying: MAL's pg_13 is a real rating with no Kitsu equivalent, and
+ * flattening it to PG would claim something milder than the source said.
+ *
+ * So this normalises presentation only, never meaning. Left alone, 258 of 480
+ * live titles rendered the literal string "pg_13" as their rating.
+ */
+const AGE_RATINGS: Record<string, string> = {
+  g: "G",
+  pg: "PG",
+  pg_13: "PG-13",
+  r: "R",
+  "r+": "R+",
+  rx: "Rx",
+  r18: "R18",
+};
+
+export function ageRatingLabel(value: string | null): string | null {
+  if (!value) return null;
+  const key = value.trim().toLowerCase();
+  // An unseen value is still tidied rather than shown raw, so it degrades to
+  // "PG-13" shape instead of "pg_13".
+  return AGE_RATINGS[key] ?? key.toUpperCase().replace(/_/g, "-");
+}
+
 export function sourceMaterialLabel(value: string | null): string | null {
   if (!value) return null;
   const words = value.replace(/_/g, " ").trim();

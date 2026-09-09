@@ -83,10 +83,19 @@ Facets are scoped per season. Offering a genre chip that matches nothing in the 
 is the same dead-control bug as the old hardcoded `Sci-Fi`, reached from a different direction.
 Switching season therefore clears `genre` and `service`.
 
-**Kitsu tags a title to its START season only** - verified, Spring and Summer 2026 share zero ids.
-So a show that began in Spring and is still airing appears under Spring, not Summer. That also
-means the `anime_media_latest` dedupe (`PARTITION BY source, source_id`, no season) is safe today,
-but it would collapse carryovers if a source ever tagged a title to both.
+**Both sources tag a title to its START season only**, so a show that began in Spring and is still
+airing appears under Spring, not Summer. Kitsu does this natively; MAL does not, and its season
+endpoint returns everything *airing* in a season - One Piece and Sazae-san included, each carrying
+its debut season. `ingestion/mal/fetch_season.py` drops those at ingest. Without it they reached
+the warehouse and gave this switcher 30 phantom entries of one to three titles each.
+
+**The sources disagree about the season for some titles** - nine live ones were Summer to Kitsu
+and Spring to MAL. Consolidation therefore runs over the whole catalogue at once rather than per
+season (`consolidate_catalogue`), because a season-scoped merge can never see both halves of such
+a pair, and each one showed up as a duplicate on the site.
+
+`getSeasons()` also enforces `MIN_SEASON_TITLES`: a season it offers should be a season we actually
+ingested.
 
 After a backfill, the frontend serves the previous season list for up to an hour - `cacheLife`
 is doing its job. In dev, `use cache` survives a Fast Refresh; clear `.next` to see new data.
@@ -97,9 +106,10 @@ is doing its job. In dev, `use cache` survives a Fast Refresh; clear `.next` to 
 `lib/types.ts` owns this: absent means `DEFAULT_FORMAT`, and `FORMAT_ALL` ("all") is the explicit
 opt-out. LiveChart and AniChart both default to Television for the same reason.
 
-The reason is measured: of 142 entries, **27 are music videos and 0% of them are ever scored**;
-ONAs are 13% scored and films 9%. TV series are 66 titles at ~48%. So the old "73% of the season
-has no score" headline was mostly counting music videos rather than saying anything about anime.
+The reason is measured. Re-measured 2026-09-09 over 228 titles, the gap is wider than at first
+count: **TV is 75 titles at 81% scored**, while music videos are 51 titles at 15%, movies 31 at
+22% and ONAs 60 at 30%. So a headline about how much of "the season" is unscored is mostly a
+statement about music videos, not about anime.
 
 Nothing is hidden. Every format keeps its own chip, "All formats" is one click, and the front page
 states `Beyond TV` alongside the TV counts and links straight to `?format=all`. **Do not "simplify"
@@ -111,13 +121,26 @@ they can never be.
 Measured across the full season, not a sample. An earlier 40-title sample overstated cover art at
 ~50% and trailers at ~80%; Kitsu's listing puts well-documented titles first, so the head lies.
 
+Re-measured 2026-09-09 over the newest season (228 titles) after MAL joined. MAL supplies
+studios, source material and scores but carries **no** slug, cover, trailer or streaming links, so
+adding it raised some fields and diluted others. Both directions matter.
+
 | Field | Coverage | Rule |
 |---|---|---|
-| `slug`, `user_count` | ~100% | Safe to rely on |
-| `streaming_services` / `_urls` | 59% | Show an honest "no link listed" when absent |
-| `trailer_id` | 57% | Render the component or nothing |
-| `score_100`, `rating_rank` | 29% | The whole certainty system exists for this |
-| `cover_url` | **17%** | **Enhancement only. Never reserve space for it** |
+| `user_count` | 100% | Safe to rely on |
+| `source_material` | 83% | MAL's contribution; was 0% before it |
+| `studios` | 68% | Same |
+| `rating_rank` | 64% | |
+| `slug` | **61%** | **MAL rows have none.** `sourceUrl()` returns null; render no link, never a broken one |
+| `score_100` | 43% | The whole certainty system exists for this |
+| `streaming_services` / `_urls` | 36% | Show an honest "no link listed" when absent |
+| `trailer_id` | 35% | Render the component or nothing |
+| `broadcast_day` / `_time` | 29% | Drives the slot line and `NextAiring` |
+| `cover_url` | **11%** | **Enhancement only. Never reserve space for it** |
+
+`age_rating` needs `ageRatingLabel()`. Kitsu says `PG`/`R`/`G`, MAL says `pg_13`/`g`/`r`/`pg`, and
+the two are different scales, so this is normalised for display only and never flattened into one
+vocabulary - MAL's `pg_13` has no Kitsu equivalent and calling it `PG` would understate it.
 
 `streaming_*` are parallel arrays; pair them with `streamingLinks()`. Junk URLs are dropped at
 ingest, so anything reaching the client is a usable absolute link.
