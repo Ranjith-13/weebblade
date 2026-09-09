@@ -87,35 +87,63 @@ def _merge_sources(df: DataFrame) -> DataFrame:
     MAL both carry BLEACH under different ids, and a plain union keeps both, so
     every popular title appears twice in the UI.
 
-    Rows are matched on `mal_id`, which Kitsu supplies via its mappings
-    relationship. A row with no mal_id cannot be matched to anything and keeps
-    its own identity, which is the safe default: a false merge silently deletes a
-    title, while a missed merge merely leaves a duplicate that is visible and
-    fixable.
+    Two passes, because one key is not enough:
+
+    1. `mal_id`, which Kitsu supplies via its mappings relationship. This is the
+       reliable key and catches the large majority.
+    2. title + format, for the rows pass 1 cannot match. Measured against the
+       live Summer 2026 data, 14 Kitsu rows carry no MAL mapping at all, so
+       their MAL twins survived pass 1 as visible duplicates. Their titles are
+       byte-identical, so this pass catches them.
+
+    Pass 2 is deliberately narrow. It requires an exact title AND the same
+    format, and consolidate already runs per season, so a false merge needs two
+    different shows sharing a title, a format and a season. A false merge
+    silently deletes a title, which is worse than the duplicate it prevents, so
+    anything less certain than that is left alone.
 
     The merge is per-column, taking the first non-null value in source-priority
-    order, so one output row can hold Kitsu's streaming links and MAL's studios
-    at once. `source` and `source_id` are taken from the winning source so the
-    row still points at a real upstream record.
+    order, so one output row holds Kitsu's streaming links and MAL's studios at
+    once.
+    """
+    matched_by_id = _merge_on(
+        df,
+        F.when(F.col("mal_id").isNotNull(), F.concat(F.lit("mal:"), F.col("mal_id"))).otherwise(
+            F.concat(F.lit("src:"), F.col("source"), F.lit(":"), F.col("source_id"))
+        ),
+    )
+    return _merge_on(
+        matched_by_id,
+        F.when(
+            F.col("title_romaji").isNotNull() & F.col("format").isNotNull(),
+            F.concat(
+                F.lit("tf:"),
+                F.lower(F.trim(F.col("title_romaji"))),
+                F.lit("|"),
+                F.lower(F.col("format")),
+            ),
+        ).otherwise(
+            F.concat(F.lit("src:"), F.col("source"), F.lit(":"), F.col("source_id"))
+        ),
+    )
+
+
+def _merge_on(df: DataFrame, key: "F.Column") -> DataFrame:
+    """Group by `key` and take the first non-null value of every column in
+    source-priority order.
+
+    An ORDERED window, not groupBy(...).agg(first(...)): inside a groupBy,
+    `first` has no defined order, so which source won would vary between runs.
+    The frame must span the whole partition or `first` only sees rows up to the
+    current one.
     """
     priority = F.create_map(
         *[x for i, s in enumerate(_SOURCE_PRIORITY) for x in (F.lit(s), F.lit(i))]
     )
     df = df.withColumn(
         "_priority", F.coalesce(priority[F.col("source")], F.lit(len(_SOURCE_PRIORITY)))
-    ).withColumn(
-        # Rows without a mal_id are unmatchable, so they group only with
-        # themselves. Prefixing keeps a mal_id of 5 from colliding with a
-        # source_id of "5".
-        "_key",
-        F.when(F.col("mal_id").isNotNull(), F.concat(F.lit("mal:"), F.col("mal_id")))
-        .otherwise(F.concat(F.lit("src:"), F.col("source"), F.lit(":"), F.col("source_id"))),
-    )
+    ).withColumn("_key", key)
 
-    # An ORDERED window, not groupBy(...).agg(first(...)): inside a groupBy,
-    # `first` has no defined order, so which source won would vary between runs.
-    # The frame must span the whole partition or `first` only sees rows up to the
-    # current one.
     window = (
         Window.partitionBy("_key")
         .orderBy("_priority")
