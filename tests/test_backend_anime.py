@@ -221,3 +221,49 @@ def test_ordering_is_reproducible_across_identical_queries(tied_client, sort):
     runs = [_page_through(tied_client, sort) for _ in range(5)]
 
     assert all(run == runs[0] for run in runs), f"{sort} ordering is not deterministic"
+
+
+def test_list_columns_survive_a_row_written_before_those_columns_existed(tmp_path):
+    """Regression: /anime returned 500 for any page containing a carried-over row.
+
+    anime_media_latest keeps the newest row per title, so a title that stops
+    appearing upstream is still served from an older snapshot. standardize_schema
+    fills that snapshot's missing columns with typed NULLs on purpose - it is what
+    makes backfills work - and a NULL array reaches Pydantic as None, which a bare
+    list[str] rejects. In production this failed on item 58 of limit=100 while
+    limit=50 passed, because the old rows sat past the first page.
+    """
+    from backend.app.schemas import Anime
+
+    anime = Anime.model_validate(
+        {
+            "source": "kitsu",
+            "source_id": "1",
+            "genres": None,
+            "studios": None,
+            "streaming_services": None,
+            "streaming_urls": None,
+        }
+    )
+
+    assert anime.genres == []
+    assert anime.studios == []
+    assert anime.streaming_services == []
+    assert anime.streaming_urls == []
+
+
+def test_list_columns_pass_through_when_present():
+    from backend.app.schemas import Anime
+
+    anime = Anime.model_validate(
+        {
+            "source": "kitsu",
+            "source_id": "1",
+            "genres": ["Action"],
+            "streaming_services": ["Crunchyroll"],
+            "streaming_urls": ["https://www.crunchyroll.com/series/a"],
+        }
+    )
+
+    assert anime.genres == ["Action"]
+    assert anime.streaming_services == ["Crunchyroll"]

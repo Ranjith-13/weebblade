@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class Anime(BaseModel):
@@ -44,6 +44,26 @@ class Anime(BaseModel):
     start_month: int | None = None
     start_day: int | None = None
     run_date: str | None = None
+
+    @field_validator(
+        "genres", "studios", "streaming_services", "streaming_urls", mode="before"
+    )
+    @classmethod
+    def _null_list_is_empty(cls, value: object) -> object:
+        """A list column reads back as NULL, not [], for any row written before that
+        column existed.
+
+        `anime_media_latest` keeps the newest row per title, so a title that stopped
+        appearing upstream is still served from an older snapshot. standardize_schema
+        fills the columns it lacks with typed NULLs by design - that is what makes
+        backfills work - and those NULLs arrive here as None, which a bare list[str]
+        rejects with a 500 for the whole page.
+
+        Found in production the moment streaming_services shipped: /anime?limit=100
+        failed on item 58 while limit=50 was fine, because the carried-over rows sit
+        past the first page.
+        """
+        return [] if value is None else value
 
 
 class AnimeListResponse(BaseModel):
