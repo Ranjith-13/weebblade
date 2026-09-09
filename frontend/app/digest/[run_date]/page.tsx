@@ -17,22 +17,22 @@ function formatDate(runDate: string): string {
 
 export async function generateMetadata(props: PageProps<"/digest/[run_date]">) {
   const { run_date } = await props.params;
-  return { title: `Digest — ${formatDate(run_date)}` };
+  return { title: `Digest, ${formatDate(run_date)}` };
 }
 
 /* Shell prerenders; the params-dependent body streams. Cache Components makes
  * reading `params` outside a <Suspense> boundary a prerender error. */
 export default function DigestPage(props: PageProps<"/digest/[run_date]">) {
   return (
-    <article className="mx-auto max-w-[1400px] px-6 py-12">
-      <Link href="/digest" className="label hover:!text-ink transition-colors">
-        ← Archive
+    <article className="mx-auto max-w-[1340px] px-5 py-9 sm:px-7">
+      <Link href="/digest" className="meta inline-block py-2 transition-colors hover:text-flag">
+        Back to the archive
       </Link>
       <Suspense
         fallback={
           <div className="mt-8 space-y-4">
-            <div className="h-14 w-1/2 bg-raised" />
-            <div className="h-4 w-full max-w-[68ch] bg-raised" />
+            <div className="h-14 w-1/2 bg-plate" />
+            <div className="h-4 w-full max-w-[64ch] bg-plate" />
           </div>
         }
       >
@@ -54,16 +54,16 @@ async function DigestBody({
 
   return (
     <>
-      <header className="mt-8 border-b border-rule pb-8">
-        <p className="label">
-          <span className="text-accent">●</span> Written by an LLM from the week&rsquo;s ingested data
+      <header className="mt-7 border-b-2 border-ink pb-7">
+        <p className="meta">
+          Written by an LLM from the week&rsquo;s ingested data
         </p>
-        <h1 className="font-display text-5xl leading-[1.05] md:text-6xl mt-4">
+        <h1 className="mt-3 font-display text-[clamp(2.2rem,6vw,3.6rem)] font-black leading-[1.02]">
           {formatDate(digest.run_date)}
         </h1>
       </header>
 
-      <div className="digest-prose mt-10 text-[1.05rem] text-ink/90">
+      <div className="digest-prose mt-8 text-[1.02rem]">
         <Markdown>{digest.content}</Markdown>
       </div>
     </>

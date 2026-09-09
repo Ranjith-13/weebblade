@@ -1,1 +1,103 @@
 @AGENTS.md
+
+# Frontend
+
+Read `DESIGN.md` before changing anything visual. Most choices here are measured, not preferences.
+
+## Direction
+
+**Halftone Almanac — colour as certainty.** Only 39 of 142 titles have a score, so the design
+spends its one colour on that fact: scored titles print in full colour with a flag-pink tab,
+unscored ones drain to greyscale and screen back to visible halftone. A third state, diagonal rule
+fill, covers the 37 titles with no artwork — that is a *separate* gap from a missing score and
+must stay separate.
+
+The certainty treatment is driven by `isKnown(anime)` over real data. **Never apply
+`.plate-unknown` decoratively** — the moment it stops meaning "no score upstream", the whole idea
+becomes ornament.
+
+## Where the tokens live
+
+`app/globals.css`, in the `@theme` block. That is the **single source of truth for every colour**.
+`lib/design-tokens.ts` exports only variable *names* and composed patterns, so no hex is ever
+duplicated. There is no literal hex anywhere in `app/`, `components/` or `lib/`; keep it that way.
+
+Palette: `paper #E9E7E0` · `plate #DFDCD2` · `rule #C6C2B6` · `ink #15151A` · `ink-soft #5E5E66` ·
+`flag #C2005E` · `data #1B3FBF`. Two signal colours only — a third is drift.
+
+**Contrast is computed, not eyeballed.** The first draft's `#FF2E88` measured 2.83:1 (fails even
+large-text AA) and `#6E6E75` measured 4.09:1 (fails body). Re-measure if you change a colour.
+
+## Typefaces
+
+**Bodoni Moda** (display) + **Archivo** (text), via `next/font/google`. Display sizes only for the
+didone; its hairlines break up at body size.
+
+**Fraunces and Instrument Serif are both banned here.** The first pass used Fraunces to avoid
+Instrument Serif, which is swapping one generated-site default for the other. Justify a face
+against this product or do not change it.
+
+Do not add variable-font axes you do not actually vary. Fraunces briefly shipped `SOFT`, `WONK`
+and `opsz` that no rule ever set, costing 82 KB (152 KB to 70 KB) for no visual difference.
+
+## Banned
+
+Inter, Geist, Roboto, Open Sans, Lato, Montserrat, Poppins, and system-font defaults. Purple/indigo
+gradients. Cream-and-terracotta (`#F4F1EA` + `#D97757`). Rounded corners and drop shadows —
+separation is hairline rules. ALL-CAPS tracked eyebrows used indiscriminately: `.stamp` is
+for structural data labels only and must stay in single digits sitewide, `.meta` carries everything
+else. Em-dashes in visible copy (the null marker on an unscored plate is the one exception).
+Decorative dots or squares before labels. `01 / 02` numbering on a countable list. `·`-joined
+metadata and `→` appended to link text. Uniform card grids where every item
+carries equal weight regardless of what is known about it.
+
+If a change would fit three other products, it is wrong.
+
+## Data layer — three upstream bugs it works around
+
+`lib/api.ts` fetches the whole season once and derives everything locally. Do not "optimise" this
+back into per-view API calls; it is *fewer* upstream requests, and it is the only place these are
+fixable:
+
+1. **Pagination is unstable under `score_desc`** (103 NULL scores, no deterministic tie order).
+   Three identical fetches returned 126 / 116 / 122 distinct titles. **`sort=title` is pinned in
+   `getSeason()` and is load-bearing** — do not remove it.
+2. **`popularity` is a rank, lower = more popular.** The API's only popularity sort returns the
+   least popular first. Sorted locally.
+3. **Genre facets are derived from the data.** A hardcoded list drifted and shipped a `Sci-Fi` chip
+   that matched nothing.
+
+Never render `studios`, `source_material`, `mal_id` (100% null) or `favourites` (0–25, noise).
+
+## Caching is a rate-limit boundary, not a perf tweak
+
+The API limits per client IP (60/min, 20/min on `/search`) and on Vercel every visitor shares the
+app's egress addresses. Server reads use `'use cache'` + `cacheLife('hours')`; the pipeline
+publishes weekly so this costs nothing in freshness.
+
+**`/search` deliberately runs client-side** so each visitor spends their own budget on their own
+queries. Do not move it to the server. Results carry no artwork from the API, so the server passes
+a trimmed season lookup and the client joins locally.
+
+`lib/types.ts` is client-safe; `lib/api.ts` imports `server-only`. Importing `API_BASE` from
+`api.ts` into a client component drags `cacheLife` into the browser bundle and breaks the build.
+
+## Motion
+
+GSAP + ScrollTrigger via `@gsap/react`'s `useGSAP`, in `components/motion/`. **Do not add a second
+animation library** — two libraries on the same elements fight over frames.
+
+Every effect sits inside `gsap.matchMedia("(prefers-reduced-motion: no-preference)")` and uses
+`gsap.from()`, so reduced-motion users get no animation and a JS failure leaves the page complete
+rather than invisible. Transform and opacity only, so CLS stays 0.
+
+Do not add: horizontal scroll hijack (breaks `/browse`'s filters, pagination and URLs), Three.js
+(no 3D content), or Lenis (overrides native scroll, hurts fast scanning and accessibility).
+
+Motion must be motivated. If you cannot say in one sentence what an animation communicates —
+hierarchy, sequence, feedback, state change — do not add it.
+
+## Verify before claiming
+
+Run the build, then check in a real browser at 390 and 1440. Current gate results: 0 contrast
+failures, 0 tap targets under the WCAG 2.2 24px minimum, CLS 0, visible focus on every control.

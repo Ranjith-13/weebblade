@@ -1,85 +1,229 @@
 @import "tailwindcss";
 
-/* Design tokens - see DESIGN.md for the intent behind them. Dark-only by
-   deliberate choice: this is a single committed look, not a themed app, so
-   there's no prefers-color-scheme branch to keep in sync. */
-@theme {
-  --color-ground: #0b0b0f;
-  --color-raised: #101016;
-  --color-ink: #f2f2f0;
-  --color-muted: #8a8a92;
-  --color-rule: #22222a;
-  --color-accent: #e23e57;
+/* ============================================================================
+   WeebBlade — token layer.  Direction: "Halftone Almanac, colour as certainty".
+   See DESIGN.md for the reasoning. Nothing below is decorative-by-accident:
+   the palette is the product's honesty about its own data.
 
-  --font-display: var(--font-display), ui-serif, Georgia, serif;
-  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+   THE CENTRAL IDEA
+   The pipeline has a score for only 39 of 142 titles. Rather than hide that,
+   the design spends its one colour on it: a title the pipeline *knows* prints
+   in full colour with a flag-pink score tab; a title it doesn't drains to grey
+   and dithers out to visible halftone. Colour is the reward for known data.
+
+   CONTRAST IS COMPUTED, NOT EYEBALLED
+   The first draft of this palette used #FF2E88 (2.83:1 on paper — fails even
+   large-text AA) and #6E6E75 for muted text (4.09:1 — fails body). Both were
+   replaced with measured values. Every pair below is >= 4.5:1 against its
+   intended background, so there is no "accessible variant" to remember.
+   ========================================================================= */
+
+@theme {
+  /* --- surface ------------------------------------------------------------
+     Newsprint, not cream: a cool-leaning off-white. Deliberately NOT the
+     #F4F1EA/#D97757 cream-and-terracotta pairing. */
+  --color-paper: #e9e7e0;
+  --color-plate: #dfdcd2; /* raised: fallback tiles, table stripes */
+  --color-rule: #c6c2b6; /* hairlines; separation is rules, never shadow */
+
+  /* --- ink ----------------------------------------------------------------- */
+  --color-ink: #15151a; /* 14.71:1 on paper */
+  --color-ink-soft: #5e5e66; /* 5.19:1 on paper — passes body, unlike #6E6E75 */
+
+  /* --- the two signal colours ---------------------------------------------
+     flag  = "this value is known" (scores, live counts)
+     data  = quantitative rails, ranks, links
+     Only two. Any third colour is drift. */
+  --color-flag: #c2005e; /* 4.91:1 on paper, and 4.91:1 for paper-on-flag */
+  --color-data: #1b3fbf; /* 6.76:1 on paper */
+
+  /* --- type ---------------------------------------------------------------
+     Bodoni Moda: a didone, which is the historical face of printed almanacs
+     and broadsheet mastheads. Its extreme thick/thin stroke contrast is the
+     typographic analogue of the halftone screen this whole design runs on:
+     dense ink next to bare paper. Used only at display sizes, where a didone
+     is strong; never for body, where it would be fragile.
+     Deliberately NOT Fraunces or Instrument Serif, the two display serifs
+     every generated editorial site reaches for.
+     Archivo: a grotesque that stays legible at 10px for dense metadata. */
+  --font-display: var(--font-bodoni), ui-serif, Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* --- shape --------------------------------------------------------------
+     Zero radius everywhere. An almanac is printed, not rounded. */
+  --radius-none: 0px;
+
+  /* --- motion -------------------------------------------------------------
+     One easing, short durations. No hover-lift, no fade-and-slide-up. */
+  --ease-print: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Map the semantic names any pulled shadcn component expects onto the palette
+   above, so those components wear this design instead of shipping stock. */
+@theme {
+  --color-background: var(--color-paper);
+  --color-foreground: var(--color-ink);
+  --color-muted: var(--color-plate);
+  --color-muted-foreground: var(--color-ink-soft);
+  --color-input: var(--color-rule);
+  --color-ring: var(--color-flag);
+  --color-border: var(--color-rule);
+  --color-destructive: #a1132b;
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
-  background: var(--color-ground);
+  background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Figures are content in this project (scores, episode counts, similarity
-   distances), so they get tabular numerals everywhere rather than only where
-   someone remembered to ask. */
+/* Paper tooth. A single dot screen over the whole page at low opacity — the
+   thing that makes flat #E9E7E0 read as stock rather than as a grey div.
+   Fixed so it never parallaxes; pointer-events off so it never eats a click. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.38;
+  background-image: radial-gradient(var(--color-ink) 0.5px, transparent 0.6px);
+  background-size: 4px 4px;
+}
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   CERTAINTY  — the one idea, expressed as two utilities.
+   .plate-known    full colour, untouched artwork
+   .plate-unknown  drained to grey and screened back to halftone
+   Applied from real data (score_100 != null), never decoratively.
+   ------------------------------------------------------------------------ */
+.plate-known img {
+  filter: saturate(1.06) contrast(1.03);
+}
+.plate-unknown img {
+  filter: grayscale(1) contrast(0.9) brightness(1.06);
+}
+.plate-unknown::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(var(--color-paper) 1.3px, transparent 1.45px);
+  background-size: 4px 4px;
+  opacity: 0.88;
+  transition: opacity 320ms var(--ease-print);
+}
+
+/* Hover lifts the screen so more of the artwork shows through. This is the one
+   micro-interaction that carries meaning rather than delight: the plate is
+   screened back because the pipeline has no score for it, and leaning in
+   reveals what IS there. Deliberately CSS rather than JS on scroll: animating a
+   halftone's opacity across 30 plates during scroll costs a repaint per plate
+   per frame, and the grid stutters. One element at a time on hover is free. */
+.group:hover .plate-unknown::after,
+.group:focus-visible .plate-unknown::after {
+  opacity: 0.55;
+}
+
+/* Diagonal rule fill for the ~20% of titles with no artwork at all. A missing
+   poster is a different gap from a missing score, and gets its own treatment
+   rather than being folded into one "incomplete" state. */
+.plate-empty {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 5px,
+    color-mix(in srgb, var(--color-ink) 9%, transparent) 5px 10px
+  );
+}
+
+/* Figures are the substance here, so tabular numerals are the default for
+   anything numeric rather than an opt-in someone forgets. */
 .tnum {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
 
-/* The small uppercase metadata label used throughout - wide tracking against
-   the oversized display type is most of what carries the editorial hierarchy. */
-.label {
-  font-size: 0.6875rem;
+/* Two levels of quiet text, and the split matters.
+
+   .stamp is the uppercase tracked label. It is reserved for STRUCTURAL data
+   labels only: the terms in a definition list, a filter-row name, a column
+   heading. Roughly five places in the whole app.
+
+   .meta is everything else that is merely small and secondary: provenance
+   lines, plate metadata, pagination, back links, helper text. Sentence case,
+   no tracking, no shouting.
+
+   This split exists because the first pass got it wrong. The previous build
+   was criticised in the audit for using its equivalent 23+ times so that every
+   label shouted equally; the rewrite then shipped 35. A label treatment that
+   applies to everything communicates nothing. */
+.stamp {
+  font-size: 0.625rem;
   line-height: 1;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--color-muted);
+  color: var(--color-ink-soft);
 }
 
-/* Prose for the LLM-written digest. Not @tailwindcss/typography: that plugin's
-   defaults (rounded code blocks, its own color scale) fight the design, and the
-   digest is plain Markdown - headings, paragraphs, lists, emphasis. */
+.meta {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-ink-soft);
+}
+
+/* Visible focus everywhere, on paper. */
+:focus-visible {
+  outline: 2px solid var(--color-flag);
+  outline-offset: 2px;
+}
+
+/* Digest prose. Not @tailwindcss/typography — its defaults (rounded code
+   blocks, its own grey scale) fight this palette, and the digest is plain
+   Markdown: headings, paragraphs, lists, emphasis. */
 .digest-prose {
-  max-width: 68ch;
+  max-width: 64ch;
 }
 .digest-prose p {
-  margin-block: 1.15em;
-  line-height: 1.75;
+  margin-block: 1.05em;
+  line-height: 1.72;
+}
+.digest-prose > p:first-child::first-letter {
+  float: left;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 3.1em;
+  line-height: 0.82;
+  padding: 0.06em 0.1em 0 0;
+  color: var(--color-flag);
 }
 .digest-prose h1,
 .digest-prose h2,
 .digest-prose h3 {
   font-family: var(--font-display);
-  line-height: 1.15;
-  margin-block: 1.6em 0.5em;
+  font-weight: 700;
+  line-height: 1.12;
+  margin-block: 1.5em 0.45em;
   text-wrap: balance;
 }
-.digest-prose h1 {
-  font-size: 1.9rem;
-}
-.digest-prose h2 {
-  font-size: 1.5rem;
-}
-.digest-prose h3 {
-  font-size: 1.2rem;
-}
+.digest-prose h1 { font-size: 1.85rem; }
+.digest-prose h2 { font-size: 1.45rem; }
+.digest-prose h3 { font-size: 1.15rem; }
 .digest-prose ul,
 .digest-prose ol {
-  margin-block: 1.15em;
-  padding-left: 1.25em;
+  margin-block: 1.05em;
+  padding-left: 1.2em;
   line-height: 1.7;
 }
-.digest-prose li {
-  margin-block: 0.4em;
-}
+.digest-prose li { margin-block: 0.35em; }
 .digest-prose ul > li {
   list-style: none;
   position: relative;
@@ -88,23 +232,33 @@ body {
   content: "";
   position: absolute;
   left: -1em;
-  top: 0.72em;
-  width: 0.4em;
-  height: 1px;
-  background: var(--color-accent);
+  top: 0.7em;
+  width: 0.42em;
+  height: 2px;
+  background: var(--color-flag);
 }
-.digest-prose ol > li {
-  list-style: decimal;
-}
+.digest-prose ol > li { list-style: decimal; }
 .digest-prose strong {
+  font-weight: 700;
   color: var(--color-ink);
-  font-weight: 600;
 }
 .digest-prose em {
-  color: var(--color-ink);
+  font-style: italic;
 }
 .digest-prose a {
-  color: var(--color-accent);
-  text-underline-offset: 3px;
+  color: var(--color-data);
   text-decoration-line: underline;
+  text-underline-offset: 3px;
+}
+
+/* Respect the user's motion preference rather than assuming nobody minds. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

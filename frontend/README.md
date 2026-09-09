@@ -16,7 +16,7 @@ npm run dev
 Defaults to the live API. To point elsewhere, set `NEXT_PUBLIC_API_BASE_URL` (e.g. a local backend
 on `http://localhost:8000`).
 
-## Two things worth knowing before changing the data layer
+## Three things worth knowing before changing the data layer
 
 **Caching isn't a performance nicety here, it's a rate-limit boundary.** The API limits requests
 per client IP (60/min, 20/min on `/search`), and on Vercel every visitor shares this app's egress
@@ -28,6 +28,21 @@ costs nothing in freshness because the pipeline only publishes weekly.
 each visitor spends their own rate-limit budget on their own unique queries. Server-side caching
 would buy nothing for queries nobody repeats, and search results have no SEO value worth
 prerendering.
+
+**The whole season is fetched at once, and that is deliberate.** `getSeason()` pulls all 142
+titles in two requests, caches them, and derives every filter, sort, facet and page locally. It is
+*fewer* upstream requests than passing filters through, and it is the only place three upstream
+behaviours can be corrected:
+
+1. **Pagination is unstable under the default sort.** `score_desc` orders by
+   `score_100 DESC NULLS LAST` over 103 NULLs, so ties have no deterministic order and
+   `LIMIT/OFFSET` slices a differently shuffled result each call — three identical two-page
+   fetches returned 126, 116 and 122 distinct titles. `sort=title` is stable and is pinned in
+   `getSeason()`. **Do not remove it.**
+2. **`popularity` is a rank** — lower is more popular — and the API's only popularity sort returns
+   the least popular first. Sorted locally instead.
+3. **Genre facets are derived from the data.** A hardcoded list had drifted and offered a `Sci-Fi`
+   chip that matched nothing (the real tag is `Science Fiction`).
 
 Because of that split, `lib/` is two modules on purpose:
 

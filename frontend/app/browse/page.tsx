@@ -1,42 +1,13 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { PosterGrid } from "@/components/PosterTile";
-import { getAnimeList } from "@/lib/api";
-import type { AnimeQuery } from "@/lib/types";
+import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
+import { ScrollReveal } from "@/components/motion/ScrollReveal";
+import { getFacets, getSeason } from "@/lib/api";
+import { formatLabel, isKnown, sortAnime, SORTS, type SortKey } from "@/lib/types";
 
-export const metadata = { title: "Browse" };
+export const metadata = { title: "The season" };
 
-const PAGE_SIZE = 24;
-
-const SORTS = [
-  { value: "score_desc", label: "Score" },
-  { value: "popularity_desc", label: "Popularity" },
-  { value: "title", label: "Title" },
-] as const;
-
-// Formats as the sources actually spell them - Kitsu returns lowercase subtypes
-// ("TV", "ONA", "movie"), matched case-insensitively server-side (see
-// backend/app/routers/anime.py), so these only need to be recognisable here.
-const FORMATS = ["TV", "ONA", "movie", "special", "OVA", "music"] as const;
-
-/** Hardcoded rather than derived: the API has no distinct-genres endpoint, and
- *  fetching every title just to populate a filter would spend the shared
- *  rate-limit budget on a dropdown. These are the highest-volume tags in the
- *  live data. */
-const GENRES = [
-  "Action",
-  "Adventure",
-  "Comedy",
-  "Drama",
-  "Fantasy",
-  "Romance",
-  "Sci-Fi",
-  "Slice of Life",
-  "Supernatural",
-  "Isekai",
-  "Mystery",
-  "Music",
-] as const;
+const PAGE_SIZE = 30;
 
 type Current = Record<string, string | undefined>;
 
@@ -49,14 +20,15 @@ function buildHref(current: Current, patch: Current) {
   return qs ? `/browse?${qs}` : "/browse";
 }
 
-/* The page shell is static and prerenders; everything that depends on
- * searchParams lives inside <Suspense> below. Cache Components requires this -
- * reading searchParams outside a boundary makes the whole route unprerenderable
- * and blocks the initial paint on an upstream round-trip. */
+/* The shell is static and prerenders; everything reading searchParams sits
+ * inside <Suspense>. Cache Components requires this — reading searchParams
+ * outside a boundary makes the route unprerenderable and blocks first paint. */
 export default function BrowsePage(props: PageProps<"/browse">) {
   return (
-    <div className="mx-auto max-w-[1400px] px-6 py-12">
-      <h1 className="font-display text-5xl leading-none">Browse</h1>
+    <div className="mx-auto max-w-[1340px] px-5 py-9 sm:px-7">
+      <h1 className="font-display text-[clamp(2.2rem,6vw,3.4rem)] font-black leading-none">
+        The season
+      </h1>
       <Suspense fallback={<BrowseSkeleton />}>
         <BrowseResults searchParams={props.searchParams} />
       </Suspense>
@@ -67,11 +39,9 @@ export default function BrowsePage(props: PageProps<"/browse">) {
 function BrowseSkeleton() {
   return (
     <>
-      <div className="mt-10 h-[8.5rem] border-y border-rule" />
-      <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-        {Array.from({ length: 12 }).map((_, i) => (
-          <div key={i} className="aspect-[3/4] border border-rule bg-raised" />
-        ))}
+      <div className="mt-8 h-32 border-y border-rule" />
+      <div className="mt-9">
+        <PlateGridSkeleton count={18} />
       </div>
     </>
   );
@@ -83,130 +53,175 @@ async function BrowseResults({
   searchParams: PageProps<"/browse">["searchParams"];
 }) {
   const sp = await searchParams;
-
   const read = (key: string) => {
     const raw = sp[key];
     const value = Array.isArray(raw) ? raw[0] : raw;
     return value || undefined;
   };
 
+  const [season, facets] = await Promise.all([getSeason(), getFacets()]);
+
+  const sortKey: SortKey = (["score", "popularity", "title"] as const).includes(
+    read("sort") as SortKey,
+  )
+    ? (read("sort") as SortKey)
+    : "score";
+
   const current: Current = {
     genre: read("genre"),
     format: read("format"),
-    sort: read("sort") ?? "score_desc",
+    rated: read("rated"),
+    sort: sortKey,
     page: read("page"),
   };
 
-  const page = Math.max(1, Number(current.page ?? "1") || 1);
-  const query: AnimeQuery = {
-    genre: current.genre,
-    format: current.format,
-    sort: (current.sort as AnimeQuery["sort"]) ?? "score_desc",
-    limit: PAGE_SIZE,
-    offset: (page - 1) * PAGE_SIZE,
-  };
+  /* Filtering happens here rather than upstream because the whole season is
+     already in memory and deduped — see lib/api.ts. It also lets "Rated only"
+     exist at all: the API has a min_score parameter but no way to ask for
+     "has any score", which is the distinction that matters when three quarters of
+     the catalogue has none. */
+  let items = season.items;
+  if (current.genre) {
+    const g = current.genre.toLowerCase();
+    items = items.filter((a) => a.genres.some((x) => x.toLowerCase() === g));
+  }
+  if (current.format) {
+    const f = current.format.toLowerCase();
+    items = items.filter((a) => (a.format ?? "").toLowerCase() === f);
+  }
+  if (current.rated === "1") items = items.filter(isKnown);
 
-  const data = await getAnimeList(query);
-  const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
-  const hasFilters = Boolean(current.genre || current.format);
+  items = sortAnime(items, sortKey);
+
+  const page = Math.max(1, Number(current.page ?? "1") || 1);
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const clamped = Math.min(page, totalPages);
+  const visible = items.slice((clamped - 1) * PAGE_SIZE, clamped * PAGE_SIZE);
+  const hasFilters = Boolean(current.genre || current.format || current.rated);
+  const scoredHere = items.filter(isKnown).length;
 
   return (
     <>
-      <p className="label mt-3">
-        <span className="tnum">{data.total.toLocaleString()}</span> titles
-        {hasFilters ? " matching" : ""}
+      <p className="mt-3 text-[0.85rem] text-ink-soft">
+        <span className="tnum font-semibold text-ink">{items.length.toLocaleString()}</span>{" "}
+        {hasFilters ? "matching" : "titles"},{" "}
+        <span className="tnum">{scoredHere.toLocaleString()}</span> of them rated
+        {hasFilters && (
+          <>
+            {". "}
+            <Link href="/browse" className="text-data underline underline-offset-4">
+              Clear filters
+            </Link>
+          </>
+        )}
       </p>
 
-      <div className="mt-8 space-y-5 border-y border-rule py-6">
+      <div className="mt-7 space-y-4 border-y border-rule py-5">
         <FilterRow label="Genre">
-          <FilterLink
-            href={buildHref(current, { genre: undefined, page: undefined })}
-            active={!current.genre}
-          >
+          <Chip href={buildHref(current, { genre: undefined, page: undefined })} active={!current.genre}>
             All
-          </FilterLink>
-          {GENRES.map((genre) => (
-            <FilterLink
-              key={genre}
-              href={buildHref(current, { genre, page: undefined })}
-              active={current.genre === genre}
+          </Chip>
+          {/* Derived from the live data with real counts. The previous build
+              hardcoded this list and it had drifted: "Sci-Fi" matched nothing,
+              because the tag is actually "Science Fiction". */}
+          {facets.genres.map((g) => (
+            <Chip
+              key={g.value}
+              href={buildHref(current, { genre: g.value, page: undefined })}
+              active={current.genre === g.value}
+              count={g.count}
             >
-              {genre}
-            </FilterLink>
+              {g.value}
+            </Chip>
           ))}
         </FilterRow>
 
         <FilterRow label="Format">
-          <FilterLink
-            href={buildHref(current, { format: undefined, page: undefined })}
-            active={!current.format}
-          >
+          <Chip href={buildHref(current, { format: undefined, page: undefined })} active={!current.format}>
             All
-          </FilterLink>
-          {FORMATS.map((format) => (
-            <FilterLink
-              key={format}
-              href={buildHref(current, { format, page: undefined })}
-              active={current.format === format}
+          </Chip>
+          {facets.formats.map((f) => (
+            <Chip
+              key={f.value}
+              href={buildHref(current, { format: f.value, page: undefined })}
+              active={current.format === f.value}
+              count={f.count}
             >
-              {format}
-            </FilterLink>
+              {formatLabel(f.value)}
+            </Chip>
           ))}
         </FilterRow>
 
         <FilterRow label="Sort">
-          {SORTS.map((sort) => (
-            <FilterLink
-              key={sort.value}
-              href={buildHref(current, { sort: sort.value, page: undefined })}
-              active={current.sort === sort.value}
+          {SORTS.map((s) => (
+            <Chip
+              key={s.key}
+              href={buildHref(current, { sort: s.key, page: undefined })}
+              active={sortKey === s.key}
+              title={s.hint}
             >
-              {sort.label}
-            </FilterLink>
+              {s.label}
+            </Chip>
           ))}
+          <span className="mx-1 h-4 w-px bg-rule" aria-hidden />
+          <Chip
+            href={buildHref(current, {
+              rated: current.rated === "1" ? undefined : "1",
+              page: undefined,
+            })}
+            active={current.rated === "1"}
+            title="Hide titles with no score upstream"
+          >
+            Rated only
+          </Chip>
         </FilterRow>
       </div>
 
-      {data.items.length === 0 ? (
-        <p className="mt-16 text-muted">
-          Nothing matches that combination.{" "}
-          <Link href="/browse" className="text-accent underline underline-offset-4">
-            Clear filters
-          </Link>
-          .
-        </p>
-      ) : (
-        <div className="mt-10">
-          <PosterGrid items={data.items} />
+      {visible.length === 0 ? (
+        <div className="mt-14 max-w-prose">
+          <p className="font-display text-2xl font-bold">Nothing matches that.</p>
+          <p className="mt-2 text-ink-soft">
+            The season is only {season.total} titles from a single source, so narrow
+            combinations run out quickly.{" "}
+            <Link href="/browse" className="text-data underline underline-offset-4">
+              Clear the filters
+            </Link>
+            .
+          </p>
         </div>
+      ) : (
+        <ScrollReveal className="mt-9" selector=":scope > div > a" stagger={0.035}>
+          <PlateGrid items={visible} />
+        </ScrollReveal>
       )}
 
       {totalPages > 1 && (
-        <nav className="mt-16 flex items-center justify-between border-t border-rule pt-6">
-          {page > 1 ? (
+        <nav
+          aria-label="Pagination"
+          className="mt-14 flex items-center justify-between border-t border-rule pt-5"
+        >
+          {clamped > 1 ? (
             <Link
-              href={buildHref(current, { page: String(page - 1) })}
-              className="label hover:!text-ink"
+              href={buildHref(current, { page: String(clamped - 1) })}
+              className="meta inline-block py-2 transition-colors hover:text-flag"
             >
-              ← Previous
+              Previous
             </Link>
           ) : (
-            <span className="label opacity-30">← Previous</span>
+            <span className="meta inline-block py-2 opacity-35">Previous</span>
           )}
-
-          <span className="label tnum">
-            Page {page} of {totalPages}
+          <span className="meta tnum">
+            Page {clamped} of {totalPages}
           </span>
-
-          {page < totalPages ? (
+          {clamped < totalPages ? (
             <Link
-              href={buildHref(current, { page: String(page + 1) })}
-              className="label hover:!text-ink"
+              href={buildHref(current, { page: String(clamped + 1) })}
+              className="meta inline-block py-2 transition-colors hover:text-flag"
             >
-              Next →
+              Next
             </Link>
           ) : (
-            <span className="label opacity-30">Next →</span>
+            <span className="meta inline-block py-2 opacity-35">Next</span>
           )}
         </nav>
       )}
@@ -216,34 +231,42 @@ async function BrowseResults({
 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
-      <span className="label w-16 shrink-0">{label}</span>
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">{children}</div>
+    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
+      <span className="stamp w-14 shrink-0">{label}</span>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2">{children}</div>
     </div>
   );
 }
 
-/* Filters are links, not client state: the page ships no JS for filtering, and
-   every filtered view gets a real shareable, back-button-able URL. */
-function FilterLink({
+/* Filters stay links, not client state: the page ships no JS for filtering and
+   every view has a real shareable, back-button-able URL. */
+function Chip({
   href,
   active,
+  count,
+  title,
   children,
 }: {
   href: string;
   active: boolean;
+  count?: number;
+  title?: string;
   children: React.ReactNode;
 }) {
   return (
     <Link
       href={href}
-      className={
+      title={title}
+      aria-current={active ? "true" : undefined}
+      className={[
+        "inline-block border-b-2 py-1.5 text-[0.82rem] transition-colors duration-150",
         active
-          ? "text-sm text-ink border-b border-accent pb-0.5"
-          : "text-sm text-muted hover:text-ink transition-colors border-b border-transparent pb-0.5"
-      }
+          ? "border-flag font-semibold text-ink"
+          : "border-transparent text-ink-soft hover:border-rule hover:text-ink",
+      ].join(" ")}
     >
       {children}
+      {count !== undefined && <span className="tnum ml-1 text-[0.7rem] opacity-60">{count}</span>}
     </Link>
   );
 }
