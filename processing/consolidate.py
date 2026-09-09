@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
+from pyspark.sql.types import ArrayType
 
 from .normalize import standardize_schema
 from .spark import get_spark_session
@@ -149,10 +150,24 @@ def _merge_on(df: DataFrame, key: "F.Column") -> DataFrame:
         .orderBy("_priority")
         .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
     )
+    # An EMPTY ARRAY is not a value, it is an absence, and treating it as a value
+    # is a real bug this hit: Kitsu emitted studios as [] meaning "no studio data
+    # here", ignorenulls accepted it, and because Kitsu outranks MAL every merged
+    # row ended up with no studios at all while MAL's populated list sat right
+    # there. Sources now emit null instead, and this makes the merge immune
+    # regardless of what any future source does.
+    fields = {f.name: f.dataType for f in df.schema.fields}
+
+    def meaningful(name: str) -> "F.Column":
+        col = F.col(name)
+        if isinstance(fields.get(name), ArrayType):
+            return F.when(F.size(col) > 0, col)
+        return col
+
     columns = [c for c in df.columns if c not in ("_key", "_priority")]
     merged = df.select(
         F.col("_key"),
-        *[F.first(F.col(c), ignorenulls=True).over(window).alias(c) for c in columns],
+        *[F.first(meaningful(c), ignorenulls=True).over(window).alias(c) for c in columns],
     )
     return merged.dropDuplicates(["_key"]).drop("_key")
 

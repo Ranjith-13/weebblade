@@ -91,8 +91,11 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "broadcast_time": broadcast.get("start_time"),
         "slug": None,
         "trailer_id": None,
-        "streaming_services": [],
-        "streaming_urls": [],
+        # None rather than [], for the same reason Kitsu's studios are None: an
+        # empty list reads as a real value to the merge and would beat another
+        # source's populated one.
+        "streaming_services": None,
+        "streaming_urls": None,
         "start_year": start_year,
         "start_month": start_month,
         "start_day": start_day,

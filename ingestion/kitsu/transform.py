@@ -126,8 +126,11 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "start_year": start_year,
         "start_month": start_month,
         "start_day": start_day,
-        # Studio data requires a second JSON:API relationship hop (animeProductions ->
-        # producer) — skipped for now to keep this source's scope bounded; revisit if
-        # studio-level trend analysis needs Kitsu specifically.
-        "studios": [],
+        # None, not [] - the difference matters. [] would mean "this show has zero
+        # studios", which the cross-source merge then treats as a real value and
+        # prefers over MAL's populated list, because Kitsu outranks MAL. None
+        # means "this source has no studio data", which is the truth: it needs a
+        # second JSON:API relationship hop (animeProductions -> producer) that
+        # returned empty when probed.
+        "studios": None,
     }

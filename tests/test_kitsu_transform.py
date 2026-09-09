@@ -41,7 +41,10 @@ def test_flatten_media():
     assert row["start_year"] == 2019
     assert row["start_month"] == 4
     assert row["start_day"] == 6
-    assert row["studios"] == []
+    # None, not []: Kitsu has no studio data at all, and saying so as an empty
+    # list made the cross-source merge treat "no data" as a real value and beat
+    # MAL's populated list. See test_consolidate_merge.
+    assert row["studios"] is None
     assert row["synopsis"] == "A boy named Tanjiro fights demons."
     # "large", not "original" - originals are full-resolution and this only renders
     # as a grid tile or detail poster.

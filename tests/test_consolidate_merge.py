@@ -209,3 +209,21 @@ def test_rows_with_no_format_are_not_merged_by_title(spark):
         SCHEMA_F,
     )
     assert _merge_sources(df).count() == 2
+
+
+def test_an_empty_array_loses_to_a_populated_one_from_a_lower_priority_source(spark):
+    """An empty array is an absence, not a value.
+
+    This is a real bug that shipped: Kitsu emitted studios as [] meaning "no
+    studio data here", ignorenulls accepted it as a value, and because Kitsu
+    outranks MAL every merged row came out with no studios while MAL's populated
+    list sat right there. Verified live on BLEACH before the fix.
+    """
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "49444", 41467, studios=[]),
+            _row("mal", "41467", 41467, studios=["Pierrot"]),
+        ],
+        SCHEMA_F,
+    )
+    assert _merge_sources(df).collect()[0]["studios"] == ["Pierrot"]
