@@ -23,7 +23,11 @@ _TIEBREAK = "source ASC, source_id ASC"
 _SORT_COLUMNS = {
     "score_desc": f"score_100 DESC NULLS LAST, {_TIEBREAK}",
     "popularity_desc": f"popularity DESC NULLS LAST, {_TIEBREAK}",
-    "title": f"COALESCE(title_english, title_romaji) ASC, {_TIEBREAK}",
+    # Explicit casts: if a partition's parquet happens to hold an all-NULL
+    # title_romaji, DuckDB types that column INTEGER and COALESCE refuses to mix
+    # it with VARCHAR, turning the whole sort into a 500. Casting both sides
+    # makes the ordering independent of how any one file's nulls were typed.
+    "title": f"COALESCE(CAST(title_english AS VARCHAR), CAST(title_romaji AS VARCHAR)) ASC, {_TIEBREAK}",
 }
 
 
