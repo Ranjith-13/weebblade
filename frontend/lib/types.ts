@@ -43,6 +43,11 @@ export type Anime = {
   cover_url: string | null;
   trailer_id: string | null;
   slug: string | null;
+  /** MAL's weekly broadcast slot: a day name and HH:MM in JST. NOT a
+   *  next-episode date - MAL has none. Use nextAiring() to project it forward,
+   *  and present the result as a slot rather than a confirmed airdate. */
+  broadcast_day: string | null;
+  broadcast_time: string | null;
   /** Parallel arrays: streaming_services[i] labels streaming_urls[i]. ~59% of
    *  the season carries at least one. Junk URLs are filtered at ingest, so
    *  anything arriving here is a usable absolute http(s) link. */
@@ -258,4 +263,81 @@ export function isTv(a: Anime): boolean {
 export function resolveFormat(param: string | undefined): string | null {
   if (param === FORMAT_ALL) return null;
   return param ?? DEFAULT_FORMAT;
+}
+
+/* ---------------------------------------------------------------------------
+ * Broadcast slot -> next airing.
+ *
+ * MAL has no next-episode date. What it has is the weekly slot the show occupies
+ * ("saturday", "23:00", JST), so the next airing is DERIVED here rather than
+ * stored. That is deliberate: the pipeline runs weekly, so a date computed at
+ * ingest would be wrong within days, while a slot holds for a whole cour.
+ *
+ * It also means the result is a prediction, not a fact. A broadcast can slip,
+ * and MAL's slot will not know. Callers must present it as the regular slot,
+ * never as a confirmed airdate.
+ * ------------------------------------------------------------------------ */
+
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const WEEKDAYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+];
+
+/** The next instant the show's slot comes round, or null if the slot is
+ *  unparseable. Japan does not observe DST, so a fixed +09:00 is exact. */
+export function nextAiring(
+  broadcastDay: string | null,
+  broadcastTime: string | null,
+  now: Date = new Date(),
+): Date | null {
+  if (!broadcastDay || !broadcastTime) return null;
+
+  const targetDay = WEEKDAYS.indexOf(broadcastDay.trim().toLowerCase());
+  if (targetDay < 0) return null;
+
+  const [hours, minutes] = broadcastTime.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+
+  // Shift into JST so UTC getters read as Japanese wall-clock time, do the
+  // weekday arithmetic there, then shift back. Doing it this way avoids relying
+  // on the server's or the viewer's own timezone, which differ.
+  const jstNow = new Date(now.getTime() + JST_OFFSET_MS);
+  let daysAhead = (targetDay - jstNow.getUTCDay() + 7) % 7;
+
+  const slot = new Date(jstNow);
+  slot.setUTCDate(slot.getUTCDate() + daysAhead);
+  slot.setUTCHours(hours, minutes, 0, 0);
+
+  // Same weekday but the slot has already passed today: it is next week's.
+  if (slot.getTime() <= jstNow.getTime()) slot.setUTCDate(slot.getUTCDate() + 7);
+
+  return new Date(slot.getTime() - JST_OFFSET_MS);
+}
+
+/** "Saturdays 23:00 JST" - the slot itself, which is what we actually know. */
+export function broadcastSlotLabel(
+  broadcastDay: string | null,
+  broadcastTime: string | null,
+): string | null {
+  if (!broadcastDay || !broadcastTime) return null;
+  const day = broadcastDay.trim().toLowerCase();
+  if (!WEEKDAYS.includes(day)) return null;
+  const name = day.charAt(0).toUpperCase() + day.slice(1);
+  return `${name}s ${broadcastTime} JST`;
+}
+
+
+/** MAL reports source material as a snake_case token ("light_novel",
+ *  "4_koma_manga"). Rendered as-is it looks like a database field, which on a
+ *  page whose whole argument is legibility is the wrong impression. */
+export function sourceMaterialLabel(value: string | null): string | null {
+  if (!value) return null;
+  const words = value.replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }

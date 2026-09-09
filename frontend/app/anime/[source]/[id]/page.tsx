@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { ParallaxPoster } from "@/components/motion/ParallaxPoster";
+import { NextAiring } from "@/components/NextAiring";
 import { Trailer } from "@/components/Trailer";
 import { getAnime } from "@/lib/api";
 import {
@@ -11,7 +12,9 @@ import {
   formatAirDate,
   formatLabel,
   isKnown,
+  broadcastSlotLabel,
   secondaryTitle,
+  sourceMaterialLabel,
   sourceUrl,
   streamingLinks,
   type Anime,
@@ -82,13 +85,16 @@ async function AnimeDetail({
   const secondary = secondaryTitle(anime);
   const known = isKnown(anime);
 
-  /* Only fields the data actually carries. The previous build rendered
-     Studios, Source material and Favourites: the first two are null for 100%
-     of live rows (Kitsu provides neither), and favourites ranges 0–25, which
-     is noise dressed as a metric. Popularity — present on every single row and
-     never previously shown — replaces them, with its direction spelled out
-     because a bare "5,909" reads like a score otherwise. */
+  /* Only fields the data actually carries, which is now a different set than
+     it was. Studios and Source material were removed when they were null for
+     100% of rows, because Kitsu provides neither; MAL does, so they are back and
+     lead, being the most concretely useful things here. Favourites stays out:
+     it ranges 0-25 and is noise dressed as a metric. */
   const facts: [string, string][] = [
+    anime.studios.length > 0 ? ["Studio", anime.studios.join(", ")] : null,
+    sourceMaterialLabel(anime.source_material)
+      ? ["Adapted from", sourceMaterialLabel(anime.source_material)!]
+      : null,
     ["Format", formatLabel(anime.format)],
     ["Status", anime.status === "current" ? "Airing now" : "Finished"],
     anime.episodes ? ["Episodes", String(anime.episodes)] : null,
@@ -109,6 +115,7 @@ async function AnimeDetail({
 
   const watch = streamingLinks(anime);
   const kitsu = sourceUrl(anime);
+  const slot = broadcastSlotLabel(anime.broadcast_day, anime.broadcast_time);
 
   return (
     <>
@@ -251,6 +258,31 @@ async function AnimeDetail({
             </div>
           ))}
         </dl>
+
+        {slot && (
+          <div className="mt-5 border-l-2 border-data pl-4">
+            <p className="text-[0.9rem]">
+              Airs <span className="font-semibold">{slot}</span>
+            </p>
+            {/* One line of space is reserved because NextAiring is client-only
+                and renders nothing during SSR. Without the reservation the
+                caveat below jumps down a line the moment it fills in, which is
+                exactly the layout shift the rest of the page avoids. 1.5em is
+                one .meta line: 0.75rem at line-height 1.5. */}
+            <p className="meta mt-1 min-h-[1.5em]">
+              <NextAiring
+                broadcastDay={anime.broadcast_day}
+                broadcastTime={anime.broadcast_time}
+              />
+            </p>
+            {/* Stated plainly rather than tucked into a tooltip: MAL has no
+                next-episode date, so this is the regular weekly slot projected
+                forward. A broadcast that slips will not show up here. */}
+            <p className="meta mt-1 max-w-[46ch] !leading-[1.6]">
+              This is the regular broadcast slot, not a confirmed airdate
+            </p>
+          </div>
+        )}
 
         <p className="meta mt-6 flex flex-wrap items-baseline gap-x-5 gap-y-1">
           {kitsu ? (

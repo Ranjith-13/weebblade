@@ -45,3 +45,6 @@ caddy-logs/
 
 # Claude Code local tool state (not project code)
 .claude/
+
+# Playwright MCP scratch output (screenshots, snapshots, console logs)
+.playwright-mcp/
