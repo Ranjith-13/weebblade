@@ -23,7 +23,7 @@ from pyspark.sql.types import (  # noqa: E402
     StructType,
 )
 
-from processing.consolidate import _merge_sources  # noqa: E402
+from processing.consolidate import _merge_sources, _snapshot_for  # noqa: E402
 
 # An explicit schema, because Spark cannot infer a type for a column that is
 # None in every row - which is the normal case here, since the whole point is
@@ -34,6 +34,7 @@ SCHEMA = StructType(
         StructField("source_id", StringType()),
         StructField("mal_id", LongType()),
         StructField("title_romaji", StringType()),
+        StructField("title_english", StringType()),
         StructField("studios", ArrayType(StringType())),
         StructField("source_material", StringType()),
         StructField("streaming_urls", ArrayType(StringType())),
@@ -63,6 +64,7 @@ def _row(source, source_id, mal_id, **overrides):
         "source_id": source_id,
         "mal_id": mal_id,
         "title_romaji": "BLEACH",
+        "title_english": None,
         "studios": None,
         "source_material": None,
         "streaming_urls": None,
@@ -277,3 +279,114 @@ def test_standardize_schema_tolerates_a_snapshot_missing_the_derived_columns(spa
     assert out["mal_id"] is None
     assert out["duration_minutes"] is None
     assert out["score_100"] is None
+
+
+def test_the_display_title_pass_merges_transliteration_variants(spark):
+    """Romaji is a transliteration and the two sources transliterate differently,
+    so an exact romaji match misses pairs that are obviously the same show. All
+    five live examples agree on the English title instead.
+
+    Two of them have no English title on the Kitsu side, which is why the key
+    coalesces: Kitsu's romaji is matched against MAL's English.
+    """
+    pairs = [
+        ("Otome Kaiju Caramelise", "Kaiju Girl Caramelise",
+         "Otome Kaijuu Caraméliser", "Kaiju Girl Caramelise"),
+        ("Magical Girl Lyrical Nanoha EXCEEDS Gun Blaze Vengeance", None,
+         "Mahou Shoujo Lyrical Nanoha EXCEEDS: Gun Blaze Vengeance",
+         "Magical Girl Lyrical Nanoha EXCEEDS Gun Blaze Vengeance"),
+        ("Koukaku Kidoutai: THE GHOST IN THE SHELL", "THE GHOST IN THE SHELL",
+         "Koukaku Kidoutai (TV)", "The Ghost in the Shell"),
+        ("Mairimashita! Iruma-kun 4", "Welcome to Demon School! Iruma-kun Season 4",
+         "Mairimashita! Iruma-kun 4th Season", "Welcome to Demon School! Iruma-kun Season 4"),
+        ("Yoroi-Shinden Samurai Troopers Part 2", None,
+         "Yoroi Shin Den Samurai Troopers Part 2", "Yoroi-Shinden Samurai Troopers Part 2"),
+    ]
+
+    for i, (k_romaji, k_english, m_romaji, m_english) in enumerate(pairs):
+        df = spark.createDataFrame(
+            [
+                _row("kitsu", str(i), None, title_romaji=k_romaji, title_english=k_english,
+                     streaming_urls=["https://crunchyroll.com/x"]),
+                _row("mal", str(1000 + i), 1000 + i, title_romaji=m_romaji,
+                     title_english=m_english, studios=["Studio"]),
+            ],
+            SCHEMA_F,
+        )
+        out = _merge_sources(df)
+
+        assert out.count() == 1, f"{k_romaji!r} did not merge with {m_romaji!r}"
+        row = out.collect()[0]
+        assert row["streaming_urls"] == ["https://crunchyroll.com/x"]  # from Kitsu
+        assert row["studios"] == ["Studio"]  # from MAL
+
+
+def test_the_display_title_pass_still_will_not_merge_across_formats(spark):
+    """The widened key must not widen the risk. A movie and a series sharing an
+    English title in one season stay separate, exactly as they do for romaji."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "1", None, title_romaji="A", title_english="Same Name", fmt="TV"),
+            _row("mal", "2", 999, title_romaji="B", title_english="Same Name", fmt="movie"),
+        ],
+        SCHEMA_F,
+    )
+    assert _merge_sources(df).count() == 2
+
+
+def test_rows_sharing_no_title_at_all_are_left_alone(spark):
+    """Two rows with no title and no format must not collapse into each other
+    just because their keys are both absent."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "1", None, title_romaji=None, title_english=None, fmt=None),
+            _row("mal", "2", None, title_romaji=None, title_english=None, fmt=None),
+        ],
+        SCHEMA_F,
+    )
+    assert _merge_sources(df).count() == 2
+
+
+def _touch(directory, name):
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / name
+    path.write_bytes(b"")
+    return path
+
+
+def test_a_source_not_refetched_this_run_is_carried_forward(tmp_path):
+    """The bug that put 12 duplicate pairs in live data.
+
+    Sources are not fetched on the same day: Kitsu's Spring 2026 snapshot is
+    dated 2026-06-15 and MAL's is 2026-09-09. An exact-date lookup found no Kitsu
+    file and skipped the source entirely, so the merge never saw both halves of a
+    title and could not collapse them - and nothing downstream could either, since
+    anime_media_latest dedupes by (source, source_id).
+    """
+    _touch(tmp_path, "2026-06-15.parquet")
+
+    assert _snapshot_for(tmp_path, "2026-09-09").name == "2026-06-15.parquet"
+
+
+def test_this_runs_own_snapshot_wins_over_an_older_one(tmp_path):
+    _touch(tmp_path, "2026-06-15.parquet")
+    _touch(tmp_path, "2026-09-09.parquet")
+
+    assert _snapshot_for(tmp_path, "2026-09-09").name == "2026-09-09.parquet"
+
+
+def test_a_snapshot_from_after_the_run_date_is_not_used(tmp_path):
+    """Re-running an old date must reproduce what that run would have seen,
+    rather than pulling in data from its future."""
+    _touch(tmp_path, "2026-06-15.parquet")
+    _touch(tmp_path, "2026-09-09.parquet")
+
+    assert _snapshot_for(tmp_path, "2026-07-01").name == "2026-06-15.parquet"
+
+
+def test_a_source_that_never_ran_returns_nothing(tmp_path):
+    """Still not a hard error: a source that has never produced a snapshot is
+    skipped, which is the normal case for anilist and jikan today."""
+    assert _snapshot_for(tmp_path / "never", "2026-09-09") is None
+    _touch(tmp_path, "2026-09-09.parquet")
+    assert _snapshot_for(tmp_path, "2026-01-01") is None
