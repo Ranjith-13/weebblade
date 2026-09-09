@@ -136,3 +136,28 @@ def test_flatten_media_tolerates_every_new_field_being_absent():
     assert row["rating_rank"] is None
     assert row["streaming_urls"] == []
     assert row["streaming_services"] == []
+
+
+def test_youtube_short_domain_maps_to_youtube():
+    from ingestion.kitsu.transform import _service_name
+
+    # Kitsu uses both forms; they are the same service and must not appear as two.
+    assert _service_name("https://youtu.be/P31CxorjHjI") == "YouTube"
+    assert _service_name("https://www.youtube.com/watch?v=P31CxorjHjI") == "YouTube"
+
+
+def test_unusable_streaming_links_are_dropped():
+    """Kitsu's streaming records are user-maintained and contain junk. The live
+    season carries one whose entire url field is the string "a"."""
+    from ingestion.kitsu.transform import flatten_media
+
+    row = flatten_media(
+        {
+            "id": "1",
+            "attributes": {"canonicalTitle": "X", "titles": {}},
+            "_streaming_urls": ["a", "", None, "ftp://x.test/a", "https://www.hidive.com/season/36240"],
+        }
+    )
+
+    assert row["streaming_urls"] == ["https://www.hidive.com/season/36240"]
+    assert row["streaming_services"] == ["HIDIVE"]

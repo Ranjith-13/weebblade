@@ -18,6 +18,7 @@ _STREAMING_SERVICES = {
     "disneyplus.com": "Disney+",
     "hidive.com": "HIDIVE",
     "youtube.com": "YouTube",
+    "youtu.be": "YouTube",
     "bilibili.tv": "Bilibili",
     "iq.com": "iQIYI",
     "tubitv.com": "Tubi",
@@ -26,6 +27,20 @@ _STREAMING_SERVICES = {
     "vrv.co": "VRV",
     "funimation.com": "Funimation",
 }
+
+
+def _is_usable_link(url: object) -> bool:
+    """Reject anything that is not an absolute http(s) URL.
+
+    Kitsu's streaming records are user-maintained and contain junk: the live season
+    carries a link whose entire url field is the string "a". Rendering that as a
+    clickable "Unknown" is worse than not showing it, so it is dropped at ingest
+    rather than pushed to every consumer to defend against.
+    """
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url)
+    return parsed.scheme in ("http", "https") and bool(parsed.hostname)
 
 
 def _service_name(url: str) -> str:
@@ -55,7 +70,7 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
 
     average_rating = attrs.get("averageRating")
 
-    streaming_urls = media.get("_streaming_urls") or []
+    streaming_urls = [u for u in (media.get("_streaming_urls") or []) if _is_usable_link(u)]
     streaming_services = [_service_name(u) for u in streaming_urls]
 
     return {
