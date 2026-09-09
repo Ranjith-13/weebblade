@@ -4,6 +4,7 @@ import {
   API_BASE,
   ApiError,
   dedupeAnime,
+  isTv,
   type Anime,
   type AnimeListResponse,
   type Digest,
@@ -69,6 +70,15 @@ export type Season = {
   airing: number;
   withArtwork: number;
   label: string | null;
+  /* TV-scoped counts. The site defaults to TV because a fifth of a season is
+     music videos that are never scored, so whole-season figures describe the
+     ingest rather than the anime. Both are kept: the front page states the full
+     catalogue AND what share of it is TV, instead of quietly showing one and
+     labelling it the other. */
+  tvTotal: number;
+  tvScored: number;
+  tvAiring: number;
+  nonTvTotal: number;
 };
 
 /** The whole current season, deduped. Everything else derives from this. */
@@ -89,6 +99,7 @@ export async function getSeason(): Promise<Season> {
 
   const items = dedupeAnime(rows);
   const lead = items.find((a) => a.season && a.season_year);
+  const tv = items.filter(isTv);
 
   return {
     items,
@@ -100,6 +111,10 @@ export async function getSeason(): Promise<Season> {
     label: lead?.season
       ? `${lead.season.charAt(0)}${lead.season.slice(1).toLowerCase()} ${lead.season_year}`
       : null,
+    tvTotal: tv.length,
+    tvScored: tv.filter((a) => a.score_100 !== null).length,
+    tvAiring: tv.filter((a) => a.status === "current").length,
+    nonTvTotal: items.length - tv.length,
   };
 }
 

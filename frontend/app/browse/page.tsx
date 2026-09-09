@@ -3,7 +3,16 @@ import { Suspense } from "react";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
 import { getFacets, getSeason } from "@/lib/api";
-import { formatLabel, isKnown, sortAnime, SORTS, type SortKey } from "@/lib/types";
+import {
+  DEFAULT_FORMAT,
+  FORMAT_ALL,
+  formatLabel,
+  isKnown,
+  resolveFormat,
+  sortAnime,
+  SORTS,
+  type SortKey,
+} from "@/lib/types";
 
 export const metadata = { title: "The season" };
 
@@ -86,8 +95,12 @@ async function BrowseResults({
     const g = current.genre.toLowerCase();
     items = items.filter((a) => a.genres.some((x) => x.toLowerCase() === g));
   }
-  if (current.format) {
-    const f = current.format.toLowerCase();
+  /* Absent means the TV default, not "no filter" - FORMAT_ALL is the explicit
+     way to see everything. A fifth of a season is music videos that are never
+     scored, so an unfiltered grid mostly answers a question nobody asked. */
+  const activeFormat = resolveFormat(current.format);
+  if (activeFormat) {
+    const f = activeFormat.toLowerCase();
     items = items.filter((a) => (a.format ?? "").toLowerCase() === f);
   }
   if (current.service) {
@@ -104,8 +117,13 @@ async function BrowseResults({
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const clamped = Math.min(page, totalPages);
   const visible = items.slice((clamped - 1) * PAGE_SIZE, clamped * PAGE_SIZE);
+  // The TV default is not a "filter" the user applied, so it does not light up
+  // the clear-filters affordance. Choosing any other format does.
   const hasFilters = Boolean(
-    current.genre || current.format || current.service || current.rated,
+    current.genre ||
+      current.service ||
+      current.rated ||
+      (current.format && current.format !== DEFAULT_FORMAT),
   );
   const scoredHere = items.filter(isKnown).length;
 
@@ -146,19 +164,26 @@ async function BrowseResults({
         </FilterRow>
 
         <FilterRow label="Format">
-          <Chip href={buildHref(current, { format: undefined, page: undefined })} active={!current.format}>
-            All
-          </Chip>
           {facets.formats.map((f) => (
             <Chip
               key={f.value}
               href={buildHref(current, { format: f.value, page: undefined })}
-              active={current.format === f.value}
+              // TV is active both when chosen explicitly and when no format is in
+              // the URL at all, because absent means TV.
+              active={(activeFormat ?? "").toLowerCase() === f.value.toLowerCase()}
               count={f.count}
             >
               {formatLabel(f.value)}
             </Chip>
           ))}
+          <span className="mx-1 h-4 w-px bg-rule" aria-hidden />
+          <Chip
+            href={buildHref(current, { format: FORMAT_ALL, page: undefined })}
+            active={current.format === FORMAT_ALL}
+            title="Include films, ONAs, specials and music videos"
+          >
+            All formats
+          </Chip>
         </FilterRow>
 
         {facets.services.length > 0 && (
@@ -211,11 +236,22 @@ async function BrowseResults({
         <div className="mt-14 max-w-prose">
           <p className="font-display text-2xl font-bold">Nothing matches that.</p>
           <p className="mt-2 text-ink-soft">
-            The season is only {season.total} titles from a single source, so narrow
-            combinations run out quickly.{" "}
+            This view shows {activeFormat ? formatLabel(activeFormat) : "every format"} from a
+            season of {season.total} titles, so narrow combinations run out quickly.{" "}
             <Link href="/browse" className="text-data underline underline-offset-4">
               Clear the filters
             </Link>
+            {activeFormat ? (
+              <>
+                {" or "}
+                <Link
+                  href={buildHref(current, { format: FORMAT_ALL, page: undefined })}
+                  className="text-data underline underline-offset-4"
+                >
+                  include every format
+                </Link>
+              </>
+            ) : null}
             .
           </p>
         </div>

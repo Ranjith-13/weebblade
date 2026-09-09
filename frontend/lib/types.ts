@@ -227,3 +227,35 @@ export function streamingLinks(a: Anime): { service: string; url: string }[] {
 export function sourceUrl(a: Anime): string | null {
   return a.source === "kitsu" && a.slug ? `https://kitsu.app/anime/${a.slug}` : null;
 }
+
+
+/* ---------------------------------------------------------------------------
+ * Format defaulting.
+ *
+ * 27 of 142 entries in a season are music videos, and 0% of them are ever
+ * scored. Another 29 are ONAs (13% scored) and 11 are films (9%). TV series are
+ * 66 titles at 48% scored. So the headline "73% of the season has no score" was
+ * mostly measuring music videos rather than saying anything about anime.
+ *
+ * Defaulting to TV is what LiveChart and AniChart both do, for the same reason.
+ * Nothing is hidden: FORMAT_ALL is one click away and every format keeps its own
+ * chip, so the long tail is reachable and still counted honestly on the front
+ * page.
+ * ------------------------------------------------------------------------ */
+
+/** Sentinel for "do not filter by format". A real value rather than `undefined`
+ *  because undefined now means "use the default", which is TV. */
+export const FORMAT_ALL = "all";
+
+export const DEFAULT_FORMAT = "TV";
+
+export function isTv(a: Anime): boolean {
+  return (a.format ?? "").toLowerCase() === "tv";
+}
+
+/** Resolve the format filter from a URL param. Absent means the TV default;
+ *  FORMAT_ALL means no filtering at all. */
+export function resolveFormat(param: string | undefined): string | null {
+  if (param === FORMAT_ALL) return null;
+  return param ?? DEFAULT_FORMAT;
+}

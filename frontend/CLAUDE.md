@@ -69,6 +69,21 @@ fixable:
 
 Never render `studios`, `source_material`, `mal_id` (100% null) or `favourites` (0-25, noise).
 
+## The catalogue defaults to TV
+
+`/browse` with no `format` param shows **TV only**, not everything. `resolveFormat()` in
+`lib/types.ts` owns this: absent means `DEFAULT_FORMAT`, and `FORMAT_ALL` ("all") is the explicit
+opt-out. LiveChart and AniChart both default to Television for the same reason.
+
+The reason is measured: of 142 entries, **27 are music videos and 0% of them are ever scored**;
+ONAs are 13% scored and films 9%. TV series are 66 titles at ~48%. So the old "73% of the season
+has no score" headline was mostly counting music videos rather than saying anything about anime.
+
+Nothing is hidden. Every format keeps its own chip, "All formats" is one click, and the front page
+states `Beyond TV` alongside the TV counts and links straight to `?format=all`. **Do not "simplify"
+this back to one unfiltered grid** - it puts music videos in a list headed "rated highest", which
+they can never be.
+
 ## Sparse fields: coverage is a design constraint
 
 Measured across the full season, not a sample. An earlier 40-title sample overstated cover art at

@@ -7,7 +7,7 @@ import { MastheadScroll } from "@/components/motion/MastheadScroll";
 import { PinnedAside } from "@/components/motion/PinnedAside";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
 import { halftone } from "@/lib/design-tokens";
-import { byScoreThenPopularity } from "@/lib/types";
+import { byScoreThenPopularity, isTv } from "@/lib/types";
 
 function dateline(runDate: string): string {
   const parsed = new Date(`${runDate}T00:00:00Z`);
@@ -45,7 +45,10 @@ function HomeSkeleton() {
 async function Home() {
   const [digest, season] = await Promise.all([getLatestDigest(), getSeason()]);
 
-  const featured = [...season.items].sort(byScoreThenPopularity).slice(0, 12);
+  /* TV only, matching what /browse defaults to. Ranking the whole season put
+     music videos and shorts in a list headed "rated highest", which they can
+     never be: 0% of music videos carry a score. */
+  const featured = season.items.filter(isTv).sort(byScoreThenPopularity).slice(0, 12);
 
   /* The digest runs ~700 words. The previous build printed all of it above the
      catalogue, which on a phone was roughly four screens of unbroken prose
@@ -97,12 +100,16 @@ async function Home() {
           rather than from one unstably-paginated page. The old rail claimed
           "Sources 3" when two of the three are down upstream, and reported a
           title count that changed between refreshes. */}
+      {/* Leads with TV because that is what the site shows by default, and states
+          the rest of the ingest beside it rather than folding 27 music videos
+          into a single headline number. The previous rail said "142 titles, 39
+          rated" - true, but it described the ingest, not the anime. */}
       <ScrollReveal selector=":scope > dl > div" y={12} stagger={0.07} start="top 92%">
         <dl className="grid grid-cols-2 border-b border-rule sm:grid-cols-4">
-          <Stat term="Titles" value={season.total} />
-          <Stat term="Rated" value={season.scored} of={season.total} />
-          <Stat term="Airing now" value={season.airing} />
-          <Stat term="With artwork" value={season.withArtwork} of={season.total} />
+          <Stat term="TV series" value={season.tvTotal} />
+          <Stat term="Rated" value={season.tvScored} of={season.tvTotal} />
+          <Stat term="Airing now" value={season.tvAiring} />
+          <Stat term="Beyond TV" value={season.nonTvTotal} />
         </dl>
       </ScrollReveal>
 
@@ -154,13 +161,22 @@ async function Home() {
             href="/browse"
             className="meta inline-block border-b border-rule py-1.5 transition-colors hover:border-flag hover:text-flag"
           >
-            All <span className="tnum">{season.total}</span> titles
+            All <span className="tnum">{season.tvTotal}</span> TV series
           </Link>
         </div>
 
         {/* The key now sits beside the plates it explains and is pinned while
             they scroll past. It moved here from the digest block for exactly
             that reason: a legend is only useful next to the thing it decodes. */}
+        <p className="meta mt-2">
+          <Link
+            href="/browse?format=all"
+            className="inline-block py-1.5 underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+          >
+            Films, ONAs, specials and music videos are here too
+          </Link>
+        </p>
+
         <div className="mt-6 grid gap-x-10 gap-y-8 lg:grid-cols-[15rem_minmax(0,1fr)]">
           <PinnedAside>
             <h2 className="meta mb-3">How to read this</h2>
@@ -176,8 +192,8 @@ async function Home() {
                 <span className="mt-0.5 h-4 w-4 shrink-0 border border-ink" style={halftone} />
                 <span>
                   <b className="font-semibold">Screened back.</b> No score upstream.{" "}
-                  {Math.round(((season.total - season.scored) / season.total) * 100)}% of the
-                  season. Hover one to lift the screen.
+                  {Math.round(((season.tvTotal - season.tvScored) / season.tvTotal) * 100)}% of
+                  TV series. Hover one to lift the screen.
                 </span>
               </li>
             </ul>
