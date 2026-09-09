@@ -59,8 +59,29 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Quarterly order, not alphabetical - FALL sorts last in the year, not first. */
+const SEASON_ORDER = ["WINTER", "SPRING", "SUMMER", "FALL"];
+
+export function seasonKey(season: string, year: number): string {
+  return `${year}-${season}`;
+}
+
+export function seasonLabel(season: string, year: number): string {
+  return `${season.charAt(0)}${season.slice(1).toLowerCase()} ${year}`;
+}
+
+export type SeasonRef = {
+  key: string;
+  season: string;
+  year: number;
+  label: string;
+  count: number;
+};
+
 export type Season = {
   items: Anime[];
+  /** Which season this is, and its key for links. Null only if nothing is tagged. */
+  key: string | null;
   /** Distinct titles after dedupe — the honest count. */
   total: number;
   /** Rows the API returned before dedupe. Surfaced so the UI can be candid
@@ -81,8 +102,10 @@ export type Season = {
   nonTvTotal: number;
 };
 
-/** The whole current season, deduped. Everything else derives from this. */
-export async function getSeason(): Promise<Season> {
+/** Every title the warehouse holds, across every season. One fetch, cached, and
+ *  the per-season views are derived from it: the whole catalogue is a few
+ *  hundred rows, so slicing locally is cheaper than a request per season. */
+async function getCatalogue(): Promise<Anime[]> {
   "use cache";
   cacheLife("hours");
 
@@ -96,21 +119,63 @@ export async function getSeason(): Promise<Season> {
     );
     rows.push(...next.items);
   }
+  return dedupeAnime(rows);
+}
 
-  const items = dedupeAnime(rows);
-  const lead = items.find((a) => a.season && a.season_year);
+/** Seasons present in the warehouse, newest first. Derived, so a backfill of an
+ *  older season appears here without any config change. */
+export async function getSeasons(): Promise<SeasonRef[]> {
+  "use cache";
+  cacheLife("hours");
+
+  const items = await getCatalogue();
+  const byKey = new Map<string, SeasonRef>();
+  for (const a of items) {
+    if (!a.season || !a.season_year) continue;
+    const key = seasonKey(a.season, a.season_year);
+    const existing = byKey.get(key);
+    if (existing) existing.count += 1;
+    else
+      byKey.set(key, {
+        key,
+        season: a.season,
+        year: a.season_year,
+        label: seasonLabel(a.season, a.season_year),
+        count: 1,
+      });
+  }
+  // Newest first: by year, then by the industry's quarterly order rather than
+  // alphabetically, which would put FALL before SPRING before SUMMER.
+  return [...byKey.values()].sort(
+    (a, b) => b.year - a.year || SEASON_ORDER.indexOf(b.season) - SEASON_ORDER.indexOf(a.season),
+  );
+}
+
+/** One season, deduped, with its counts. Defaults to the newest season present.
+ *  Everything the season pages render derives from this. */
+export async function getSeason(key?: string): Promise<Season> {
+  "use cache";
+  cacheLife("hours");
+
+  const all = await getCatalogue();
+  const seasons = await getSeasons();
+  const target = seasons.find((s) => s.key === key) ?? seasons[0];
+  const items = target
+    ? all.filter(
+        (a) => a.season === target.season && a.season_year === target.year,
+      )
+    : all;
   const tv = items.filter(isTv);
 
   return {
     items,
     total: items.length,
-    rawTotal: first.total,
+    rawTotal: all.length,
     scored: items.filter((a) => a.score_100 !== null).length,
     airing: items.filter((a) => a.status === "current").length,
     withArtwork: items.filter((a) => a.poster_url).length,
-    label: lead?.season
-      ? `${lead.season.charAt(0)}${lead.season.slice(1).toLowerCase()} ${lead.season_year}`
-      : null,
+    label: target?.label ?? null,
+    key: target?.key ?? null,
     tvTotal: tv.length,
     tvScored: tv.filter((a) => a.score_100 !== null).length,
     tvAiring: tv.filter((a) => a.status === "current").length,
@@ -123,7 +188,7 @@ export async function getSeason(): Promise<Season> {
  *  worse than no chip. Only genres with enough titles to be worth a click are
  *  offered; the long tail (98 distinct genres across 142 titles) is not a
  *  usable filter row. */
-export async function getFacets(): Promise<{
+export async function getFacets(seasonKeyParam?: string): Promise<{
   genres: { value: string; count: number }[];
   formats: { value: string; count: number }[];
   services: { value: string; count: number }[];
@@ -131,7 +196,10 @@ export async function getFacets(): Promise<{
   "use cache";
   cacheLife("hours");
 
-  const { items } = await getSeason();
+  // Facets are per-season: offering a genre chip that matches nothing in the
+  // season you are looking at is the same dead-control bug as the old hardcoded
+  // "Sci-Fi", just arrived at from a different direction.
+  const { items } = await getSeason(seasonKeyParam);
   const tally = (values: (string | null)[]) => {
     const map = new Map<string, number>();
     for (const v of values) {

@@ -69,6 +69,28 @@ fixable:
 
 Never render `studios`, `source_material`, `mal_id` (100% null) or `favourites` (0-25, noise).
 
+## Seasons
+
+The warehouse holds more than one season. `getCatalogue()` fetches every title once and the
+per-season views are sliced from it locally, because the whole catalogue is a few hundred rows and
+slicing beats a request per season.
+
+`getSeason(key?)` and `getFacets(key?)` both default to the **newest season present**, derived from
+the data - so backfilling an older season never changes what a bare URL shows. Ordering is by year
+then the industry's quarterly order, not alphabetical: FALL sorts last in a year, not first.
+
+Facets are scoped per season. Offering a genre chip that matches nothing in the season being viewed
+is the same dead-control bug as the old hardcoded `Sci-Fi`, reached from a different direction.
+Switching season therefore clears `genre` and `service`.
+
+**Kitsu tags a title to its START season only** - verified, Spring and Summer 2026 share zero ids.
+So a show that began in Spring and is still airing appears under Spring, not Summer. That also
+means the `anime_media_latest` dedupe (`PARTITION BY source, source_id`, no season) is safe today,
+but it would collapse carryovers if a source ever tagged a title to both.
+
+After a backfill, the frontend serves the previous season list for up to an hour - `cacheLife`
+is doing its job. In dev, `use cache` survives a Fast Refresh; clear `.next` to see new data.
+
 ## The catalogue defaults to TV
 
 `/browse` with no `format` param shows **TV only**, not everything. `resolveFormat()` in

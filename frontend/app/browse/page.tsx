@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
-import { getFacets, getSeason } from "@/lib/api";
+import { getFacets, getSeason, getSeasons } from "@/lib/api";
 import {
   DEFAULT_FORMAT,
   FORMAT_ALL,
@@ -68,7 +68,15 @@ async function BrowseResults({
     return value || undefined;
   };
 
-  const [season, facets] = await Promise.all([getSeason(), getFacets()]);
+  // The season is chosen before anything else, because every facet and count
+  // below is scoped to it. Absent means the newest season the warehouse holds,
+  // so a backfill of an older season never changes what the bare URL shows.
+  const seasonParam = read("season");
+  const [season, facets, seasons] = await Promise.all([
+    getSeason(seasonParam),
+    getFacets(seasonParam),
+    getSeasons(),
+  ]);
 
   const sortKey: SortKey = (["score", "popularity", "title"] as const).includes(
     read("sort") as SortKey,
@@ -77,6 +85,7 @@ async function BrowseResults({
     : "score";
 
   const current: Current = {
+    season: seasonParam,
     genre: read("genre"),
     format: read("format"),
     service: read("service"),
@@ -119,6 +128,8 @@ async function BrowseResults({
   const visible = items.slice((clamped - 1) * PAGE_SIZE, clamped * PAGE_SIZE);
   // The TV default is not a "filter" the user applied, so it does not light up
   // the clear-filters affordance. Choosing any other format does.
+  // Season and the TV default are not filters the user applied, so neither
+  // lights up the clear affordance.
   const hasFilters = Boolean(
     current.genre ||
       current.service ||
@@ -136,7 +147,13 @@ async function BrowseResults({
         {hasFilters && (
           <>
             {". "}
-            <Link href="/browse" className="text-data underline underline-offset-4">
+            <Link
+              href={buildHref(
+                {},
+                { season: current.season, format: current.format },
+              )}
+              className="text-data underline underline-offset-4"
+            >
               Clear filters
             </Link>
           </>
@@ -144,6 +161,28 @@ async function BrowseResults({
       </p>
 
       <div className="mt-7 space-y-4 border-y border-rule py-5">
+        {seasons.length > 1 && (
+          <FilterRow label="Season">
+            {seasons.map((sn) => (
+              <Chip
+                key={sn.key}
+                href={buildHref(current, {
+                  season: sn.key,
+                  // Genre and service facets differ per season, so a filter
+                  // carried across would silently return nothing.
+                  genre: undefined,
+                  service: undefined,
+                  page: undefined,
+                })}
+                active={season.key === sn.key}
+                count={sn.count}
+              >
+                {sn.label}
+              </Chip>
+            ))}
+          </FilterRow>
+        )}
+
         <FilterRow label="Genre">
           <Chip href={buildHref(current, { genre: undefined, page: undefined })} active={!current.genre}>
             All
@@ -238,7 +277,10 @@ async function BrowseResults({
           <p className="mt-2 text-ink-soft">
             This view shows {activeFormat ? formatLabel(activeFormat) : "every format"} from a
             season of {season.total} titles, so narrow combinations run out quickly.{" "}
-            <Link href="/browse" className="text-data underline underline-offset-4">
+            <Link
+              href={buildHref({}, { season: current.season })}
+              className="text-data underline underline-offset-4"
+            >
               Clear the filters
             </Link>
             {activeFormat ? (
