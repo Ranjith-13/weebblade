@@ -496,9 +496,6 @@ def _write_source(spark, data_dir, dir_name, partition, run_date, rows):
             StructField("format", StringType()),
             StructField("season", StringType()),
             StructField("season_year", LongType()),
-        StructField("start_year", LongType()),
-        StructField("start_month", LongType()),
-        StructField("start_day", LongType()),
         ]
     )
     out = data_dir / "processed" / dir_name / partition / f"{run_date}.parquet"
