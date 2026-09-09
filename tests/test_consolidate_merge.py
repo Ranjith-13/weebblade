@@ -23,7 +23,11 @@ from pyspark.sql.types import (  # noqa: E402
     StructType,
 )
 
-from processing.consolidate import _merge_sources, _snapshot_for  # noqa: E402
+from processing.consolidate import (  # noqa: E402
+    _current_state,
+    _merge_sources,
+    _snapshots_upto,
+)
 
 # An explicit schema, because Spark cannot infer a type for a column that is
 # None in every row - which is the normal case here, since the whole point is
@@ -354,25 +358,14 @@ def _touch(directory, name):
     return path
 
 
-def test_a_source_not_refetched_this_run_is_carried_forward(tmp_path):
-    """The bug that put 12 duplicate pairs in live data.
-
-    Sources are not fetched on the same day: Kitsu's Spring 2026 snapshot is
-    dated 2026-06-15 and MAL's is 2026-09-09. An exact-date lookup found no Kitsu
-    file and skipped the source entirely, so the merge never saw both halves of a
-    title and could not collapse them - and nothing downstream could either, since
-    anime_media_latest dedupes by (source, source_id).
-    """
+def test_every_snapshot_up_to_the_run_date_is_considered(tmp_path):
     _touch(tmp_path, "2026-06-15.parquet")
-
-    assert _snapshot_for(tmp_path, "2026-09-09").name == "2026-06-15.parquet"
-
-
-def test_this_runs_own_snapshot_wins_over_an_older_one(tmp_path):
-    _touch(tmp_path, "2026-06-15.parquet")
+    _touch(tmp_path, "2026-09-07.parquet")
     _touch(tmp_path, "2026-09-09.parquet")
 
-    assert _snapshot_for(tmp_path, "2026-09-09").name == "2026-09-09.parquet"
+    names = [p.name for p in _snapshots_upto(tmp_path, "2026-09-09")]
+
+    assert names == ["2026-06-15.parquet", "2026-09-07.parquet", "2026-09-09.parquet"]
 
 
 def test_a_snapshot_from_after_the_run_date_is_not_used(tmp_path):
@@ -381,12 +374,63 @@ def test_a_snapshot_from_after_the_run_date_is_not_used(tmp_path):
     _touch(tmp_path, "2026-06-15.parquet")
     _touch(tmp_path, "2026-09-09.parquet")
 
-    assert _snapshot_for(tmp_path, "2026-07-01").name == "2026-06-15.parquet"
+    assert [p.name for p in _snapshots_upto(tmp_path, "2026-07-01")] == ["2026-06-15.parquet"]
 
 
-def test_a_source_that_never_ran_returns_nothing(tmp_path):
+def test_a_source_that_never_ran_contributes_nothing(tmp_path):
     """Still not a hard error: a source that has never produced a snapshot is
     skipped, which is the normal case for anilist and jikan today."""
-    assert _snapshot_for(tmp_path / "never", "2026-09-09") is None
+    assert _snapshots_upto(tmp_path / "never", "2026-09-09") == []
     _touch(tmp_path, "2026-09-09.parquet")
-    assert _snapshot_for(tmp_path, "2026-01-01") is None
+    assert _snapshots_upto(tmp_path, "2026-01-01") == []
+
+
+def _write_snapshot(spark, directory, run_date, rows):
+    """A dated snapshot, written the way the ingestion layer writes them."""
+    schema = StructType(
+        [
+            StructField("source", StringType()),
+            StructField("source_id", StringType()),
+            StructField("title_romaji", StringType()),
+        ]
+    )
+    spark.createDataFrame(rows, schema).write.mode("overwrite").parquet(
+        str(directory / f"{run_date}.parquet")
+    )
+
+
+def test_a_source_not_refetched_this_run_still_reaches_the_merge(spark, tmp_path):
+    """The bug that put 12 duplicate pairs in live data. Kitsu's Spring snapshot
+    is dated 2026-06-15; consolidating on 2026-09-09 found no file for that date
+    and dropped the source, so the merge never saw both halves of a title."""
+    _write_snapshot(spark, tmp_path, "2026-06-15", [("kitsu", "49746", "Re:Zero 4th Season")])
+
+    out = _current_state(spark, tmp_path, "2026-09-09").collect()
+
+    assert [r["source_id"] for r in out] == ["49746"]
+
+
+def test_the_newest_row_for_an_id_wins(spark, tmp_path):
+    """A source that reports a title again should update it, not double it."""
+    _write_snapshot(spark, tmp_path, "2026-06-15", [("kitsu", "1", "Old Title")])
+    _write_snapshot(spark, tmp_path, "2026-09-09", [("kitsu", "1", "New Title")])
+
+    out = _current_state(spark, tmp_path, "2026-09-09").collect()
+
+    assert len(out) == 1
+    assert out[0]["title_romaji"] == "New Title"
+
+
+def test_a_title_dropped_from_the_latest_listing_keeps_its_last_seen_row(spark, tmp_path):
+    """The two pairs a newest-file-only fallback would still have missed. Kitsu
+    listed these on 2026-09-07 and not on 2026-09-09, so their last good row sits
+    in the older snapshot while MAL's half is current. This is also exactly what
+    anime_media_latest does downstream; doing it here lets the merge see the row."""
+    _write_snapshot(
+        spark, tmp_path, "2026-09-07", [("kitsu", "1", "Yami Shibai 17"), ("kitsu", "2", "Other")]
+    )
+    _write_snapshot(spark, tmp_path, "2026-09-09", [("kitsu", "2", "Other")])
+
+    out = {r["source_id"]: r["title_romaji"] for r in _current_state(spark, tmp_path, "2026-09-09").collect()}
+
+    assert out == {"1": "Yami Shibai 17", "2": "Other"}

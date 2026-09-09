@@ -34,30 +34,53 @@ SOURCE_DIR_NAMES = {
 _SOURCE_PRIORITY = ["kitsu", "anilist", "mal", "jikan"]
 
 
-def _snapshot_for(source_dir: Path, run_date: str) -> Path | None:
-    """The snapshot to consolidate for one source: this run's if it exists, else
-    the most recent earlier one.
-
-    The fallback is the whole point. Sources are not fetched on the same day -
-    Kitsu's Spring 2026 snapshot is dated 2026-06-15 and MAL's is 2026-09-09 -
-    and an exact-date lookup silently dropped every source that had not been
-    re-fetched today. `_merge_sources` can only merge rows it is handed, so a
-    title whose two sources landed in different runs stayed doubled in the
-    catalogue permanently: the DuckDB `anime_media_latest` view dedupes by
-    (source, source_id), which differs between the two halves, so nothing
-    downstream could collapse them either. That produced 12 visible duplicate
-    pairs in live data, all of them Kitsu-from-June against MAL-from-September.
+def _snapshots_upto(source_dir: Path, run_date: str) -> list[Path]:
+    """Every snapshot a source has produced for this partition, oldest first.
 
     Bounded by `<= run_date` so re-running an old date reproduces what that run
     would have seen, rather than pulling in snapshots from its future.
     """
-    exact = source_dir / f"{run_date}.parquet"
-    if exact.exists():
-        return exact
     if not source_dir.is_dir():
+        return []
+    return sorted(p for p in source_dir.glob("*.parquet") if p.stem <= run_date)
+
+
+def _current_state(spark, source_dir: Path, run_date: str) -> DataFrame | None:
+    """One source's current view of a season: the latest row per id across all of
+    its snapshots, not just the file dated today.
+
+    Reading a single dated file was the bug behind 12 duplicate pairs in live
+    data. Sources are not fetched on the same day - Kitsu's Spring 2026 snapshot
+    is dated 2026-06-15 and MAL's 2026-09-09 - so an exact-date lookup found no
+    Kitsu file and skipped the source outright. `_merge_sources` can only merge
+    rows it is handed, and nothing downstream could repair it: the DuckDB
+    `anime_media_latest` view dedupes by (source, source_id), which differs
+    between the two halves of a title, so both survived forever.
+
+    Taking the newest earlier file instead would still have missed two more
+    pairs, where the source WAS fetched today but had dropped the title from its
+    listing, leaving its last good row in an older snapshot. Reducing over every
+    snapshot covers both, and it is the same rule `anime_media_latest` already
+    applies downstream - a title keeps its last-seen row until a source reports a
+    newer one. Applying it here just means the merge gets to see that row.
+    """
+    paths = _snapshots_upto(source_dir, run_date)
+    if not paths:
         return None
-    earlier = sorted(p for p in source_dir.glob("*.parquet") if p.stem <= run_date)
-    return earlier[-1] if earlier else None
+
+    df = None
+    for path in paths:
+        frame = standardize_schema(spark.read.parquet(str(path))).withColumn(
+            "_snapshot", F.lit(path.stem)
+        )
+        df = frame if df is None else df.unionByName(frame)
+
+    newest = Window.partitionBy("source", "source_id").orderBy(F.col("_snapshot").desc())
+    return (
+        df.withColumn("_rn", F.row_number().over(newest))
+        .filter(F.col("_rn") == 1)
+        .drop("_rn", "_snapshot")
+    )
 
 
 def consolidate_partition(data_dir: Path, partition: str, run_date: str) -> Path | None:
@@ -67,28 +90,28 @@ def consolidate_partition(data_dir: Path, partition: str, run_date: str) -> Path
     not treated as a hard error - this is meant to run even when some upstream
     sources are down, which is the normal case right now (see PROGRESS.md).
 
-    A source with no snapshot for *this* run_date is carried forward from its most
-    recent earlier one rather than dropped, so the merge always sees every source
-    that has ever reported on the season. See `_snapshot_for`.
+    Each source contributes its CURRENT state for the partition - the latest row
+    per id across all of its snapshots - rather than only the file dated today, so
+    the merge always sees every source that has ever reported on the season. See
+    `_current_state`.
     """
     spark = get_spark_session("weebblade-consolidate")
     frames: list[DataFrame] = []
 
     for source, dir_name in SOURCE_DIR_NAMES.items():
         source_dir = data_dir / "processed" / dir_name / partition
-        path = _snapshot_for(source_dir, run_date)
-        if path is None:
+        snapshots = _snapshots_upto(source_dir, run_date)
+        df = _current_state(spark, source_dir, run_date)
+        if df is None:
             logger.warning("No snapshot for %s under %s, skipping", source, source_dir)
             continue
-        if path.stem != run_date:
-            logger.info(
-                "No %s snapshot for %s - carrying forward %s so the merge still sees it",
-                source,
-                run_date,
-                path.stem,
-            )
-        df = standardize_schema(spark.read.parquet(str(path)))
-        logger.info("Loaded %s rows from %s (snapshot %s)", df.count(), source, path.stem)
+        logger.info(
+            "Loaded %s rows from %s (%s snapshot(s), newest %s)",
+            df.count(),
+            source,
+            len(snapshots),
+            snapshots[-1].stem,
+        )
         frames.append(df)
 
     if not frames:
