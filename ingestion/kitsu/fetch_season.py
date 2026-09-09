@@ -54,7 +54,7 @@ def fetch_season(
         "filter[season]": season.lower(),
         "filter[seasonYear]": season_year,
         "page[limit]": PAGE_LIMIT,
-        "include": "categories,streamingLinks",
+        "include": "categories,streamingLinks,mappings",
     }
 
     while url:
@@ -95,6 +95,15 @@ def _attach_metadata(
         for item in included
         if item["type"] == "streamingLinks"
     }
+    # The cross-source join key. Kitsu and MAL describe the same shows under
+    # different ids, so without this every popular title would appear twice once
+    # MAL is consolidated in. Rides along on the request we already make.
+    mal_by_mapping_id = {
+        item["id"]: (item.get("attributes") or {}).get("externalId")
+        for item in included
+        if item["type"] == "mappings"
+        and (item.get("attributes") or {}).get("externalSite") == "myanimelist/anime"
+    }
 
     items = []
     for item in payload["data"]:
@@ -112,6 +121,17 @@ def _attach_metadata(
             for s in streaming_refs
             if streaming_by_id.get(s["id"])
         ]
+        mapping_refs = (
+            item.get("relationships", {}).get("mappings", {}).get("data")
+        ) or []
+        item["_mal_id"] = next(
+            (
+                mal_by_mapping_id[m["id"]]
+                for m in mapping_refs
+                if mal_by_mapping_id.get(m["id"])
+            ),
+            None,
+        )
         item["_season"] = season.upper()
         item["_season_year"] = season_year
         items.append(item)

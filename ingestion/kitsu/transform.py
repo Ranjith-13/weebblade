@@ -76,7 +76,9 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     return {
         "source": "kitsu",
         "source_id": media.get("id"),
-        "mal_id": None,
+        # Carried so the consolidation step can recognise that a Kitsu row and a
+        # MAL row describe the same show. Kitsu supplies it as a string.
+        "mal_id": int(media["_mal_id"]) if str(media.get("_mal_id") or "").isdigit() else None,
         "title_romaji": titles.get("en_jp") or attrs.get("canonicalTitle"),
         "title_english": titles.get("en"),
         "title_native": titles.get("ja_jp"),
