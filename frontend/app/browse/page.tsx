@@ -70,6 +70,7 @@ async function BrowseResults({
   const current: Current = {
     genre: read("genre"),
     format: read("format"),
+    service: read("service"),
     rated: read("rated"),
     sort: sortKey,
     page: read("page"),
@@ -89,6 +90,12 @@ async function BrowseResults({
     const f = current.format.toLowerCase();
     items = items.filter((a) => (a.format ?? "").toLowerCase() === f);
   }
+  if (current.service) {
+    const svc = current.service.toLowerCase();
+    items = items.filter((a) =>
+      (a.streaming_services ?? []).some((x) => x.toLowerCase() === svc),
+    );
+  }
   if (current.rated === "1") items = items.filter(isKnown);
 
   items = sortAnime(items, sortKey);
@@ -97,7 +104,9 @@ async function BrowseResults({
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const clamped = Math.min(page, totalPages);
   const visible = items.slice((clamped - 1) * PAGE_SIZE, clamped * PAGE_SIZE);
-  const hasFilters = Boolean(current.genre || current.format || current.rated);
+  const hasFilters = Boolean(
+    current.genre || current.format || current.service || current.rated,
+  );
   const scoredHere = items.filter(isKnown).length;
 
   return (
@@ -151,6 +160,27 @@ async function BrowseResults({
             </Chip>
           ))}
         </FilterRow>
+
+        {facets.services.length > 0 && (
+          <FilterRow label="Watch on">
+            <Chip
+              href={buildHref(current, { service: undefined, page: undefined })}
+              active={!current.service}
+            >
+              Anywhere
+            </Chip>
+            {facets.services.map((sv) => (
+              <Chip
+                key={sv.value}
+                href={buildHref(current, { service: sv.value, page: undefined })}
+                active={current.service === sv.value}
+                count={sv.count}
+              >
+                {sv.value}
+              </Chip>
+            ))}
+          </FilterRow>
+        )}
 
         <FilterRow label="Sort">
           {SORTS.map((s) => (

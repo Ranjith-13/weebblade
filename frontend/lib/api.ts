@@ -111,6 +111,7 @@ export async function getSeason(): Promise<Season> {
 export async function getFacets(): Promise<{
   genres: { value: string; count: number }[];
   formats: { value: string; count: number }[];
+  services: { value: string; count: number }[];
 }> {
   "use cache";
   cacheLife("hours");
@@ -130,6 +131,10 @@ export async function getFacets(): Promise<{
   return {
     genres: tally(items.flatMap((a) => a.genres)).filter((g) => g.count >= 4),
     formats: tally(items.map((a) => a.format)),
+    // "Where can I actually watch this" is the question the old build could not
+    // answer at all. Derived like every other facet, so a service that stops
+    // appearing upstream stops appearing here rather than becoming a dead chip.
+    services: tally(items.flatMap((a) => a.streaming_services ?? [])),
   };
 }
 

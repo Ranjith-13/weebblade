@@ -18,6 +18,10 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "media.kitsu.app" },
       { protocol: "https", hostname: "s4.anilist.co" },
       { protocol: "https", hostname: "cdn.myanimelist.net" },
+      // YouTube poster frames for the trailer facade in components/Trailer.tsx.
+      // i.ytimg.com is the thumbnail CDN; no YouTube script is loaded unless the
+      // visitor actually presses play.
+      { protocol: "https", hostname: "i.ytimg.com" },
     ],
   },
 };

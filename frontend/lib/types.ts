@@ -29,8 +29,25 @@ export type Anime = {
   studios: string[];
   source_material: string | null;
   score_100: number | null;
+  /** A RANK, not a count: lower is more popular. Never sort this descending. */
   popularity: number | null;
+  /** Also a rank. No denser than score_100 (both ~29% of the season). */
+  rating_rank: number | null;
+  /** The only dense interest signal: present for ~100% of the season, where
+   *  score_100 covers 29% and favourites tops out around 25. */
+  user_count: number | null;
   favourites: number | null;
+  age_rating: string | null;
+  /** Sparse enhancements. cover_url is on ~17% of titles and trailer_id ~57%,
+   *  so neither may be treated as a layout assumption. */
+  cover_url: string | null;
+  trailer_id: string | null;
+  slug: string | null;
+  /** Parallel arrays: streaming_services[i] labels streaming_urls[i]. ~59% of
+   *  the season carries at least one. Junk URLs are filtered at ingest, so
+   *  anything arriving here is a usable absolute http(s) link. */
+  streaming_services: string[];
+  streaming_urls: string[];
   start_year: number | null;
   start_month: number | null;
   start_day: number | null;
@@ -193,4 +210,20 @@ export function formatLabel(format: string | null): string {
     special: "Special",
   };
   return map[format.toLowerCase()] ?? format;
+}
+
+
+/** Pair up the parallel streaming arrays for rendering. Defensive about length
+ *  mismatch: the arrays are written together at ingest, but a carried-over row
+ *  from an older snapshot can have one and not the other. */
+export function streamingLinks(a: Anime): { service: string; url: string }[] {
+  return (a.streaming_urls ?? []).map((url, i) => ({
+    service: a.streaming_services?.[i] ?? "Watch",
+    url,
+  }));
+}
+
+/** Kitsu's public page for a title, when we captured the slug. */
+export function sourceUrl(a: Anime): string | null {
+  return a.source === "kitsu" && a.slug ? `https://kitsu.app/anime/${a.slug}` : null;
 }

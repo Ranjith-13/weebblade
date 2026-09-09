@@ -67,7 +67,27 @@ fixable:
 3. **Genre facets are derived from the data.** A hardcoded list drifted and shipped a `Sci-Fi` chip
    that matched nothing.
 
-Never render `studios`, `source_material`, `mal_id` (100% null) or `favourites` (0–25, noise).
+Never render `studios`, `source_material`, `mal_id` (100% null) or `favourites` (0-25, noise).
+
+## Sparse fields: coverage is a design constraint
+
+Measured across the full season, not a sample. An earlier 40-title sample overstated cover art at
+~50% and trailers at ~80%; Kitsu's listing puts well-documented titles first, so the head lies.
+
+| Field | Coverage | Rule |
+|---|---|---|
+| `slug`, `user_count` | ~100% | Safe to rely on |
+| `streaming_services` / `_urls` | 59% | Show an honest "no link listed" when absent |
+| `trailer_id` | 57% | Render the component or nothing |
+| `score_100`, `rating_rank` | 29% | The whole certainty system exists for this |
+| `cover_url` | **17%** | **Enhancement only. Never reserve space for it** |
+
+`streaming_*` are parallel arrays; pair them with `streamingLinks()`. Junk URLs are dropped at
+ingest, so anything reaching the client is a usable absolute link.
+
+The trailer is a click-to-load facade (`components/Trailer.tsx`). **Do not swap it for a plain
+iframe** — that ships ~500 KB of third-party JS and sets cookies on every view whether or not
+anyone presses play.
 
 ## Caching is a rate-limit boundary, not a perf tweak
 

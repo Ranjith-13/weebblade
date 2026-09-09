@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { ParallaxPoster } from "@/components/motion/ParallaxPoster";
+import { Trailer } from "@/components/Trailer";
 import { getAnime } from "@/lib/api";
 import {
   ApiError,
@@ -11,6 +12,8 @@ import {
   formatLabel,
   isKnown,
   secondaryTitle,
+  sourceUrl,
+  streamingLinks,
   type Anime,
 } from "@/lib/types";
 
@@ -91,12 +94,47 @@ async function AnimeDetail({
     anime.episodes ? ["Episodes", String(anime.episodes)] : null,
     anime.duration_minutes ? ["Episode length", `${anime.duration_minutes} min`] : null,
     formatAirDate(anime) ? ["First aired", formatAirDate(anime)!] : null,
-    anime.popularity
-      ? ["Popularity", `#${Math.round(anime.popularity).toLocaleString()} on Kitsu`]
+    anime.age_rating ? ["Rating", anime.age_rating] : null,
+    // userCount is the one interest figure present for essentially the whole
+    // season, so it leads. popularity and rating_rank are RANKS (lower is
+    // better) and are labelled as such so nobody reads 11,491 as a score.
+    anime.user_count
+      ? ["Tracked by", `${anime.user_count.toLocaleString()} people`]
       : null,
+    anime.popularity
+      ? ["Popularity rank", `#${Math.round(anime.popularity).toLocaleString()}`]
+      : null,
+    anime.rating_rank ? ["Rating rank", `#${anime.rating_rank.toLocaleString()}`] : null,
   ].filter(Boolean) as [string, string][];
 
+  const watch = streamingLinks(anime);
+  const kitsu = sourceUrl(anime);
+
   return (
+    <>
+      {/* Cover art exists for only ~17% of the season, so this is an enhancement
+          and never a layout assumption: when it is absent the page simply starts
+          at the poster, with nothing reserved and nothing to shift. It carries
+          the same certainty treatment as the plates so a screened-back banner
+          still reads as "no score" rather than as a different design. */}
+      {anime.cover_url && (
+        <div
+          className={[
+            "relative mt-7 aspect-[3/1] w-full overflow-hidden border border-ink",
+            known ? "plate-known" : "plate-unknown",
+          ].join(" ")}
+        >
+          <Image
+            src={anime.cover_url}
+            alt=""
+            fill
+            sizes="(max-width: 1340px) 100vw, 1340px"
+            className="object-cover"
+            priority
+          />
+        </div>
+      )}
+
     <div className="mt-7 grid gap-x-12 gap-y-9 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
       <div>
         <ParallaxPoster
@@ -163,10 +201,43 @@ async function AnimeDetail({
           </ul>
         )}
 
+        {/* The most actionable thing on the page, so it sits above the synopsis.
+            About 59% of the season carries at least one link; the rest say so
+            plainly rather than leaving a silent gap where a control should be. */}
+        <div className="mt-7 border-t border-rule pt-5">
+          <h2 className="stamp mb-3">Where to watch</h2>
+          {watch.length > 0 ? (
+            <ul className="flex flex-wrap gap-2">
+              {watch.map(({ service, url }) => (
+                <li key={url}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block border border-ink px-3 py-1.5 text-[0.8rem] font-medium transition-colors hover:bg-flag hover:text-paper"
+                  >
+                    {service}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[0.85rem] text-ink-soft">
+              Kitsu lists no streaming link for this title.
+            </p>
+          )}
+        </div>
+
         {anime.synopsis ? (
           <p className="mt-7 max-w-[64ch] leading-[1.72]">{anime.synopsis}</p>
         ) : (
           <p className="mt-7 text-ink-soft">No synopsis upstream for this title.</p>
+        )}
+
+        {anime.trailer_id && (
+          <div className="mt-7 max-w-[34rem]">
+            <Trailer videoId={anime.trailer_id} title={title} />
+          </div>
         )}
 
         <dl className="mt-9 border-t-2 border-ink sm:grid sm:grid-cols-2 sm:gap-x-12">
@@ -181,11 +252,23 @@ async function AnimeDetail({
           ))}
         </dl>
 
-        <p className="meta mt-6 flex flex-wrap gap-x-5">
-          <span>Source: {anime.source}</span>
+        <p className="meta mt-6 flex flex-wrap items-baseline gap-x-5 gap-y-1">
+          {kitsu ? (
+            <a
+              href={kitsu}
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+            >
+              View on Kitsu
+            </a>
+          ) : (
+            <span>Source: {anime.source}</span>
+          )}
           {anime.run_date && <span>Snapshot {anime.run_date}</span>}
         </p>
       </div>
     </div>
+    </>
   );
 }
