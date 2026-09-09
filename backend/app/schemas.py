@@ -36,6 +36,10 @@ class Anime(BaseModel):
     cover_url: str | None = None
     trailer_id: str | None = None
     slug: str | None = None
+    # MAL's weekly broadcast slot (day name + HH:MM, JST). Not a next-episode
+    # date - MAL has none - so the next airing is derived by the client.
+    broadcast_day: str | None = None
+    broadcast_time: str | None = None
     # Parallel arrays: streaming_services[i] labels streaming_urls[i]. ~59% of the
     # season carries at least one link.
     streaming_services: list[str] = []

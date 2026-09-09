@@ -22,6 +22,9 @@ x-airflow-common: &airflow-common
     AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "true"
     PYTHONPATH: /opt/airflow
     GROQ_API_KEY: ${GROQ_API_KEY:-}
+    # Official MyAnimeList API v2. Free, from https://myanimelist.net/apiconfig
+    # Unset is a supported state: fetch_mal skips rather than failing.
+    MAL_CLIENT_ID: ${MAL_CLIENT_ID:-}
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./ingestion:/opt/airflow/ingestion

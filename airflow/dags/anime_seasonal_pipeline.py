@@ -74,6 +74,44 @@ def anime_seasonal_pipeline():
         )
 
     @task
+    def fetch_mal(logical_date=None):
+        """The OFFICIAL MyAnimeList API v2, not the Jikan mirror.
+
+        Jikan has returned 504 ("MyAnimeList may be down") for this project's
+        whole life, but MAL itself answers 200 and api.myanimelist.net returns a
+        well-formed "Invalid client id" - verified, not assumed. MAL was never
+        the broken part; Jikan was. This source exists because MAL carries the
+        two columns that are null for 100% of stored rows, studios and
+        source_material, plus scores for titles Kitsu does not rate.
+
+        Skips cleanly when MAL_CLIENT_ID is unset so the DAG stays green on an
+        installation that has not registered one, rather than failing a task for
+        a configuration choice.
+        """
+        from ingestion.mal.client import MissingClientId
+        from ingestion.mal.fetch_season import fetch_season
+        from ingestion.mal.transform import flatten_media
+
+        season = season_for_month(logical_date.month)
+        season_year = logical_date.year
+        run_date = logical_date.to_date_string()
+        partition = _partition(season, season_year)
+
+        try:
+            raw = fetch_season(season, season_year)
+        except MissingClientId as exc:
+            logger.warning("Skipping MAL: %s", exc)
+            return
+
+        logger.info("MAL: fetched %s titles", len(raw))
+        write_raw_json(raw, DATA_DIR / "raw" / "mal" / partition, run_date)
+        write_parquet(
+            [flatten_media(m) for m in raw],
+            DATA_DIR / "processed" / "mal_media" / partition,
+            run_date,
+        )
+
+    @task
     def fetch_kitsu(logical_date=None):
         from ingestion.kitsu.fetch_season import fetch_season
         from ingestion.kitsu.transform import flatten_media
@@ -131,7 +169,7 @@ def anime_seasonal_pipeline():
         count = build_index(DATA_DIR / "warehouse.duckdb", DATA_DIR / "chroma")
         logger.info("Indexed %s titles", count)
 
-    fetches = [fetch_anilist(), fetch_jikan(), fetch_kitsu()]
+    fetches = [fetch_anilist(), fetch_jikan(), fetch_mal(), fetch_kitsu()]
     catalog = fetches >> consolidate() >> refresh_catalog()
     catalog >> [generate_digest(), build_search_index()]
 

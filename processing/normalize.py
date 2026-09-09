@@ -40,6 +40,11 @@ _STRING_COLUMNS = [
     "trailer_id",     # YouTube id; 57% of the season
     "slug",           # lets the UI link back to the source record
     "age_rating",
+    # MAL's weekly broadcast slot, e.g. ("saturday", "23:30") in JST. Stored as
+    # the slot rather than a computed next-airing date: the pipeline runs weekly,
+    # so any precomputed date is stale within days, while a slot holds for a cour.
+    "broadcast_day",
+    "broadcast_time",
 ]
 _ARRAY_COLUMNS = [
     "genres",

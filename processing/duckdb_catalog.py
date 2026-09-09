@@ -15,6 +15,7 @@ _VIEWS = {
     "anime_media_anilist": "processed/anilist_media/*/*.parquet",
     "anime_media_jikan": "processed/jikan_media/*/*.parquet",
     "anime_media_kitsu": "processed/kitsu_media/*/*.parquet",
+    "anime_media_mal": "processed/mal_media/*/*.parquet",
 }
 
 
