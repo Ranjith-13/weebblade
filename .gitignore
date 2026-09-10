@@ -48,3 +48,6 @@ caddy-logs/
 
 # Playwright MCP scratch output (screenshots, snapshots, console logs)
 .playwright-mcp/
+
+# Playwright screenshots taken during verification
+schedule-*.png

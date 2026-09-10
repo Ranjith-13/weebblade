@@ -171,6 +171,29 @@ a trimmed season lookup and the client joins locally.
 `lib/types.ts` is client-safe; `lib/api.ts` imports `server-only`. Importing `API_BASE` from
 `api.ts` into a client component drags `cacheLife` into the browser bundle and breaks the build.
 
+## The schedule is grouped by Japan, not by the reader
+
+`/schedule` lists the week's airing titles by `broadcast_day`, and **the columns are JST**. This
+looks wrong and is not: most of these broadcast after midnight in Tokyo, so a Monday 00:26 slot is
+Sunday evening across the Americas. Grouping by the reader's day would mean the server cannot
+render the page at all — the day a title belongs to would differ per visitor.
+
+So the split is the same one `NextAiring` uses: the JST slot is a fact rendered on the server, and
+each row carries the reader's own weekday and time beside it (`LocalSlot`, client-only). The intro
+copy says the columns are Japan's, because a schedule that silently showed the wrong day would be
+worse than one that explains itself.
+
+`LocalSlot` and `TodayMarker` read the clock through `useSyncExternalStore`, **not** `useState` +
+`useEffect`. Two lint rules object to the obvious version: `set-state-in-effect` (65 rows, 65
+cascading renders) and `purity` (`Date.now()` during render). The store's snapshot is frozen at
+first client read — `getSnapshot` must be stable or React loops, and it also keeps all 65 rows
+converting against one instant. "Now" is needed at all only because of DST; a fixed JST slot lands
+on a different local hour in summer than winter, so the conversion cannot be computed from the slot
+alone.
+
+Only titles that are **airing and have a slot** are listed. 40% of airing titles have no slot, and
+the page states that count rather than quietly showing a thinner week than the season has.
+
 ## Motion
 
 GSAP + ScrollTrigger via `@gsap/react`'s `useGSAP`, in `components/motion/`. **Do not add a second

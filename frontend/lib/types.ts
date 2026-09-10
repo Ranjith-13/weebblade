@@ -358,6 +358,48 @@ const WEEKDAYS = [
   "saturday",
 ];
 
+/* The week as a schedule is read: Monday first.
+ *
+ * WEEKDAYS above is Sunday-first because its index has to line up with
+ * getUTCDay(). That is arithmetic, not presentation, and the two should not be
+ * the same list. */
+export const SCHEDULE_DAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+
+export function weekdayLabel(day: string): string {
+  return day.charAt(0).toUpperCase() + day.slice(1);
+}
+
+export function hasBroadcastSlot(a: Anime): boolean {
+  return slotMinutes(a) !== null;
+}
+
+/** Minutes past midnight JST, for ordering a day's listings. Null when the slot
+ *  is missing or unparseable, which is also what makes it the has-a-slot test.
+ *
+ *  Sorted chronologically within the calendar day, so a 00:26 broadcast opens
+ *  its day rather than closing the previous one. Japanese listings often bill
+ *  that as the previous evening's late-night block, but the source reports a
+ *  calendar day and re-mapping it here would be this site inventing a
+ *  convention the data never stated. */
+export function slotMinutes(a: Anime): number | null {
+  const day = a.broadcast_day?.trim().toLowerCase();
+  if (!day || !WEEKDAYS.includes(day) || !a.broadcast_time) return null;
+
+  const [hours, minutes] = a.broadcast_time.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  return hours * 60 + minutes;
+}
+
 /** The next instant the show's slot comes round, or null if the slot is
  *  unparseable. Japan does not observe DST, so a fixed +09:00 is exact. */
 export function nextAiring(

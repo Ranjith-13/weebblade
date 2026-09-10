@@ -5,7 +5,10 @@ import {
   API_BASE,
   ApiError,
   dedupeAnime,
+  hasBroadcastSlot,
   isTv,
+  SCHEDULE_DAYS,
+  slotMinutes,
   type Anime,
   type AnimeListResponse,
   type Digest,
@@ -136,6 +139,43 @@ export async function getCatalogue(): Promise<Anime[]> {
     rows.push(...next.items);
   }
   return dedupeAnime(rows);
+}
+
+export type ScheduleDay = { day: string; items: Anime[] };
+
+/** The week's broadcast schedule, grouped by the day it airs in Japan.
+ *
+ *  Only titles that are airing AND carry a slot. A schedule of finished shows is
+ *  not a schedule, and 40% of the airing titles have no slot at all — the page
+ *  says so rather than quietly showing a shorter week than the season has.
+ *
+ *  Grouped by JST, deliberately, and this is the load-bearing decision. The slot
+ *  is a fact that is the same for everyone; the day it lands on is not, because
+ *  most of these broadcast after midnight Tokyo time and that is the previous
+ *  evening across the Americas. Grouping by the viewer's day would mean the
+ *  server cannot render the page at all. So the columns are Japan's, stated as
+ *  such, and each row carries the viewer's own time beside it (`LocalSlot`) —
+ *  the same split `NextAiring` already uses. */
+export async function getSchedule(seasonKeyParam?: string): Promise<{
+  days: ScheduleDay[];
+  slotted: number;
+  airingWithoutSlot: number;
+}> {
+  "use cache";
+  cacheLife("hours");
+
+  const { items } = await getSeason(seasonKeyParam);
+  const airing = items.filter((a) => a.status === "current");
+  const slotted = airing.filter(hasBroadcastSlot);
+
+  const days = SCHEDULE_DAYS.map((day) => ({
+    day,
+    items: slotted
+      .filter((a) => a.broadcast_day?.trim().toLowerCase() === day)
+      .sort((a, b) => (slotMinutes(a) ?? 0) - (slotMinutes(b) ?? 0)),
+  }));
+
+  return { days, slotted: slotted.length, airingWithoutSlot: airing.length - slotted.length };
 }
 
 /** Which sources actually reached the warehouse, and how many the pipeline runs.
