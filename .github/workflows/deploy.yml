@@ -72,6 +72,13 @@ jobs:
       # if the two have drifted, rather than quietly resolving something newer.
       - run: npm ci
 
+      # PageProps and friends are GENERATED types - Next writes them into
+      # .next/types, so tsc on a clean checkout cannot resolve them and fails with
+      # "Cannot find name 'PageProps'" in every route file. This step is what makes
+      # the typecheck standalone; a local .next left over from `npm run dev` is
+      # what hid the problem until CI ran on a clean tree.
+      - run: npx next typegen
+
       # Ordered fastest and most deterministic first, so a type error reports in
       # seconds rather than after a full build. Neither of these touches the
       # network, so neither can go red because something unrelated is down.
