@@ -50,6 +50,15 @@
 # The Chroma index and the digests are derived too - rebuildable from the warehouse
 # via ai.search.build_index and ai.digest.generate - so losing them costs a rerun,
 # not data.
+#
+# ONE EXCEPTION, and it is the file this backup most needs to protect:
+# data/identity/registry.parquet. It maps every source key ever seen to a stable
+# title identity, and it is state rather than derivation - no rerun can rebuild
+# it, because identities are minted once and remembered (processing/identity.py
+# explains why no stateless scheme works). Restore it with everything else. If
+# it is lost, the pipeline still runs, but it mints a fresh identity for every
+# title and every stored reference to one - a shared link, a franchise edge, a
+# watchlist entry - stops resolving at once.
 set -euo pipefail
 
 DEST="${WEEBBLADE_BACKUP_DIR:-$HOME/weebblade-backups}"
