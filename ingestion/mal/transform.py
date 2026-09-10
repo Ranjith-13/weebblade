@@ -30,6 +30,51 @@ _STATUSES = {
     "not_yet_aired": "upcoming",
 }
 
+# Genre names that mean the same thing as a Kitsu name, mapped onto Kitsu's.
+#
+# The two catalogues share only 33 of their genre names (MAL uses 73, Kitsu 155),
+# and where they name one concept differently the site showed two chips for it.
+# "Sci-Fi" and "Science Fiction" sat side by side, so clicking either one silently
+# hid the other source's shows - 210 MAL titles invisible to anyone filtering on
+# Science Fiction. Same bug as media_type "tv" against "TV", one field over; the
+# ingest check cannot see it because the names differ by more than case.
+#
+# THE RULE: map only a SYNONYM - the same concept under another label, by
+# abbreviation, plural, spelling or romanisation. Never a narrower or broader
+# neighbour, because that silently changes what a filter means. Deliberately NOT
+# mapped, all of them subgenres of the Kitsu name rather than another word for it:
+#   Iyashikei -> Slice of Life, Urban Fantasy -> Contemporary Fantasy,
+#   School -> School Life, Gourmet -> Cooking, Reincarnation -> Isekai,
+#   Performing Arts / Visual Arts -> The Arts.
+#
+# Built from each source's own snapshots, not the merged catalogue: a merged row
+# carries whichever source's genres won, so reading vocabularies from it credits
+# MAL's names to Kitsu and hides exactly the split being looked for. Fuzzy
+# matching was tried and rejected - it paired "Gore" with "Korea".
+_GENRES = {
+    "Sci-Fi": "Science Fiction",
+    "Anthropomorphic": "Anthropomorphism",
+    "Mahou Shoujo": "Magical Girl",  # the same words, romanised
+    "Crossdressing": "Cross Dressing",
+    "Delinquents": "Delinquent",
+    # MAL splits idols by gender and Kitsu cannot, so a gendered chip could never
+    # include a single Kitsu show - a filter that is incomplete by construction.
+    "Idols (Female)": "Idol",
+    "Idols (Male)": "Idol",
+}
+
+
+def _genres(media: dict[str, Any]) -> list[str]:
+    """MAL's genres in Kitsu's vocabulary, deduplicated in their original order.
+
+    Deduplicated because two MAL names can land on one Kitsu name - a title
+    tagged both "Idols (Female)" and "Idols (Male)" is one Idol title, not two.
+    """
+    seen: dict[str, None] = {}
+    for g in media.get("genres") or []:
+        seen.setdefault(_GENRES.get(g["name"], g["name"]), None)
+    return list(seen)
+
 
 def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     """Flatten a raw MAL API v2 anime node into a flat row."""
@@ -69,7 +114,7 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "season_year": start_season.get("year"),
         "episodes": media.get("num_episodes") or None,
         "duration": duration_minutes,
-        "genres": [g["name"] for g in media.get("genres") or []],
+        "genres": _genres(media),
         # The two columns that are null for 100% of rows today. Kitsu exposes
         # neither without extra relationship hops that came back empty; this is
         # the main reason MAL is worth a source slot at all.

@@ -103,3 +103,41 @@ def test_an_unrated_title_has_no_score_rather_than_a_zero():
     rather than unknown."""
     assert flatten_media({"id": 1})["average_score"] is None
     assert flatten_media({"id": 1, "mean": None})["average_score"] is None
+
+
+def _with_genres(*names):
+    return {"id": 1, "genres": [{"id": i, "name": n} for i, n in enumerate(names)]}
+
+
+def test_genres_that_mean_the_same_thing_use_kitsus_name():
+    """"Sci-Fi" and "Science Fiction" were two chips on the site, and clicking
+    either hid the other source's shows - 210 MAL titles invisible to anyone
+    filtering on Science Fiction."""
+    genres = flatten_media(_with_genres("Sci-Fi", "Anthropomorphic", "Mahou Shoujo"))["genres"]
+
+    assert genres == ["Science Fiction", "Anthropomorphism", "Magical Girl"]
+
+
+def test_two_names_landing_on_one_genre_are_counted_once():
+    """MAL splits idols by gender; Kitsu cannot. A title tagged with both is one
+    Idol title, and a duplicate entry would double-count it in the facet."""
+    assert flatten_media(_with_genres("Idols (Female)", "Idols (Male)", "Music"))["genres"] == [
+        "Idol",
+        "Music",
+    ]
+
+
+def test_a_narrower_genre_is_left_alone_rather_than_broadened():
+    """The map is synonyms only. Folding Iyashikei into Slice of Life would make a
+    Slice of Life filter quietly mean something wider than it says."""
+    genres = flatten_media(_with_genres("Iyashikei", "Urban Fantasy", "Gourmet"))["genres"]
+
+    assert genres == ["Iyashikei", "Urban Fantasy", "Gourmet"]
+
+
+def test_order_is_kept_so_the_leading_genre_stays_leading():
+    assert flatten_media(_with_genres("Action", "Sci-Fi", "Drama"))["genres"] == [
+        "Action",
+        "Science Fiction",
+        "Drama",
+    ]
