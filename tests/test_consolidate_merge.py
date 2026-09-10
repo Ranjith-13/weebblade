@@ -43,6 +43,8 @@ SCHEMA = StructType(
         StructField("studios", ArrayType(StringType())),
         StructField("source_material", StringType()),
         StructField("streaming_urls", ArrayType(StringType())),
+        StructField("streaming_services", ArrayType(StringType())),
+        StructField("genres", ArrayType(StringType())),
         StructField("score_100", DoubleType()),
         StructField("season_year", LongType()),
         StructField("start_year", LongType()),
@@ -85,6 +87,8 @@ def _row(source, source_id, mal_id, **overrides):
         "studios": None,
         "source_material": None,
         "streaming_urls": None,
+        "streaming_services": None,
+        "genres": None,
         "score_100": None,
         # The title passes require a start year, so fixtures need one; a merge
         # across different years is its own test below.
@@ -706,3 +710,71 @@ def test_a_title_keeps_its_identity_when_a_new_source_starts_winning(spark, tmp_
     assert len(first) == 1 and len(second) == 1
     assert sorted(second[0]["source_keys"]) == ["kitsu:1", "mal:900"]
     assert second[0]["wb_id"] == first[0]["wb_id"]
+
+
+def test_genres_are_the_union_of_every_source_with_kitsus_leading(spark):
+    """Tags add: a title is Iyashikei if any source says so. Taking one winner's
+    list dropped the other's entirely - MAL's Iyashikei appeared 13 times across
+    its snapshots but survived on only 3 catalogue titles."""
+    df = spark.createDataFrame(
+        [
+            _row("mal", "41467", 41467, genres=["Action", "Iyashikei"]),
+            _row("kitsu", "49444", 41467, genres=["Action", "Fantasy"]),
+        ],
+        SCHEMA_F,
+    )
+
+    out = _merge_sources(df).collect()[0]
+
+    assert out["genres"] == ["Action", "Fantasy", "Iyashikei"]  # Kitsu's first, deduped
+
+
+def test_a_title_no_source_tags_still_has_no_genres_rather_than_an_empty_list(spark):
+    """An empty list is an absence everywhere else in this merge; a union of
+    nothing must stay null rather than becoming a value."""
+    df = spark.createDataFrame(
+        [_row("mal", "1", 7), _row("kitsu", "2", 7)], SCHEMA_F
+    )
+
+    assert _merge_sources(df).collect()[0]["genres"] is None
+
+
+def test_genres_accumulate_across_merge_passes(spark):
+    """A title assembled over several passes keeps every tag it collected on the
+    way, not just the last pass's."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "1", 500, genres=["Drama"], title_english="Show", fmt="TV",
+                 start_year=2026, start_month=4, start_day=8),
+            _row("mal", "500", 500, genres=["Romance"], title_english="Show", fmt="TV",
+                 start_year=2026, start_month=4, start_day=8),
+            _row("jikan", "7", None, genres=["School"], title_english="Show", fmt="special",
+                 start_year=2026, start_month=4, start_day=8),
+        ],
+        SCHEMA_F,
+    )
+
+    out = _merge_sources(df).collect()
+
+    assert len(out) == 1
+    assert sorted(out[0]["genres"]) == ["Drama", "Romance", "School"]
+
+
+def test_streaming_links_stay_paired_with_their_service_names(spark):
+    """The trap the genre union must not spring. streaming_services[i] names
+    streaming_urls[i]; unioning the two independently would label every link with
+    another service's name. They take one source's pair, whole."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "49444", 41467, streaming_services=["Hulu"],
+                 streaming_urls=["https://hulu.com/x"]),
+            _row("mal", "41467", 41467, streaming_services=["Crunchyroll"],
+                 streaming_urls=["https://crunchyroll.com/y"]),
+        ],
+        SCHEMA_F,
+    )
+
+    out = _merge_sources(df).collect()[0]
+
+    assert out["streaming_services"] == ["Hulu"]
+    assert out["streaming_urls"] == ["https://hulu.com/x"]

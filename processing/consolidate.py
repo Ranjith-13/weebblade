@@ -378,9 +378,12 @@ def _merge_on(df: DataFrame, key: "F.Column") -> DataFrame:
         "_priority", F.coalesce(priority[F.col("source")], F.lit(len(_SOURCE_PRIORITY)))
     ).withColumn("_key", key)
 
+    # source and source_id break ties within one priority. Two rows of a group can
+    # share a source - a source listing one show twice - and priority alone then
+    # leaves both `first` and the genre order to whatever Spark reads first.
     window = (
         Window.partitionBy("_key")
-        .orderBy("_priority")
+        .orderBy("_priority", "source", "source_id")
         .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
     )
     # An EMPTY ARRAY is not a value, it is an absence, and treating it as a value
@@ -406,6 +409,28 @@ def _merge_on(df: DataFrame, key: "F.Column") -> DataFrame:
             return F.array_sort(
                 F.array_distinct(F.flatten(F.collect_list(F.col(name)).over(window)))
             ).alias(name)
+
+        # Genres are tags, and tags add: a title is Iyashikei if any source says
+        # so. Taking one winner's whole list threw away every tag the other
+        # source had - MAL's Iyashikei appeared 13 times across its snapshots
+        # but on 3 catalogue titles, because wherever Kitsu also held the show,
+        # Kitsu's list won outright and MAL's was dropped.
+        #
+        # NOT sorted, unlike source_keys: collected in window order, so the
+        # higher-priority source's genres lead and the other's follow. A title's
+        # first genre stays Kitsu's canonical one.
+        #
+        # Safe only because MAL's genre names are mapped onto Kitsu's at ingest.
+        # Without that, a union would put "Sci-Fi" and "Science Fiction" on the
+        # same title - the source split moved inside a single row.
+        #
+        # The other list columns are deliberately left alone. streaming_services
+        # and streaming_urls are PARALLEL arrays, services[i] labelling urls[i];
+        # unioning them independently would pair every link with the wrong name.
+        if name == "genres":
+            union = F.array_distinct(F.flatten(F.collect_list(F.col(name)).over(window)))
+            return F.when(F.size(union) > 0, union).alias(name)
+
         return F.first(meaningful(name), ignorenulls=True).over(window).alias(name)
 
     columns = [c for c in df.columns if c not in ("_key", "_priority")]
