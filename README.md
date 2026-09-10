@@ -63,6 +63,10 @@ Consolidation is a **field-level** merge over the whole catalogue, not a union o
 
 - Per column, the first non-null value in source-priority order wins — so a title takes
   its streaming links and cover art from Kitsu and its studios from MAL in the same row.
+- Genres are the exception: tags add, so a title carries every source's genres, Kitsu's
+  first. Taking one winner's list dropped MAL's tags wherever Kitsu also held the show.
+  This works only because MAL's genre names are mapped onto Kitsu's at ingest, so
+  Sci-Fi and Science Fiction never end up on the same title.
 - Sources are matched across snapshots, not per dated file — they aren't fetched on the
   same day, and an exact-date lookup silently dropped whole sources.
 - Scores are normalized to one scale (MAL rates 0–10, Kitsu 0–100; both land in
