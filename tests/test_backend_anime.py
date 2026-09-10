@@ -267,3 +267,97 @@ def test_list_columns_pass_through_when_present():
 
     assert anime.genres == ["Action"]
     assert anime.streaming_services == ["Crunchyroll"]
+
+
+# --- stable identities ----------------------------------------------------------
+
+from processing.identity import Registry, assign, save  # noqa: E402
+
+
+def _client_for(tmp_path, rows, registry=None):
+    data_dir = tmp_path / "data"
+    _write_parquet(
+        data_dir / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-09-16" / "part-0.parquet",
+        rows,
+    )
+    if registry is not None:
+        save(data_dir, registry)
+    db_path = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data_dir, db_path)
+
+    def override_get_db():
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            yield con
+        finally:
+            con.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    return TestClient(app)
+
+
+def _title(**over):
+    row = {
+        "source": "kitsu", "source_id": "1", "title_english": "Frieren", "format": "TV",
+        "season": "SUMMER", "season_year": 2026, "run_date": "2026-09-16", "genres": ["Drama"],
+    }
+    row.update(over)
+    return row
+
+
+def test_a_title_is_reachable_by_its_stable_identity(tmp_path):
+    ids, reg, _ = assign([["kitsu:1", "mal:10"]], Registry(), "2026-09-16")
+    client = _client_for(tmp_path, [_title(wb_id=ids[0], source_keys=["kitsu:1", "mal:10"])], reg)
+
+    body = client.get(f"/anime/{ids[0]}").json()
+
+    assert body["title_english"] == "Frieren"
+    assert body["wb_id"] == ids[0]
+    assert body["source_keys"] == ["kitsu:1", "mal:10"]
+
+
+def test_a_key_that_lost_the_merge_still_finds_its_title(tmp_path):
+    """The bug in the old route. mal:10 was folded into kitsu:1, so it is not the
+    winner and never appears as (source, source_id) in the catalogue - and the
+    old route answered 404 for a title that plainly existed."""
+    ids, reg, _ = assign([["kitsu:1", "mal:10"]], Registry(), "2026-09-16")
+    client = _client_for(tmp_path, [_title(wb_id=ids[0], source_keys=["kitsu:1", "mal:10"])], reg)
+
+    response = client.get("/anime/mal/10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title_english"] == "Frieren"
+    assert (body["source"], body["source_id"]) == ("kitsu", "1")  # visibly redirected
+
+
+def test_an_identity_that_merged_away_resolves_to_the_title_that_absorbed_it(tmp_path):
+    a, reg, _ = assign([["kitsu:1"]], Registry(), "2026-06-15")
+    b, reg, _ = assign([["kitsu:1"], ["mal:10"]], reg, "2026-09-09")
+    merged, reg, _ = assign([["kitsu:1", "mal:10"]], reg, "2026-09-16")
+    client = _client_for(tmp_path, [_title(wb_id=merged[0], source_keys=["kitsu:1", "mal:10"])], reg)
+
+    body = client.get(f"/anime/{b[1]}").json()
+
+    assert body["wb_id"] == a[0]
+    assert body["title_english"] == "Frieren"
+
+
+def test_an_unknown_identity_is_a_404(tmp_path):
+    ids, reg, _ = assign([["kitsu:1"]], Registry(), "2026-09-16")
+    client = _client_for(tmp_path, [_title(wb_id=ids[0])], reg)
+
+    assert client.get("/anime/wb_doesnotexist").status_code == 404
+
+
+def test_before_any_identity_run_the_api_neither_breaks_nor_invents_ids(tmp_path):
+    """Between deploying this code and the first pipeline run with identities,
+    the warehouse has no registry and no wb_id column. Asking for an identity is
+    then a plain 404 - not the 500 a missing column raises or the 503 a missing
+    view does - and the old address keeps working exactly as it did."""
+    client = _client_for(tmp_path, [_title()])
+
+    assert client.get("/anime/wb_anything").status_code == 404
+    legacy = client.get("/anime/kitsu/1")
+    assert legacy.status_code == 200
+    assert legacy.json()["wb_id"] is None

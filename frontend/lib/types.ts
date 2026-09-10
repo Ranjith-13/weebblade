@@ -57,6 +57,13 @@ export type Anime = {
   start_month: number | null;
   start_day: number | null;
   run_date: string | null;
+  /** Stable WeebBlade identity. (source, source_id) is whichever source won this
+   *  week's merge and can change; this cannot. Store this, not the source pair,
+   *  for anything that has to find the title again. Null only before the
+   *  pipeline's first run with identities. */
+  wb_id: string | null;
+  /** Every source row this title was assembled from, as "source:source_id". */
+  source_keys: string[];
 };
 
 export type AnimeListResponse = {

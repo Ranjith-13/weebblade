@@ -93,15 +93,74 @@ def list_anime(
     return AnimeListResponse(total=total, limit=limit, offset=offset, items=rows)
 
 
+def _optional(con: duckdb.DuckDBPyConnection, sql: str, params: list) -> list[dict]:
+    """A query against the identity layer, which may not exist yet.
+
+    anime_identity and anime_alias only appear once the pipeline has run with
+    identities, and anime_media_latest only has a wb_id column from then on.
+    Until that first run, "no identity layer" means "nothing to resolve", not
+    "the service is broken" - so an empty result, never the 503 or 500 a missing
+    view or column would otherwise raise.
+    """
+    try:
+        return con.execute(sql, params).fetch_arrow_table().to_pylist()
+    except (duckdb.CatalogException, duckdb.BinderException):
+        return []
+
+
+def _by_identity(con: duckdb.DuckDBPyConnection, wb_id: str) -> list[dict]:
+    """The current title for an identity, following it if it was since merged."""
+    alias = _optional(con, "SELECT wb_id FROM anime_alias WHERE alias = ?", [wb_id])
+    target = alias[0]["wb_id"] if alias else wb_id
+    return _optional(con, "SELECT * FROM anime_media_latest WHERE wb_id = ?", [target])
+
+
+# Declared before /{source}/{source_id}. The two cannot collide - one path
+# segment against two - but this is the address new references should use.
+@router.get("/{wb_id}", response_model=Anime)
+def get_anime_by_identity(
+    wb_id: str, con: duckdb.DuckDBPyConnection = Depends(get_db)
+) -> Anime:
+    """A title by its stable identity.
+
+    Survives every change of merge winner, and resolves an identity that has
+    since merged into another to the title that absorbed it - which is the whole
+    reason to prefer this over /{source}/{source_id} for anything stored.
+    """
+    rows = _by_identity(con, wb_id)
+    if not rows:
+        raise HTTPException(404, f"No title with identity {wb_id}")
+    return rows[0]
+
+
 @router.get("/{source}/{source_id}", response_model=Anime)
 def get_anime(
     source: str, source_id: str, con: duckdb.DuckDBPyConnection = Depends(get_db)
 ) -> Anime:
+    """A title by any source key it has ever been known by.
+
+    This used to match only the merge's current winner, so a key that lost a
+    merge - `mal:63830` folded into `kitsu:50665`, say - returned 404 for a title
+    that plainly existed. Every link ever made with a losing key broke silently.
+    Now a miss on the winner falls through to the identity registry, which knows
+    every key a title was assembled from, and returns the title it belongs to.
+    The response carries that title's own source, source_id and wb_id, so a
+    caller can see it was redirected.
+    """
     rows = run_query(
         con,
         "SELECT * FROM anime_media_latest WHERE source = ? AND source_id = ?",
         [source, source_id],
     )
-    if not rows:
-        raise HTTPException(404, f"No title found for {source}:{source_id}")
-    return rows[0]
+    if rows:
+        return rows[0]
+
+    known = _optional(
+        con, "SELECT wb_id FROM anime_identity WHERE source_key = ?", [f"{source}:{source_id}"]
+    )
+    if known:
+        rows = _by_identity(con, known[0]["wb_id"])
+        if rows:
+            return rows[0]
+
+    raise HTTPException(404, f"No title found for {source}:{source_id}")

@@ -626,3 +626,83 @@ def test_a_series_and_its_film_sharing_a_title_and_year_stay_separate(spark):
         SCHEMA_F,
     )
     assert _merge_sources(df).count() == 2
+
+
+def _live():
+    """A running session. consolidate_catalogue stops the one it used, so a test
+    that consolidates twice needs to ask for another in between."""
+    return (
+        SparkSession.builder.master("local[1]")
+        .appName("weebblade-test-merge")
+        .config("spark.ui.enabled", "false")
+        .getOrCreate()
+    )
+
+
+def test_the_merge_records_every_source_row_that_became_the_title(spark):
+    """The merge keeps one winner per column, but identity needs all of them:
+    the only way to know a title next week is to know every key it was made of."""
+    df = spark.createDataFrame(
+        [_row("mal", "41467", 41467), _row("kitsu", "49444", 41467)], SCHEMA_F
+    )
+
+    out = _merge_sources(df).collect()[0]
+
+    assert out["source_keys"] == ["kitsu:49444", "mal:41467"]  # sorted, both kept
+    assert out["source"] == "kitsu"  # while the ordinary columns still take a winner
+
+
+def test_source_keys_accumulate_across_every_merge_pass(spark):
+    """A title can be assembled over several passes - two rows by mal_id, a third
+    by premiere date. Each pass must union the keys it inherited, not restart."""
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "1", 500, title_english="Show", fmt="TV",
+                 start_year=2026, start_month=4, start_day=8),
+            _row("mal", "500", 500, title_english="Show", fmt="TV",
+                 start_year=2026, start_month=4, start_day=8),
+            _row("jikan", "7", None, title_english="Show", fmt="special",
+                 start_year=2026, start_month=4, start_day=8),
+        ],
+        SCHEMA_F,
+    )
+
+    out = _merge_sources(df).collect()
+
+    assert len(out) == 1
+    assert out[0]["source_keys"] == ["jikan:7", "kitsu:1", "mal:500"]
+
+
+def test_every_consolidated_title_gets_an_identity(spark, tmp_path):
+    _write_source(
+        spark, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-09",
+        [("kitsu", "1", "Alpha", "TV", "SUMMER", 2026), ("kitsu", "2", "Beta", "TV", "SUMMER", 2026)],
+    )
+
+    rows = _reread(str(consolidate_catalogue(tmp_path, "2026-09-09")))
+
+    ids = [r["wb_id"] for r in rows]
+    assert all(i and i.startswith("wb_") for i in ids)
+    assert len(set(ids)) == 2
+    assert (tmp_path / "identity" / "registry.parquet").exists()
+
+
+def test_a_title_keeps_its_identity_when_a_new_source_starts_winning(spark, tmp_path):
+    """The whole promise, end to end through Spark. Week one Kitsu alone reports
+    the show; week two MAL reports it too and the merge collapses them. The
+    title's surviving row and its key set both change - its identity must not."""
+    _write_source(
+        spark, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-09",
+        [("kitsu", "1", "Same Show", "TV", "SUMMER", 2026)],
+    )
+    first = _reread(str(consolidate_catalogue(tmp_path, "2026-09-09")))
+
+    _write_source(
+        _live(), tmp_path, "mal_media", "2026-SUMMER", "2026-09-16",
+        [("mal", "900", "Same Show", "TV", "SUMMER", 2026)],
+    )
+    second = _reread(str(consolidate_catalogue(tmp_path, "2026-09-16")))
+
+    assert len(first) == 1 and len(second) == 1
+    assert sorted(second[0]["source_keys"]) == ["kitsu:1", "mal:900"]
+    assert second[0]["wb_id"] == first[0]["wb_id"]

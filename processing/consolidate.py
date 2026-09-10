@@ -7,6 +7,7 @@ from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType
 
+from . import identity
 from .normalize import standardize_schema
 from .spark import get_spark_session
 
@@ -32,6 +33,9 @@ SOURCE_DIR_NAMES = {
 # non-null value in this order wins, so a title takes its streaming links from
 # Kitsu and its studios from MAL in the same row.
 _SOURCE_PRIORITY = ["kitsu", "anilist", "mal", "jikan"]
+
+# Carried through every merge pass as the union of its members, never as a winner.
+_SOURCE_KEYS = "source_keys"
 
 
 def _snapshots_upto(source_dir: Path, run_date: str) -> list[Path]:
@@ -184,12 +188,42 @@ def consolidate_catalogue(data_dir: Path, run_date: str) -> Path | None:
     consolidated = _merge_sources(consolidated).withColumn("run_date", F.lit(run_date))
     logger.info("Merged %s source rows into %s titles", before, consolidated.count())
 
+    consolidated = _stamp_identities(spark, consolidated, data_dir, run_date)
+
     out_dir = data_dir / "processed" / "anime_media_consolidated" / "_catalogue" / run_date
     consolidated.coalesce(1).write.mode("overwrite").parquet(str(out_dir))
     logger.info("Wrote consolidated catalogue to %s", out_dir)
 
     spark.stop()
     return out_dir
+
+
+def _stamp_identities(spark, df: DataFrame, data_dir: Path, run_date: str) -> DataFrame:
+    """Give every merged title its stable WeebBlade identity.
+
+    The assignment itself is plain Python over a few hundred rows (see
+    processing/identity.py) - the catalogue is small, the logic is branchy, and
+    keeping it out of Spark is what makes it testable on a machine without a
+    JVM. Spark only does the join back.
+
+    The registry is saved BEFORE the catalogue is written. If the write then
+    fails, the identities minted this run are already on record and the retry
+    reuses them rather than minting a second set.
+    """
+    rows = df.select("source", "source_id", _SOURCE_KEYS).collect()
+    groups = [list(r[_SOURCE_KEYS]) for r in rows]
+
+    ids, registry, report = identity.assign(groups, identity.load(data_dir), run_date)
+    path = identity.save(data_dir, registry)
+    logger.info("Identities for %s titles: %s (registry %s)", len(ids), report, path)
+
+    mapping = spark.createDataFrame(
+        [(r["source"], r["source_id"], wb_id) for r, wb_id in zip(rows, ids)],
+        "source string, source_id string, wb_id string",
+    )
+    # (source, source_id) is unique per merged row - each is the winner of exactly
+    # one group - so this join cannot fan out.
+    return df.join(mapping, ["source", "source_id"], "left")
 
 
 def _merge_sources(df: DataFrame) -> DataFrame:
@@ -235,7 +269,16 @@ def _merge_sources(df: DataFrame) -> DataFrame:
     The merge is per-column, taking the first non-null value in source-priority
     order, so one output row holds Kitsu's streaming links and MAL's studios at
     once.
+
+    Every output row also carries `source_keys`: the source:source_id of every
+    input row that collapsed into it. The merge picks one winner per column, but
+    identity needs all of them - a title must keep its address when a different
+    member wins next week, and the only way to know it is the same title is to
+    know every key it was ever made of. See processing/identity.py.
     """
+    df = df.withColumn(
+        _SOURCE_KEYS, F.array(F.concat_ws(":", F.col("source"), F.col("source_id")))
+    )
     matched_by_id = _merge_on(
         df,
         F.when(F.col("mal_id").isNotNull(), F.concat(F.lit("mal:"), F.col("mal_id"))).otherwise(
@@ -354,11 +397,19 @@ def _merge_on(df: DataFrame, key: "F.Column") -> DataFrame:
             return F.when(F.size(col) > 0, col)
         return col
 
+    def aggregate(name: str) -> "F.Column":
+        # Every other column takes one winner. source_keys takes the union: it is
+        # the record of which rows became this one, and dropping all but the
+        # winner's would lose exactly what identity needs to recognise the title
+        # when a different member wins. Sorted so the result is deterministic.
+        if name == _SOURCE_KEYS:
+            return F.array_sort(
+                F.array_distinct(F.flatten(F.collect_list(F.col(name)).over(window)))
+            ).alias(name)
+        return F.first(meaningful(name), ignorenulls=True).over(window).alias(name)
+
     columns = [c for c in df.columns if c not in ("_key", "_priority")]
-    merged = df.select(
-        F.col("_key"),
-        *[F.first(meaningful(c), ignorenulls=True).over(window).alias(c) for c in columns],
-    )
+    merged = df.select(F.col("_key"), *[aggregate(c) for c in columns])
     return merged.dropDuplicates(["_key"]).drop("_key")
 
 

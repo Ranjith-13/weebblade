@@ -48,9 +48,17 @@ class Anime(BaseModel):
     start_month: int | None = None
     start_day: int | None = None
     run_date: str | None = None
+    # The title's stable WeebBlade identity - see processing/identity.py. Unlike
+    # (source, source_id), which is whichever source won this week's merge, this
+    # does not move. Anything storing a reference to a title should store this.
+    # Null only for a warehouse that has not yet run with identities.
+    wb_id: str | None = None
+    # Every source row that became this title, as "source:source_id". Its
+    # provenance, and the reason an old address for it still resolves.
+    source_keys: list[str] = []
 
     @field_validator(
-        "genres", "studios", "streaming_services", "streaming_urls", mode="before"
+        "genres", "studios", "streaming_services", "streaming_urls", "source_keys", mode="before"
     )
     @classmethod
     def _null_list_is_empty(cls, value: object) -> object:

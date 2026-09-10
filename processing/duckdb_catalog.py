@@ -40,23 +40,112 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
             except duckdb.IOException:
                 logger.warning("No files yet for view %s (%s), skipping", view_name, glob_path)
 
+        has_registry = _identity_views(con, data_dir)
+        if has_registry:
+            created += ["anime_identity", "anime_alias"]
+
         if "anime_media" in created:
-            # anime_media accumulates one row per title per weekly run - fine for
-            # trend-over-time analysis, but the digest and search index want just the
-            # most recent snapshot of each title, not one copy per week it's been seen.
-            con.execute(
-                "CREATE OR REPLACE VIEW anime_media_latest AS "
-                "SELECT * EXCLUDE (_rn) FROM ("
-                "  SELECT *, ROW_NUMBER() OVER ("
-                "    PARTITION BY source, source_id ORDER BY run_date DESC"
-                "  ) AS _rn FROM anime_media"
-                ") WHERE _rn = 1"
-            )
+            con.execute(_latest_view_sql(con, has_registry))
             created.append("anime_media_latest")
-            logger.info("Refreshed view anime_media_latest (deduped to latest run per title)")
+            logger.info(
+                "Refreshed view anime_media_latest (latest run per %s)",
+                "identity" if has_registry else "source row",
+            )
     finally:
         con.close()
     return created
+
+
+def _identity_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> bool:
+    """Expose the identity registry, if one exists yet. See processing/identity.py.
+
+    `anime_identity` maps every source key ever seen to the title it belongs to;
+    `anime_alias` maps retired identities to the one that absorbed them. The
+    registry keeps both flattened - every key points at a live identity and every
+    alias at its final target - so each resolves in a single join.
+    """
+    registry = data_dir / "identity" / "registry.parquet"
+    if not registry.exists():
+        logger.warning("No identity registry at %s yet - titles keyed by source row", registry)
+        return False
+
+    path = str(registry)
+    con.execute(
+        "CREATE OR REPLACE VIEW anime_identity AS "
+        f"SELECT key AS source_key, wb_id FROM read_parquet('{path}') WHERE kind = 'key'"
+    )
+    con.execute(
+        "CREATE OR REPLACE VIEW anime_alias AS "
+        f"SELECT key AS alias, wb_id FROM read_parquet('{path}') WHERE kind = 'alias'"
+    )
+    return True
+
+
+def _latest_view_sql(con: duckdb.DuckDBPyConnection, has_registry: bool) -> str:
+    """The newest row per TITLE, where title means its stable identity.
+
+    anime_media keeps one row per title per run, which is right for history, but
+    everything that renders the catalogue wants one row per title. It used to
+    partition by (source, source_id). That is the address that moves: when the
+    merge picks a different winner between two runs - a new pass, a source coming
+    back online and outranking another - the same title arrives under two keys
+    and survives twice, a duplicate made by nothing but a change of winner.
+
+    Partitioning by identity closes that. It has to cope with every row the lake
+    already holds, most of which predate identities entirely, so each row's
+    identity is resolved in order of authority:
+
+      1. the registry's current answer for the row's own source key, which is
+         authoritative and already follows merges;
+      2. the identity stamped on the row, run through the aliases, for a row
+         whose key the registry no longer lists under that identity;
+      3. the stamped identity as written;
+      4. the source key itself, for a row nothing knows about - which is exactly
+         the old behaviour, so a lake with no registry yet is unaffected.
+
+    Casts are explicit because DuckDB types a column that is NULL in every row of
+    a file as INTEGER, and 1.1.3 (the version CI pins) refuses to COALESCE it with
+    VARCHAR; that has turned a sort into a 500 in this project once already.
+    """
+    columns = {row[0] for row in con.execute("DESCRIBE anime_media").fetchall()}
+    stamped = "wb_id" in columns
+    own_key = "CAST(m.source AS VARCHAR) || ':' || CAST(m.source_id AS VARCHAR)"
+
+    candidates, joins = [], []
+    if has_registry:
+        candidates.append("CAST(k.wb_id AS VARCHAR)")
+        joins.append(f"LEFT JOIN anime_identity k ON k.source_key = {own_key}")
+    if stamped:
+        if has_registry:
+            candidates.append("CAST(al.wb_id AS VARCHAR)")
+            joins.append("LEFT JOIN anime_alias al ON al.alias = CAST(m.wb_id AS VARCHAR)")
+        candidates.append("CAST(m.wb_id AS VARCHAR)")
+
+    if not candidates:
+        # No identities anywhere yet: exactly the old view.
+        return (
+            "CREATE OR REPLACE VIEW anime_media_latest AS "
+            "SELECT * EXCLUDE (_rn) FROM ("
+            "  SELECT *, ROW_NUMBER() OVER ("
+            "    PARTITION BY source, source_id ORDER BY run_date DESC"
+            "  ) AS _rn FROM anime_media"
+            ") WHERE _rn = 1"
+        )
+
+    base = "m.* EXCLUDE (wb_id)" if stamped else "m.*"
+    resolved = (
+        f"SELECT {base}, COALESCE({', '.join(candidates)}) AS wb_id "
+        f"FROM anime_media m {' '.join(joins)}"
+    )
+    return (
+        "CREATE OR REPLACE VIEW anime_media_latest AS "
+        "SELECT * EXCLUDE (_rn) FROM ("
+        "  SELECT *, ROW_NUMBER() OVER ("
+        "    PARTITION BY COALESCE(wb_id, CAST(source AS VARCHAR) || ':' || CAST(source_id AS VARCHAR))"
+        "    ORDER BY run_date DESC"
+        f"  ) AS _rn FROM ({resolved})"
+        ") WHERE _rn = 1"
+    )
 
 
 if __name__ == "__main__":

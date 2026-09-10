@@ -89,3 +89,120 @@ def test_anime_media_latest_dedupes_to_most_recent_run(tmp_path):
 
     assert all_rows == (2,)
     assert latest_rows == [(75.0, "2026-09-07")]
+
+
+# --- identity-aware latest view -------------------------------------------------
+
+import duckdb  # noqa: E402
+
+from processing.identity import Registry, assign, save  # noqa: E402
+
+
+def _catalogue(data_dir: Path, run_date: str, rows: list[dict]) -> None:
+    for r in rows:
+        r.setdefault("run_date", run_date)
+    _write_parquet(
+        data_dir / "processed" / "anime_media_consolidated" / "_catalogue" / run_date / "part-0.parquet",
+        rows,
+    )
+
+
+def _latest(tmp_path, data_dir):
+    db = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data_dir, db)
+    con = duckdb.connect(str(db))
+    try:
+        cols = [c[0] for c in con.execute("DESCRIBE anime_media_latest").fetchall()]
+        rows = con.execute("SELECT * FROM anime_media_latest ORDER BY source, source_id").fetchall()
+        return [dict(zip(cols, r)) for r in rows]
+    finally:
+        con.close()
+
+
+def test_without_a_registry_the_view_behaves_exactly_as_before(tmp_path):
+    """A lake that has never seen an identity - every deploy until the first new
+    run - must render the same catalogue it did yesterday."""
+    data = tmp_path / "data"
+    _catalogue(data, "2026-09-09", [
+        {"source": "kitsu", "source_id": "1", "title_english": "A"},
+        {"source": "kitsu", "source_id": "2", "title_english": "B"},
+    ])
+
+    rows = _latest(tmp_path, data)
+
+    assert [r["title_english"] for r in rows] == ["A", "B"]
+
+
+def test_a_change_of_winning_source_no_longer_duplicates_the_title(tmp_path):
+    """The bug in the old view, reproduced. Week one the title survives the
+    merge as kitsu:1; week two MAL wins and it survives as mal:10. Keyed by
+    (source, source_id) those are two titles and both stayed. Keyed by identity
+    they are one, and the newer row wins."""
+    data = tmp_path / "data"
+    ids, reg, _ = assign([["kitsu:1", "mal:10"]], Registry(), "2026-09-09")
+    save(data, reg)
+    _catalogue(data, "2026-09-09", [
+        {"source": "kitsu", "source_id": "1", "title_english": "Old", "wb_id": ids[0]},
+    ])
+    _catalogue(data, "2026-09-16", [
+        {"source": "mal", "source_id": "10", "title_english": "New", "wb_id": ids[0]},
+    ])
+
+    rows = _latest(tmp_path, data)
+
+    assert [(r["title_english"], r["wb_id"]) for r in rows] == [("New", ids[0])]
+
+
+def test_rows_written_before_identities_existed_are_resolved_through_the_registry(tmp_path):
+    """The live lake is mostly old snapshots with no wb_id column at all. Each
+    must still be recognised as the title it is, via its source key, or it would
+    survive beside the new stamped row as a duplicate on the first run."""
+    data = tmp_path / "data"
+    ids, reg, _ = assign([["kitsu:1", "mal:10"]], Registry(), "2026-09-16")
+    save(data, reg)
+    # an old per-partition snapshot: no wb_id, no source_keys
+    _write_parquet(
+        data / "processed" / "anime_media_consolidated" / "2026-SUMMER" / "2026-08-30" / "part-0.parquet",
+        [{"source": "kitsu", "source_id": "1", "title_english": "Old", "run_date": "2026-08-30"}],
+    )
+    _catalogue(data, "2026-09-16", [
+        {"source": "kitsu", "source_id": "1", "title_english": "New", "wb_id": ids[0]},
+    ])
+
+    rows = _latest(tmp_path, data)
+
+    assert [(r["title_english"], r["wb_id"]) for r in rows] == [("New", ids[0])]
+
+
+def test_a_row_stamped_with_a_since_merged_identity_follows_its_alias(tmp_path):
+    """Two identities merge; an older row still carries the one that retired. It
+    has to land in the surviving title's partition, or both rows survive."""
+    data = tmp_path / "data"
+    a, reg, _ = assign([["kitsu:1"]], Registry(), "2026-06-15")
+    b, reg, _ = assign([["kitsu:1"], ["mal:10"]], reg, "2026-09-09")
+    merged, reg, _ = assign([["kitsu:1", "mal:10"]], reg, "2026-09-16")
+    save(data, reg)
+    _catalogue(data, "2026-09-09", [
+        {"source": "mal", "source_id": "10", "title_english": "Stale", "wb_id": b[1]},
+    ])
+    _catalogue(data, "2026-09-16", [
+        {"source": "kitsu", "source_id": "1", "title_english": "Current", "wb_id": merged[0]},
+    ])
+
+    rows = _latest(tmp_path, data)
+
+    assert [(r["title_english"], r["wb_id"]) for r in rows] == [("Current", a[0])]
+
+
+def test_every_row_in_the_latest_view_carries_an_identity(tmp_path):
+    data = tmp_path / "data"
+    ids, reg, _ = assign([["kitsu:1"], ["kitsu:2"]], Registry(), "2026-09-16")
+    save(data, reg)
+    _catalogue(data, "2026-09-16", [
+        {"source": "kitsu", "source_id": "1", "title_english": "A", "wb_id": ids[0]},
+        {"source": "kitsu", "source_id": "2", "title_english": "B", "wb_id": ids[1]},
+    ])
+
+    rows = _latest(tmp_path, data)
+
+    assert sorted(r["wb_id"] for r in rows) == sorted(ids)
