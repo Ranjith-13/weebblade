@@ -247,7 +247,38 @@ export function streamingLinks(a: Anime): { service: string; url: string }[] {
   }));
 }
 
-/** Kitsu's public page for a title, when we captured the slug. */
+/* The four sources the pipeline is wired for, and how to name them in prose.
+ *
+ * The count is a fact about the pipeline, so it is stated here; WHICH of them are
+ * live is a fact about the data, so it is derived (`getSources()`). Both were
+ * hardcoded before, and both were wrong: the footer said "Assembled weekly from
+ * Kitsu" and the masthead said "1 of 3 sources live" long after MAL had joined
+ * and become the only source of studios, source material and broadcast slots.
+ *
+ * A UI that misreports its own provenance is worse than one that says nothing,
+ * and this is a project whose entire point is reconciling several sources.
+ */
+export const ALL_SOURCES = ["anilist", "jikan", "kitsu", "mal"] as const;
+
+const SOURCE_LABELS: Record<string, string> = {
+  anilist: "AniList",
+  jikan: "Jikan",
+  kitsu: "Kitsu",
+  mal: "MyAnimeList",
+};
+
+export function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source;
+}
+
+/** "Kitsu and MyAnimeList" — an Oxford-free list, because it reads as prose. */
+export function joinSources(sources: string[]): string {
+  const names = sources.map(sourceLabel);
+  if (names.length === 0) return "no sources";
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 /* Where a reader can go to verify or track this title upstream.
  *
  * A list rather than one URL, because after the cross-source merge a row can

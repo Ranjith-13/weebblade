@@ -1,6 +1,7 @@
 import "server-only";
 import { cacheLife } from "next/cache";
 import {
+  ALL_SOURCES,
   API_BASE,
   ApiError,
   dedupeAnime,
@@ -135,6 +136,21 @@ export async function getCatalogue(): Promise<Anime[]> {
     rows.push(...next.items);
   }
   return dedupeAnime(rows);
+}
+
+/** Which sources actually reached the warehouse, and how many the pipeline runs.
+ *
+ *  Derived rather than stated, for the same reason the genre facets are: a
+ *  hardcoded answer drifts silently. AniList and Jikan have been down upstream
+ *  for this project's whole life and MAL joined later, so any number written into
+ *  the copy was wrong within weeks — and was, in two places, for days. */
+export async function getSources(): Promise<{ live: string[]; configured: number }> {
+  "use cache";
+  cacheLife("hours");
+
+  const items = await getCatalogue();
+  const live = [...new Set(items.map((a) => a.source))].sort();
+  return { live, configured: ALL_SOURCES.length };
 }
 
 /** Seasons present in the warehouse, newest first. Derived, so a backfill of an

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import Markdown from "react-markdown";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
+import { ProvenanceLines } from "@/components/Provenance";
 import { getLatestDigest, getSeason } from "@/lib/api";
 import { MastheadScroll } from "@/components/motion/MastheadScroll";
 import { PinnedAside } from "@/components/motion/PinnedAside";
@@ -88,9 +89,9 @@ async function Home() {
             <p data-mast-meta className="meta text-right leading-[1.8]">
               {digest ? `Week of ${dateline(digest.run_date)}` : "Awaiting first digest"}
               <br />
-              Kitsu snapshot
-              <br />
-              1 of 3 sources live
+              <Suspense fallback={null}>
+                <ProvenanceLines />
+              </Suspense>
             </p>
           </div>
         </MastheadScroll>

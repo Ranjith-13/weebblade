@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Archivo, Bodoni_Moda } from "next/font/google";
 import Link from "next/link";
+import { Suspense } from "react";
+import { Provenance, PROVENANCE_FALLBACK } from "@/components/Provenance";
 import "./globals.css";
 
 /* Bodoni Moda for the masthead. A didone: the historical face of printed
@@ -90,13 +92,14 @@ export default function RootLayout({
         </main>
 
         {/* The footer states what is actually true today rather than what the
-            architecture allows. Two of the three ingestion sources are down
-            upstream, so claiming three would be a lie the UI tells for us. */}
+            architecture allows — and reads it from the data, because the version
+            that stated it in prose went stale the moment MAL joined and told
+            every visitor for days that this was a one-source site. */}
         <footer className="mt-20 border-t border-rule">
           <div className="mx-auto flex max-w-[1340px] flex-wrap items-baseline justify-between gap-x-8 gap-y-2 px-5 py-7 sm:px-7">
-            <p className="meta">
-              Assembled weekly from Kitsu. AniList and Jikan are down upstream.
-            </p>
+            <Suspense fallback={<p className="meta">{PROVENANCE_FALLBACK}</p>}>
+              <Provenance className="meta" />
+            </Suspense>
             <a
               href="https://github.com/Ranjith-13/weebblade"
               className="meta inline-block py-2 underline decoration-rule underline-offset-4 transition-colors hover:text-flag"

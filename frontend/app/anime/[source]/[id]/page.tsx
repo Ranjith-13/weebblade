@@ -235,8 +235,12 @@ async function AnimeDetail({
               ))}
             </ul>
           ) : (
+            /* Named Kitsu until MAL joined. Kitsu is still the only source that
+               carries streaming links, but on a MAL-only title Kitsu has no
+               record at all, so blaming it by name was misleading in exactly the
+               case where the message shows most often. */
             <p className="text-[0.85rem] text-ink-soft">
-              Kitsu lists no streaming link for this title.
+              No source lists a streaming link for this title.
             </p>
           )}
         </div>
