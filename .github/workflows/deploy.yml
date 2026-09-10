@@ -45,6 +45,50 @@ jobs:
       # had was actually invoked.
       - run: python -m pytest tests/ -v
 
+  # The frontend had no automated check of any kind: 3,200 lines of TypeScript
+  # that nothing built, typechecked or linted before it reached main. A file that
+  # did not compile could land and nobody would know until someone ran `npm run
+  # build` by hand - which is exactly how one got caught during development.
+  #
+  # Deliberately NOT a dependency of deploy. That job ships the backend and
+  # pipeline to EC2; the frontend goes to Vercel separately, and a lint error in
+  # a React component is no reason to block a data-pipeline fix from shipping.
+  # A red check on the commit is the signal, and it is enough.
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ci, not install: it installs exactly what package-lock.json pins and fails
+      # if the two have drifted, rather than quietly resolving something newer.
+      - run: npm ci
+
+      # Ordered fastest and most deterministic first, so a type error reports in
+      # seconds rather than after a full build. Neither of these touches the
+      # network, so neither can go red because something unrelated is down.
+      - run: npx tsc --noEmit
+      - run: npm run lint
+
+      # The build catches what the two above cannot - route config, PPR
+      # boundaries, anything that only fails at prerender.
+      #
+      # It DOES reach the network: pages are prerendered at build time and fetch
+      # the live API, so this job goes red if weebblade.duckdns.org is down.
+      # Verified by pointing NEXT_PUBLIC_API_BASE_URL at a dead host - the build
+      # exits 1 on "Error occurred prerendering page /". That is kept rather than
+      # worked around, because Vercel's build will fail in exactly the same way:
+      # a red check here means the deploy would not have worked either.
+      - run: npm run build
+
   deploy:
     needs: test
     runs-on: ubuntu-latest

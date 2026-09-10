@@ -346,7 +346,7 @@ export function nextAiring(
   // weekday arithmetic there, then shift back. Doing it this way avoids relying
   // on the server's or the viewer's own timezone, which differ.
   const jstNow = new Date(now.getTime() + JST_OFFSET_MS);
-  let daysAhead = (targetDay - jstNow.getUTCDay() + 7) % 7;
+  const daysAhead = (targetDay - jstNow.getUTCDay() + 7) % 7;
 
   const slot = new Date(jstNow);
   slot.setUTCDate(slot.getUTCDate() + daysAhead);
