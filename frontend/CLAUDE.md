@@ -74,8 +74,26 @@ first two lead the facts list and `mal_id` is what `sourceLinks()` uses to reach
 ## Seasons
 
 The warehouse holds more than one season. `getCatalogue()` fetches every title once and the
-per-season views are sliced from it locally, because the whole catalogue is a few hundred rows and
-slicing beats a request per season.
+per-season views are sliced from it locally. That was written when the catalogue was a few hundred
+rows, and **it is now at its ceiling.**
+
+A historical backfill (2026-09-10, `ingestion/backfill.py`) took the catalogue from 481 titles to
+**2,755 across ten seasons**, Spring 2024 to Summer 2026. Fetching it is 28 sequential requests,
+measured cold at **6.6s** for the first render each hour (it was about 1s at 481). The API allows
+60 requests a minute per IP, and on Vercel every visitor shares one set of addresses.
+
+| Catalogue | Requests | Cold first render |
+|---|---|---|
+| 481 | 5 | ~1s |
+| 2,160 | 22 | 3.9s |
+| **2,755** | **28** | **6.6s** |
+| ~6,500 (five years) | ~65 | over the rate limit: the site fails |
+
+**Do not backfill further while this pattern stands.** More history is wanted - franchise pages
+still only find 7 of 15 prequels, because most sequel gaps exceed two years - but it needs a
+frontend that reads one season at a time rather than the whole catalogue. That is the rebuild's job,
+and `backfill.py` prints its projected request count precisely so this ceiling is not crossed by
+accident.
 
 `getSeason(key?)` and `getFacets(key?)` both default to the **newest season present**, derived from
 the data - so backfilling an older season never changes what a bare URL shows. Ordering is by year
