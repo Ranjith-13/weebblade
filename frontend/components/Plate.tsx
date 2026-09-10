@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { displayTitle, formatLabel, isKnown, type Anime } from "@/lib/types";
+import { displayTitle, formatLabel, isKnown, SCORE_MAX, scoreOutOfTen, type Anime } from "@/lib/types";
 
 /* A "plate" in the printing sense. This component is where the design's one
  * idea lives, so it is worth stating plainly:
@@ -64,9 +64,9 @@ export function Plate({
               : "border-b border-r border-ink bg-paper text-[0.8rem] text-ink-soft",
           ].join(" ")}
         >
-          {known ? anime.score_100!.toFixed(1) : "—"}
+          {known ? scoreOutOfTen(anime.score_100) : "—"}
           <span className="sr-only">
-            {known ? " out of 100" : "no score available for this title"}
+            {known ? ` out of ${SCORE_MAX}` : "no score available for this title"}
           </span>
         </span>
       </div>

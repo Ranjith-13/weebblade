@@ -16,6 +16,8 @@ import {
   broadcastSlotLabel,
   secondaryTitle,
   sourceMaterialLabel,
+  SCORE_MAX,
+  scoreOutOfTen,
   sourceLinks,
   streamingLinks,
   type Anime,
@@ -177,14 +179,15 @@ async function AnimeDetail({
             <div className="flex items-baseline justify-between gap-3">
               <span className="stamp">Score</span>
               <span className="tnum font-display text-[2.4rem] font-black leading-none text-flag">
-                {anime.score_100!.toFixed(1)}
+                {scoreOutOfTen(anime.score_100)}
+                <span className="text-[1.1rem] font-bold text-ink-soft"> / {SCORE_MAX}</span>
               </span>
             </div>
           ) : (
             <p className="text-[0.8rem] leading-relaxed text-ink-soft">
               <span className="meta block mb-1.5">Not scored</span>
-              Kitsu has no rating for this title. Nearly three quarters of the season is in
-              the same position. It is missing upstream, not withheld here.
+              No source rates this title yet. Rather more than half the season is in the
+              same position. It is missing upstream, not withheld here.
             </p>
           )}
         </div>

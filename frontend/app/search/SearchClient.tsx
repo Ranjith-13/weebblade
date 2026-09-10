@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { API_BASE, formatLabel, type SearchResponse, type SearchResult } from "@/lib/types";
+import { API_BASE, formatLabel, SCORE_MAX, scoreOutOfTen, type SearchResponse, type SearchResult } from "@/lib/types";
 
 /** Trimmed season row handed down from the server so results can be rendered as
  *  real plates. Field names are short because this ships in the HTML payload
@@ -232,7 +232,10 @@ export function SearchClient({
                               : "border-b border-r border-ink bg-paper text-[0.8rem] text-ink-soft",
                           ].join(" ")}
                         >
-                          {known ? meta!.s!.toFixed(1) : "—"}
+                          {known ? scoreOutOfTen(meta!.s) : "—"}
+                          <span className="sr-only">
+                            {known ? ` out of ${SCORE_MAX}` : "no score available for this title"}
+                          </span>
                         </span>
                       </div>
 

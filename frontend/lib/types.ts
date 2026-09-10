@@ -183,6 +183,25 @@ export function byTitle(a: Anime, b: Anime): number {
 
 /** The single predicate the whole visual system keys off: colour, the score tab
  *  and the halftone treatment are all downstream of this one boolean. */
+/* Scores are displayed out of 10, not out of the 100 they are stored as.
+ *
+ * The column is score_100 because that is Kitsu's native scale and what the
+ * warehouse holds; MAL's 0-10 is converted up at ingest so the two are
+ * comparable. Storage and presentation are separate questions, and readers
+ * expect a decimal out of 10 - it is what MAL, AniList's user-facing display and
+ * every ratings site outside Kitsu use, and "8.6" carries the same information as
+ * "85.6" while reading as a score rather than a percentage.
+ *
+ * One place, three call sites: the browse plate, the detail page and the search
+ * result plate all render this. Dividing by 10 at each of them is how they drift.
+ */
+export const SCORE_MAX = 10;
+
+export function scoreOutOfTen(score100: number | null | undefined): string | null {
+  if (score100 === null || score100 === undefined) return null;
+  return (score100 / 10).toFixed(1);
+}
+
 export function isKnown(a: Anime): boolean {
   return a.score_100 !== null;
 }

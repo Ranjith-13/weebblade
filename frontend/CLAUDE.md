@@ -134,11 +134,18 @@ adding it raised some fields and diluted others. Both directions matter.
 | `studios` | 68% | Same |
 | `rating_rank` | 64% | |
 | `slug` | **61%** | **MAL rows have none.** `sourceUrl()` returns null; render no link, never a broken one |
-| `score_100` | 43% | The whole certainty system exists for this |
+| `score_100` | 43% | The whole certainty system exists for this. **Stored /100, displayed /10** |
 | `streaming_services` / `_urls` | 36% | Show an honest "no link listed" when absent |
 | `trailer_id` | 35% | Render the component or nothing |
 | `broadcast_day` / `_time` | 29% | Drives the slot line and `NextAiring` |
 | `cover_url` | **11%** | **Enhancement only. Never reserve space for it** |
+
+Scores are **stored out of 100 and shown out of 10** - `scoreOutOfTen()` and `SCORE_MAX` in
+`lib/types.ts` own that, and the browse plate, the detail page and the search plate all go through
+them. Storage keeps Kitsu's native scale because that is what the warehouse holds and what MAL's
+0-10 is converted up to at ingest; the display is /10 because that is what readers expect from a
+ratings site. Do not divide by 10 at a call site - three of them drifting apart is exactly what the
+helper exists to prevent.
 
 `age_rating` needs `ageRatingLabel()`. Kitsu says `PG`/`R`/`G`, MAL says `pg_13`/`g`/`r`/`pg`, and
 the two are different scales, so this is normalised for display only and never flattened into one
