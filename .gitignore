@@ -43,11 +43,12 @@ caddy-logs/
 .vscode/
 .idea/
 
-# Claude Code local tool state (not project code)
+# Agent tool state (not project code). Work here alternates between Claude Code
+# and Codex, and each keeps its own config, cache and memory beside the repo.
 .claude/
+.serena/
 
-# Playwright MCP scratch output (screenshots, snapshots, console logs)
+# Screenshots and traces from browser verification, by either agent
 .playwright-mcp/
-
-# Playwright screenshots taken during verification
+output/
 schedule-*.png
