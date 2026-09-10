@@ -45,14 +45,14 @@ weebblade-airflow.duckdns.org {
 	#
 	#   docker compose exec caddy caddy hash-password
 	#
-	# The default is the bcrypt of 32 random bytes that were never recorded, so an
-	# unset variable fails CLOSED - Airflow becomes unreachable rather than
-	# silently unprotected. It has to be a parseable hash rather than empty,
-	# because an empty one is a config error and Caddy would refuse to start at
-	# all, taking the public API down with it. Locking one service out is a much
-	# better failure than losing both.
+	# No default here on purpose. Caddy's `{$VAR:default}` only applies when a
+	# variable is UNSET, and compose passes an empty one - which Caddy rejects
+	# ("username and password cannot be empty"), refusing to start and taking the
+	# public API down with it, since one Caddy serves both hostnames. Shipping
+	# that is what proved it. The guaranteed-valid fallback therefore lives in
+	# docker-compose.yml, which can substitute on empty as well as unset.
 	basic_auth {
-		{$AIRFLOW_BASIC_AUTH_USER:airflow} {$AIRFLOW_BASIC_AUTH_HASH:$2a$14$YOJF6swIiS5osPNNZ71QO.o7oE51TVCKrVwRJm7pPe4XFXOAG22gC}
+		{$AIRFLOW_BASIC_AUTH_USER} {$AIRFLOW_BASIC_AUTH_HASH}
 	}
 
 	header {

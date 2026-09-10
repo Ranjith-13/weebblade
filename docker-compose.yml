@@ -125,10 +125,23 @@ services:
     build: ./caddy
     logging: *default-logging
     environment:
-      # Read by basic_auth in the Caddyfile. Unset is a supported state and fails
-      # closed: Airflow becomes unreachable, the public API is untouched.
+      # Read by basic_auth in the Caddyfile.
+      #
+      # The default lives HERE rather than in the Caddyfile, and that is the whole
+      # point: `${VAR:-default}` substitutes when the variable is unset OR empty,
+      # while Caddy's own `{$VAR:default}` only covers unset. Passing an empty
+      # value is exactly what this block used to do, so Caddy saw an empty
+      # username and password, refused to adapt the config, and crash-looped -
+      # taking the public API down with it, because one Caddy serves both.
+      #
+      # The default is a bcrypt of 32 random bytes that were never recorded, so
+      # the fallback fails closed: Airflow is unreachable, never unprotected.
+      #
+      # $$ is an escaped literal $ - compose interpolates values, and a bcrypt
+      # hash is nothing but $-delimited fields, so an unescaped one gets eaten as
+      # variable references. The same applies to the value you put in .env.
       AIRFLOW_BASIC_AUTH_USER: ${AIRFLOW_BASIC_AUTH_USER:-airflow}
-      AIRFLOW_BASIC_AUTH_HASH: ${AIRFLOW_BASIC_AUTH_HASH:-}
+      AIRFLOW_BASIC_AUTH_HASH: ${AIRFLOW_BASIC_AUTH_HASH:-$$2a$$14$$YOJF6swIiS5osPNNZ71QO.o7oE51TVCKrVwRJm7pPe4XFXOAG22gC}
     ports:
       - "80:80"
       - "443:443"
