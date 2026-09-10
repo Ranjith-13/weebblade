@@ -82,3 +82,24 @@ def test_a_sparse_node_still_flattens():
     assert row["format"] is None
     assert row["studios"] == []
     assert row["broadcast_day"] is None
+
+
+def test_the_score_is_converted_to_the_hundred_point_scale():
+    """MAL rates 0-10, Kitsu rates 0-100, and both land in score_100.
+
+    Stored raw, a MAL score of 8.72 rendered as "8.72 out of 100". The merge fills
+    a missing Kitsu score from MAL, so it pulled Kitsu-sourced rows onto the wrong
+    scale as well - 124 of 227 scored Summer titles, buried at the bottom of a
+    score-sorted catalogue.
+    """
+    assert flatten_media({"id": 1, "mean": 8.72})["average_score"] == 87.2
+    assert flatten_media({"id": 1, "mean": 10})["average_score"] == 100
+
+
+def test_an_unrated_title_has_no_score_rather_than_a_zero():
+    """MAL omits `mean` for titles nobody has rated. Multiplying a missing value
+    into 0 would place them below every rated title instead of outside the
+    ranking, and the certainty treatment would draw them as known-and-terrible
+    rather than unknown."""
+    assert flatten_media({"id": 1})["average_score"] is None
+    assert flatten_media({"id": 1, "mean": None})["average_score"] is None

@@ -50,6 +50,8 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     duration_seconds = media.get("average_episode_duration")
     duration_minutes = round(duration_seconds / 60) if duration_seconds else None
 
+    mean = media.get("mean")
+
     return {
         "source": "mal",
         "source_id": str(media.get("id")),
@@ -73,7 +75,18 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         # the main reason MAL is worth a source slot at all.
         "source_material": media.get("source"),
         "studios": [s["name"] for s in media.get("studios") or []],
-        "average_score": media.get("mean"),
+        # MAL's `mean` is a 0-10 rating; Kitsu's averageRating is 0-100, and the
+        # column these both land in is literally called score_100. Stored raw, a
+        # MAL score of 8.7 rendered on the site as "8.7 out of 100" - and because
+        # the merge fills a missing Kitsu score from MAL, it dragged Kitsu-sourced
+        # rows onto the wrong scale too: 124 of 227 scored Summer titles, sorted
+        # to the bottom of a score-ranked catalogue and drawn as near-worthless by
+        # a design whose whole subject is how much is known about a title.
+        #
+        # Same class of miss as average_episode_duration above, which is in
+        # seconds. Reconciling MAL's vocabulary covered the words and skipped the
+        # units.
+        "average_score": mean * 10 if mean is not None else None,
         # MAL's `popularity` is a RANK, like Kitsu's popularityRank, so the two
         # sources agree on direction here: lower is more popular.
         "popularity": media.get("popularity"),
