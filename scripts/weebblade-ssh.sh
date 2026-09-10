@@ -16,6 +16,7 @@
 # Usage:
 #   ./scripts/weebblade-ssh.sh                    # interactive shell
 #   ./scripts/weebblade-ssh.sh 'docker ps'        # run one command and exit
+#   ./scripts/weebblade-ssh.sh 'cat f.tar.gz' > f.tar.gz   # stdout is safe to pipe
 set -euo pipefail
 
 SG_ID="${WEEBBLADE_SG_ID:-sg-029497100335e0355}"
@@ -93,12 +94,16 @@ cleanup() {
       --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$CIDR" >/dev/null 2>&1; then
     echo "WARNING: could not revoke SSH access for $CIDR - check the security group." >&2
   else
-    echo "Closed SSH for $CIDR."
+    echo "Closed SSH for $CIDR." >&2
   fi
 }
 trap cleanup EXIT
 
-echo "Opening SSH for $CIDR ..."
+# Progress goes to stderr, never stdout: stdout is the remote command's own
+# output, and callers pipe it. weebblade-backup.sh streams a tarball through
+# here, and a stray "Opening SSH ..." line in the middle of it is a corrupt
+# archive that only fails at restore time.
+echo "Opening SSH for $CIDR ..." >&2
 if ! aws_sg ec2 authorize-security-group-ingress \
     --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$CIDR" >/dev/null 2>&1; then
   # Most likely already authorised from an earlier run that failed to clean up;
