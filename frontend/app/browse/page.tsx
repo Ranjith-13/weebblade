@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
-import { getFacets, getSeason, getSeasons } from "@/lib/api";
+import { getCatalogue, getFacets, getSeason, getSeasons } from "@/lib/api";
 import {
   DEFAULT_FORMAT,
   FORMAT_ALL,
@@ -11,6 +11,7 @@ import {
   resolveFormat,
   sortAnime,
   SORTS,
+  sourceMaterialLabel,
   type SortKey,
 } from "@/lib/types";
 
@@ -72,10 +73,11 @@ async function BrowseResults({
   // below is scoped to it. Absent means the newest season the warehouse holds,
   // so a backfill of an older season never changes what the bare URL shows.
   const seasonParam = read("season");
-  const [season, facets, seasons] = await Promise.all([
+  const [season, facets, seasons, catalogue] = await Promise.all([
     getSeason(seasonParam),
     getFacets(seasonParam),
     getSeasons(),
+    getCatalogue(),
   ]);
 
   const sortKey: SortKey = (["score", "popularity", "title"] as const).includes(
@@ -89,6 +91,8 @@ async function BrowseResults({
     genre: read("genre"),
     format: read("format"),
     service: read("service"),
+    material: read("material"),
+    studio: read("studio"),
     rated: read("rated"),
     sort: sortKey,
     page: read("page"),
@@ -99,7 +103,15 @@ async function BrowseResults({
      exist at all: the API has a min_score parameter but no way to ask for
      "has any score", which is the distinction that matters when three quarters of
      the catalogue has none. */
-  let items = season.items;
+  /* A studio lookup searches the WHOLE catalogue, not the season being viewed.
+     Anime studios are long-tail: 135 distinct ones across a single season, and
+     most make exactly one show in it, so a season-scoped studio filter answers
+     "what else did they make" with "nothing" far too often. Measured over live
+     data: clicking a studio yields more than one title 42% of the time within a
+     season and 64% across the catalogue, and TMS Entertainment goes from 5
+     titles to 11. Every other filter stays season-scoped, because every other
+     filter is a facet with chips that have to match what is on screen. */
+  let items = current.studio ? catalogue : season.items;
   if (current.genre) {
     const g = current.genre.toLowerCase();
     items = items.filter((a) => a.genres.some((x) => x.toLowerCase() === g));
@@ -118,6 +130,16 @@ async function BrowseResults({
       (a.streaming_services ?? []).some((x) => x.toLowerCase() === svc),
     );
   }
+  if (current.material) {
+    const m = current.material.toLowerCase();
+    items = items.filter((a) => (a.source_material ?? "").toLowerCase() === m);
+  }
+  /* No chip row for this one: reached from a title's Studio fact instead, which
+     is where the question comes from and which works for all 135 of them. */
+  if (current.studio) {
+    const st = current.studio.toLowerCase();
+    items = items.filter((a) => (a.studios ?? []).some((x) => x.toLowerCase() === st));
+  }
   if (current.rated === "1") items = items.filter(isKnown);
 
   items = sortAnime(items, sortKey);
@@ -134,6 +156,8 @@ async function BrowseResults({
     current.genre ||
       current.service ||
       current.rated ||
+      current.material ||
+      current.studio ||
       (current.format && current.format !== DEFAULT_FORMAT),
   );
   const scoredHere = items.filter(isKnown).length;
@@ -172,6 +196,8 @@ async function BrowseResults({
                   // carried across would silently return nothing.
                   genre: undefined,
                   service: undefined,
+                  material: undefined,
+                  studio: undefined,
                   page: undefined,
                 })}
                 active={season.key === sn.key}
@@ -201,6 +227,48 @@ async function BrowseResults({
             </Chip>
           ))}
         </FilterRow>
+
+        {/* Adapted from. MAL's contribution, and the facet a trend tracker
+            actually wants: 61 originals against 35 manga adaptations says
+            something about a season that a genre count does not. */}
+        {facets.materials.length > 1 && (
+          <FilterRow label="Adapted from">
+            <Chip
+              href={buildHref(current, { material: undefined, page: undefined })}
+              active={!current.material}
+            >
+              All
+            </Chip>
+            {facets.materials.map((m) => (
+              <Chip
+                key={m.value}
+                href={buildHref(current, { material: m.value, page: undefined })}
+                active={current.material === m.value}
+                count={m.count}
+              >
+                {sourceMaterialLabel(m.value)}
+              </Chip>
+            ))}
+          </FilterRow>
+        )}
+
+        {/* Studio appears only once one is being filtered on, because it has no
+            chip row to belong to. This is the way back out, and it says outright
+            that these results ignore the season above them. */}
+        {current.studio && (
+          <FilterRow label="Studio">
+            <Chip href={buildHref(current, { studio: current.studio })} active>
+              {current.studio}
+            </Chip>
+            <span className="meta">across every season</span>
+            <Chip
+              href={buildHref(current, { studio: undefined, page: undefined })}
+              active={false}
+            >
+              Clear studio
+            </Chip>
+          </FilterRow>
+        )}
 
         <FilterRow label="Format">
           {facets.formats.map((f) => (

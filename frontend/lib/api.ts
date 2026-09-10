@@ -265,6 +265,7 @@ export async function getFacets(seasonKeyParam?: string): Promise<{
   genres: { value: string; count: number }[];
   formats: { value: string; count: number }[];
   services: { value: string; count: number }[];
+  materials: { value: string; count: number }[];
 }> {
   "use cache";
   cacheLife("hours");
@@ -291,6 +292,12 @@ export async function getFacets(seasonKeyParam?: string): Promise<{
     // answer at all. Derived like every other facet, so a service that stops
     // appearing upstream stops appearing here rather than becoming a dead chip.
     services: tally(items.flatMap((a) => a.streaming_services ?? [])),
+    /* What a title was adapted from, which MAL supplies and Kitsu does not. It
+       makes a good facet where studios do not: 11 values spread across the
+       season (61 original, 35 manga, 27 light novel) against 135 distinct
+       studios of which exactly two have four titles. Studio is a filter reached
+       from a title, not a row of chips — see the `studio` param in /browse. */
+    materials: tally(items.map((a) => a.source_material)),
   };
 }
 

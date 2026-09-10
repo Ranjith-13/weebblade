@@ -10,6 +10,7 @@ import {
   ageRatingLabel,
   ApiError,
   displayTitle,
+  FORMAT_ALL,
   formatAirDate,
   formatLabel,
   isKnown,
@@ -93,8 +94,32 @@ async function AnimeDetail({
      100% of rows, because Kitsu provides neither; MAL does, so they are back and
      lead, being the most concretely useful things here. Favourites stays out:
      it ranges 0-25 and is noise dressed as a metric. */
-  const facts: [string, string][] = [
-    anime.studios.length > 0 ? ["Studio", anime.studios.join(", ")] : null,
+  const facts: [string, React.ReactNode][] = [
+    /* The studios are links, and this is the only way into a studio filter.
+       /browse has no studio chip row on purpose: 135 distinct studios across 227
+       titles, only two with four or more, so a row would be either 28 chips deep
+       or useless, and would leave most studios unreachable either way. "What
+       else did they make" is the question people actually arrive with, and from
+       here it works for all 135.
+
+       format=all because the question is everything they made, and the browse
+       default would silently hide their films and ONAs. */
+    anime.studios.length > 0
+      ? [
+          "Studio",
+          anime.studios.map((studio, i) => (
+            <span key={studio}>
+              {i > 0 && ", "}
+              <Link
+                href={`/browse?studio=${encodeURIComponent(studio)}&format=${FORMAT_ALL}`}
+                className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+              >
+                {studio}
+              </Link>
+            </span>
+          )),
+        ]
+      : null,
     sourceMaterialLabel(anime.source_material)
       ? ["Adapted from", sourceMaterialLabel(anime.source_material)!]
       : null,
