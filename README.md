@@ -5,7 +5,7 @@ ingestion, orchestration, processing, storage, an API, a frontend, and two AI-as
 features on real pipeline infrastructure, not a one-off notebook.
 
 Live: [weebblade.duckdns.org](https://weebblade.duckdns.org) (API) ·
-[weebblade-airflow.duckdns.org](https://weebblade-airflow.duckdns.org) (Airflow UI)
+[weebblade-airflow.duckdns.org](https://weebblade-airflow.duckdns.org) (Airflow UI, credentialed)
 
 ## What it does
 
@@ -66,7 +66,10 @@ Consolidation is a **field-level** merge over the whole catalogue, not a union o
 - Sources are matched across snapshots, not per dated file — they aren't fetched on the
   same day, and an exact-date lookup silently dropped whole sources.
 - Scores are normalized to one scale (MAL rates 0–10, Kitsu 0–100; both land in
-  `score_100`), and durations to one unit.
+  `score_100`, and the frontend shows them out of 10), and durations to one unit.
+- Every source is checked against the shared schema *before* it is written. Units and
+  vocabulary are the thing most likely to be got wrong when adding a source, and a whole
+  column on the wrong scale is far cheaper to catch at ingest than on the live site.
 
 ## API
 
@@ -93,7 +96,7 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 | AI | Groq (digest) + sentence-transformers/Chroma (semantic search) |
 | Frontend | Next.js 16 App Router, Tailwind v4, GSAP — deployed on Vercel |
 | Reverse proxy / HTTPS | Caddy (Let's Encrypt, security headers, access logs) |
-| CI/CD | GitHub Actions — pytest on every push, auto-deploy `main` to EC2 |
+| CI/CD | GitHub Actions — pytest and a frontend build/typecheck/lint on every push, auto-deploy `main` to EC2 |
 
 ## Repository layout
 
@@ -134,6 +137,12 @@ The frontend is separate — see [frontend/README.md](frontend/README.md).
   using an IAM user scoped to ingress rules on one security group and nothing else.
 - **Backups** run nightly on the server, with `scripts/weebblade-backup.sh` pulling an
   off-instance copy — server-local backups sit on the same EBS volume as the data.
+- **The Airflow UI sits behind HTTP basic auth** as well as its own login. It runs
+  arbitrary code by design, so its pre-authentication surface should not be reachable by
+  anything unauthenticated.
+- **Schema validation runs at ingest** — see "Merging, not stacking". A failure isolates
+  one source rather than the run: the others land, and consolidation carries the failed
+  source's previous snapshot forward.
 - **fail2ban** watches Caddy's access log and `sshd`, pushing to ntfy on ban — a layer
   below the app-level rate limiting.
 
@@ -144,7 +153,10 @@ and verified end-to-end against real data: two seasons and ~480 titles in the ca
 today, digests publishing weekly.
 
 Known gaps: AniList and Jikan are down upstream (the pipeline degrades rather than
-fails), and the frontend's Vercel deploy is the one step still done by hand.
+fails), and **the frontend has not been deployed yet** — it builds, typechecks and lints
+in CI on every push, but the Vercel import is a dashboard flow that hasn't been done, so
+the site currently runs locally only. Off-instance backups pull to a second machine
+rather than to S3, which still needs an IAM policy.
 
 ## License
 
