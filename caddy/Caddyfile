@@ -32,6 +32,29 @@ weebblade.duckdns.org {
 }
 
 weebblade-airflow.duckdns.org {
+	# Airflow's own login was the only thing between the internet and a system
+	# whose entire purpose is running arbitrary code. This puts a second,
+	# independent gate in front of it, so Airflow's pre-authentication surface -
+	# every endpoint a CVE would target before login - is no longer reachable by
+	# anything that has not already authenticated here.
+	#
+	# The hash comes from the environment, never from this file: a bcrypt hash is
+	# not a secret worth much, but it is still a credential and the repo is not
+	# where it belongs. Set AIRFLOW_BASIC_AUTH_HASH in .env (docker-compose passes
+	# it through), generating it with:
+	#
+	#   docker compose exec caddy caddy hash-password
+	#
+	# The default is the bcrypt of 32 random bytes that were never recorded, so an
+	# unset variable fails CLOSED - Airflow becomes unreachable rather than
+	# silently unprotected. It has to be a parseable hash rather than empty,
+	# because an empty one is a config error and Caddy would refuse to start at
+	# all, taking the public API down with it. Locking one service out is a much
+	# better failure than losing both.
+	basic_auth {
+		{$AIRFLOW_BASIC_AUTH_USER:airflow} {$AIRFLOW_BASIC_AUTH_HASH:$2a$14$YOJF6swIiS5osPNNZ71QO.o7oE51TVCKrVwRJm7pPe4XFXOAG22gC}
+	}
+
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin

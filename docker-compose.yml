@@ -124,6 +124,11 @@ services:
   caddy:
     build: ./caddy
     logging: *default-logging
+    environment:
+      # Read by basic_auth in the Caddyfile. Unset is a supported state and fails
+      # closed: Airflow becomes unreachable, the public API is untouched.
+      AIRFLOW_BASIC_AUTH_USER: ${AIRFLOW_BASIC_AUTH_USER:-airflow}
+      AIRFLOW_BASIC_AUTH_HASH: ${AIRFLOW_BASIC_AUTH_HASH:-}
     ports:
       - "80:80"
       - "443:443"
