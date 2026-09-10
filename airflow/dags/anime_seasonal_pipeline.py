@@ -7,7 +7,7 @@ import pendulum
 from airflow.decorators import dag, task
 from airflow.utils.trigger_rule import TriggerRule
 
-from ingestion.seasons import season_for_month
+from ingestion.seasons import capture_for
 from ingestion.storage import write_parquet, write_raw_json
 
 logger = logging.getLogger(__name__)
@@ -17,10 +17,6 @@ logger = logging.getLogger(__name__)
 # opens the same warehouse.duckdb file over its own bind mount - needs to see the
 # data directory at this exact same path for those views to resolve there too.
 DATA_DIR = Path("/data")
-
-
-def _partition(season: str, season_year: int) -> str:
-    return f"{season_year}-{season}"
 
 
 @dag(
@@ -36,14 +32,11 @@ def anime_seasonal_pipeline():
     # the whole DAG run blocking on it.
 
     @task
-    def fetch_anilist(logical_date=None):
+    def fetch_anilist(data_interval_end=None):
         from ingestion.anilist.fetch_season import fetch_season
         from ingestion.anilist.transform import flatten_media
 
-        season = season_for_month(logical_date.month)
-        season_year = logical_date.year
-        run_date = logical_date.to_date_string()
-        partition = _partition(season, season_year)
+        season, season_year, run_date, partition = capture_for(data_interval_end)
 
         raw = fetch_season(season, season_year)
         logger.info("AniList: fetched %s titles", len(raw))
@@ -55,14 +48,11 @@ def anime_seasonal_pipeline():
         )
 
     @task
-    def fetch_jikan(logical_date=None):
+    def fetch_jikan(data_interval_end=None):
         from ingestion.jikan.fetch_season import fetch_season
         from ingestion.jikan.transform import flatten_media
 
-        season = season_for_month(logical_date.month)
-        season_year = logical_date.year
-        run_date = logical_date.to_date_string()
-        partition = _partition(season, season_year)
+        season, season_year, run_date, partition = capture_for(data_interval_end)
 
         raw = fetch_season(season, season_year)
         logger.info("Jikan: fetched %s titles", len(raw))
@@ -74,7 +64,7 @@ def anime_seasonal_pipeline():
         )
 
     @task
-    def fetch_mal(logical_date=None):
+    def fetch_mal(data_interval_end=None):
         """The OFFICIAL MyAnimeList API v2, not the Jikan mirror.
 
         Jikan has returned 504 ("MyAnimeList may be down") for this project's
@@ -92,10 +82,7 @@ def anime_seasonal_pipeline():
         from ingestion.mal.fetch_season import fetch_season
         from ingestion.mal.transform import flatten_media
 
-        season = season_for_month(logical_date.month)
-        season_year = logical_date.year
-        run_date = logical_date.to_date_string()
-        partition = _partition(season, season_year)
+        season, season_year, run_date, partition = capture_for(data_interval_end)
 
         try:
             raw = fetch_season(season, season_year)
@@ -112,14 +99,11 @@ def anime_seasonal_pipeline():
         )
 
     @task
-    def fetch_kitsu(logical_date=None):
+    def fetch_kitsu(data_interval_end=None):
         from ingestion.kitsu.fetch_season import fetch_season
         from ingestion.kitsu.transform import flatten_media
 
-        season = season_for_month(logical_date.month)
-        season_year = logical_date.year
-        run_date = logical_date.to_date_string()
-        partition = _partition(season, season_year)
+        season, season_year, run_date, partition = capture_for(data_interval_end)
 
         raw = fetch_season(season, season_year)
         logger.info("Kitsu: fetched %s titles", len(raw))
@@ -134,7 +118,7 @@ def anime_seasonal_pipeline():
     # above failed - consolidate whatever snapshots actually landed rather than
     # blocking the whole pipeline on every source being healthy at once.
     @task(trigger_rule=TriggerRule.ALL_DONE)
-    def consolidate(logical_date=None):
+    def consolidate(data_interval_end=None):
         """Consolidate every season, not just the one being fetched.
 
         Fetching is per season because the upstream APIs are shaped that way, but
@@ -146,7 +130,7 @@ def anime_seasonal_pipeline():
         """
         from processing.consolidate import consolidate_catalogue
 
-        run_date = logical_date.to_date_string()
+        _, _, run_date, _ = capture_for(data_interval_end)
 
         result = consolidate_catalogue(DATA_DIR, run_date)
         logger.info("Consolidated output: %s", result)
@@ -161,10 +145,10 @@ def anime_seasonal_pipeline():
     # Both read anime_media_latest from the warehouse - independent of each other,
     # both tolerant of "no data yet" (see generate_digest/build_index docstrings).
     @task(trigger_rule=TriggerRule.ALL_DONE)
-    def generate_digest(logical_date=None):
+    def generate_digest(data_interval_end=None):
         from ai.digest.generate import generate_digest as _generate_digest
 
-        run_date = logical_date.to_date_string()
+        _, _, run_date, _ = capture_for(data_interval_end)
         result = _generate_digest(DATA_DIR / "warehouse.duckdb", DATA_DIR / "digests", run_date)
         logger.info("Digest output: %s", result)
 
