@@ -4,7 +4,7 @@ import { SeasonIndexLive, SeasonIndexPanel } from "./SeasonIndexPanel";
 
 /* Every season the warehouse holds, as one index that any page can open.
  *
- * The seasons were always there - ten of them since the backfill - but the only
+ * The seasons were always there - ten of them after the first backfill - but the only
  * way to reach one was a chip row inside /browse's filter block. The front page
  * named one season in 90px type and never mentioned the rest, and the header
  * linked to "The season", singular. So the concept existed and was invisible.

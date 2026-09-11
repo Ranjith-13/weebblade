@@ -71,7 +71,9 @@ export function SeasonIndexPanel({
           {/* Year columns, newest first, and within a year the newest season on
               top: the same order the rest of the site uses, so the season a bare
               URL shows is always the first entry here. */}
-          <div className="mt-5 grid grid-cols-3 gap-x-5 sm:gap-x-10">
+          {/* Three years to a row: six years of seasons wrap onto a second one,
+              and without the row gap its year headings sat on the rules above. */}
+          <div className="mt-5 grid grid-cols-3 gap-x-5 gap-y-8 sm:gap-x-10">
             {byYear(seasons).map(({ year, seasons: inYear }) => (
               <section key={year} aria-labelledby={`season-year-${year}`}>
                 <h3

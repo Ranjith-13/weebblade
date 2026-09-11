@@ -73,7 +73,7 @@ first two lead the facts list and `mal_id` is what `sourceLinks()` uses to reach
 
 ## Seasons
 
-The warehouse holds ten seasons (Spring 2024 to Summer 2026, 2,755 titles), and **a page reads
+The warehouse holds twenty seasons (Fall 2021 to Summer 2026, 6,102 titles), and **a page reads
 one of them, never the catalogue.** `getSeason(key)` fetches that season whole (`sort=title`, 100
 a page) and every view is derived from it as before. Nothing fetches the whole catalogue:
 

@@ -23,8 +23,8 @@ Measured against the live API, not assumed. Everything below drove a design deci
 | `mal_id` | **0** | Do not render |
 | `favourites` | 142, range 0–25 | Noise dressed as a metric. Do not render |
 
-This table is from when the warehouse held one season. It now holds ten (Spring 2024 to Summer
-2026, 2,755 titles), reached from the season index in the header; see frontend/CLAUDE.md, "Getting
+This table is from when the warehouse held one season. It now holds twenty (Fall 2021 to Summer
+2026, 6,102 titles), reached from the season index in the header; see frontend/CLAUDE.md, "Getting
 to a season".
 
 ### Three upstream behaviours the UI must work around

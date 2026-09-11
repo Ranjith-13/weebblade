@@ -43,6 +43,14 @@ The frontend now reads one season at a time: the season list from GET
 A render costs one request per 100 titles in that season plus one, however
 many seasons are stored, so depth no longer moves it. What can still move it is
 the size of a single season, and that is what the command reports.
+
+The second backfill (2026-09-11) went to Fall 2021: twenty seasons, 6,102
+titles, the largest season 367 titles and five requests to render. Of fifteen
+currently airing sequels sampled, 11 now have their prequel in the catalogue,
+up from 7 at two years. The four still missing are older than five years - two
+films from 2018 and 2019, a short from Winter 2021, a series from 1991 - so
+the next step there is a lookup of specific prequels, not another decade of
+whole seasons.
 """
 
 from __future__ import annotations
