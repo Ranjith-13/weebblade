@@ -10,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from .limiter import limiter
-from .routers import anime, digest, search
+from .routers import anime, catalogue, digest, search
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,7 @@ app.add_middleware(
 )
 
 app.include_router(anime.router)
+app.include_router(catalogue.router)
 app.include_router(digest.router)
 app.include_router(search.router)
 
@@ -67,5 +68,13 @@ def health():
 def root():
     return {
         "message": "WeebBlade API",
-        "endpoints": ["/anime", "/anime/{source}/{source_id}", "/digest", "/digest/latest", "/search"],
+        "endpoints": [
+            "/anime",
+            "/anime/{wb_id}",
+            "/anime/{source}/{source_id}",
+            "/catalogue",
+            "/digest",
+            "/digest/latest",
+            "/search",
+        ],
     }

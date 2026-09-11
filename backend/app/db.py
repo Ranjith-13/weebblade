@@ -27,6 +27,25 @@ def get_db() -> Iterator[duckdb.DuckDBPyConnection]:
         con.close()
 
 
+def get_db_optional() -> Iterator[duckdb.DuckDBPyConnection | None]:
+    """Like get_db, but yields None where get_db would refuse with a 503.
+
+    For endpoints whose answer does not come from the warehouse and is only
+    decorated from it: /search's matches come from the vector index, so a missing
+    warehouse should cost the results their artwork, not the results themselves.
+    It also never raises during dependency resolution, where a 503 would pre-empt
+    the 422 a malformed query deserves.
+    """
+    if not DB_PATH.exists():
+        yield None
+        return
+    con = duckdb.connect(str(DB_PATH), read_only=True)
+    try:
+        yield con
+    finally:
+        con.close()
+
+
 def run_query(
     con: duckdb.DuckDBPyConnection, sql: str, params: list[Any] | None = None
 ) -> list[dict[str, Any]]:

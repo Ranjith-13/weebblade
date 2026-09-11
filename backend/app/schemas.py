@@ -90,11 +90,44 @@ class DigestResponse(BaseModel):
     content: str
 
 
+class SeasonCount(BaseModel):
+    season: str
+    season_year: int
+    count: int
+
+
+class CatalogueSummary(BaseModel):
+    """What the warehouse holds, in one small response.
+
+    Exists so a client never has to page the whole catalogue to learn its shape.
+    The frontend used to do exactly that - every title, 100 at a time - to derive
+    the season list and the sources, and at 2,755 titles that was 28 requests and
+    6.6s before a page could render.
+    """
+
+    total: int
+    # Every source that contributed a row, not only those that won a merge: a
+    # source whose rows all lost to a higher-priority one still reached the
+    # warehouse, and its fields are in there.
+    sources: list[str]
+    # Newest first: by year, then the broadcast quarter, not the alphabet.
+    seasons: list[SeasonCount]
+
+
 class SearchResult(BaseModel):
     title: str
     source: str
     source_id: str
     distance: float
+    # Decoration from the warehouse, so a client can draw a result as the title it
+    # is without holding a copy of the catalogue to look it up in. All optional:
+    # the matches come from the vector index, and a title the warehouse cannot
+    # place still comes back, just undecorated.
+    wb_id: str | None = None
+    poster_url: str | None = None
+    score_100: float | None = None
+    format: str | None = None
+    status: str | None = None
 
 
 class SearchResponse(BaseModel):

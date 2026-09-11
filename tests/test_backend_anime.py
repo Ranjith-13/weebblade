@@ -361,3 +361,26 @@ def test_before_any_identity_run_the_api_neither_breaks_nor_invents_ids(tmp_path
     legacy = client.get("/anime/kitsu/1")
     assert legacy.status_code == 200
     assert legacy.json()["wb_id"] is None
+
+
+# --- studio -----------------------------------------------------------------------
+
+
+def test_studio_filter_spans_every_season_and_ignores_case(tmp_path):
+    """"What else did they make" is a catalogue-wide question: the frontend used
+    to hold every title to answer it. A title with no studio data must not match,
+    and must not break the query either."""
+    # title_romaji because the title sort reads it, and every real catalogue has it.
+    client = _client_for(tmp_path, [
+        _title(source_id="1", title_romaji="A", studios=["MAPPA"]),
+        _title(source_id="2", title_romaji="B", studios=["Bones", "MAPPA"], season="SPRING", season_year=2024),
+        _title(source_id="3", title_romaji="C", studios=["Bones"]),
+        _title(source_id="4", title_romaji="D", studios=None),
+    ])
+    try:
+        body = client.get("/anime", params={"studio": "mappa", "sort": "title", "limit": 100}).json()
+    finally:
+        app.dependency_overrides.clear()
+
+    assert body["total"] == 2
+    assert sorted(i["source_id"] for i in body["items"]) == ["1", "2"]

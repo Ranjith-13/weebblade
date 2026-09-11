@@ -37,6 +37,7 @@ def _build_filters(
     genre: str | None,
     format: str | None,
     min_score: float | None,
+    studio: str | None = None,
 ) -> tuple[str, list]:
     clauses = []
     params: list = []
@@ -60,6 +61,12 @@ def _build_filters(
     if min_score is not None:
         clauses.append("score_100 >= ?")
         params.append(min_score)
+    if studio:
+        # The one filter a client cannot apply to a season it already holds:
+        # "what else did this studio make" spans every season, and answering it
+        # locally meant holding the whole catalogue. Case-insensitive like genre.
+        clauses.append("EXISTS (SELECT 1 FROM UNNEST(studios) AS t(s) WHERE LOWER(s) = LOWER(?))")
+        params.append(studio)
 
     where_sql = " AND ".join(clauses) if clauses else "TRUE"
     return where_sql, params
@@ -72,12 +79,13 @@ def list_anime(
     genre: str | None = None,
     format: str | None = None,
     min_score: float | None = None,
+    studio: str | None = None,
     sort: str = Query("score_desc", pattern="^(score_desc|popularity_desc|title)$"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     con: duckdb.DuckDBPyConnection = Depends(get_db),
 ) -> AnimeListResponse:
-    where_sql, params = _build_filters(season, season_year, genre, format, min_score)
+    where_sql, params = _build_filters(season, season_year, genre, format, min_score, studio)
     order_sql = _SORT_COLUMNS[sort]
 
     total = run_query(
