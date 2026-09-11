@@ -12,6 +12,13 @@ logger = logging.getLogger(__name__)
 
 COLLECTION_NAME = "anime_media"
 
+# The new index is built here and renamed into place only once it is complete.
+_BUILDING = f"{COLLECTION_NAME}__building"
+
+# Chroma refuses an add larger than its max batch size (5,461 on the server's
+# build). Used only if the client cannot say.
+_FALLBACK_BATCH = 1000
+
 _SELECT_FOR_INDEX = """
     SELECT source, source_id, title_english, title_romaji, genres, synopsis
     FROM anime_media_latest
@@ -48,12 +55,6 @@ def build_index(db_path: Path, chroma_dir: Path) -> int:
 
     from .client import get_chroma_client
 
-    client = get_chroma_client(chroma_dir)
-    existing_names = {c.name for c in client.list_collections()}
-    if COLLECTION_NAME in existing_names:
-        client.delete_collection(COLLECTION_NAME)  # full rebuild, not an incremental upsert
-    collection = client.create_collection(COLLECTION_NAME)
-
     ids = [f"{row['source']}:{row['source_id']}" for row in rows]
     documents = [text_for_embedding(row) for row in rows]
     embeddings = embed_texts(documents)
@@ -66,9 +67,41 @@ def build_index(db_path: Path, chroma_dir: Path) -> int:
         for row in rows
     ]
 
-    collection.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
+    # A full rebuild, built BESIDE the live collection and swapped in at the end.
+    # This used to delete the live collection first and then add every title in
+    # one call - and when the backfill took the catalogue to 6,055 titles, past
+    # Chroma's 5,461 batch limit, the add failed after the delete and live search
+    # answered every query with nothing. Now a failure anywhere before the swap
+    # leaves the old index serving, and the add goes in batches the client allows.
+    client = get_chroma_client(chroma_dir)
+    names = {getattr(c, "name", c) for c in client.list_collections()}
+    if _BUILDING in names:
+        client.delete_collection(_BUILDING)  # left over from a build that died
+    building = client.create_collection(_BUILDING)
+
+    batch = _batch_size(client)
+    for start in range(0, len(ids), batch):
+        end = start + batch
+        building.add(
+            ids=ids[start:end],
+            embeddings=embeddings[start:end],
+            documents=documents[start:end],
+            metadatas=metadatas[start:end],
+        )
+
+    if COLLECTION_NAME in names:
+        client.delete_collection(COLLECTION_NAME)
+    building.modify(name=COLLECTION_NAME)
     logger.info("Indexed %s titles into Chroma collection '%s'", len(ids), COLLECTION_NAME)
     return len(ids)
+
+
+def _batch_size(client: Any) -> int:
+    get = getattr(client, "get_max_batch_size", None)
+    try:
+        return max(1, int(get())) if get else _FALLBACK_BATCH
+    except Exception:  # an older or stricter client - the fallback is always safe
+        return _FALLBACK_BATCH
 
 
 if __name__ == "__main__":
