@@ -170,17 +170,18 @@ def anime_seasonal_pipeline():
         ingestion/mal/fetch_relations.py.
 
         After the catalogue refresh because the plan reads this week's titles:
-        the new ones have never been fetched, and the airing ones may have
-        gained a sequel. A few hundred requests a week once the first full fetch
-        is done. Skips cleanly without MAL_CLIENT_ID, like fetch_mal."""
+        the new ones have never been fetched, the airing ones may have gained a
+        sequel, and anything they name that has never been fetched extends the
+        franchise past the catalogue. A few hundred requests a week once the
+        first full fetch is done; the budget stops a week that finds a huge
+        franchise from running for hours, and the rest waits for next week.
+        Skips cleanly without MAL_CLIENT_ID, like fetch_mal."""
         from ingestion.mal.client import MissingClientId
-        from ingestion.mal.fetch_relations import fetch_state, fetch_relations, plan
+        from ingestion.mal.fetch_relations import fetch_until_complete
 
         _, _, run_date, _ = capture_for(data_interval_end)
-        catalogue, ever, today = fetch_state(DATA_DIR, run_date)
-        ids = plan(catalogue, ever, today)
         try:
-            result = fetch_relations(ids, DATA_DIR, run_date)
+            result = fetch_until_complete(DATA_DIR, run_date, budget=2000)
         except MissingClientId as exc:
             logger.warning("Skipping MAL relations: %s", exc)
             return

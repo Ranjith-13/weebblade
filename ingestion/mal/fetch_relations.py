@@ -51,6 +51,18 @@ MAX_CONSECUTIVE_FAILURES = 10
 # new points at it, and then the edge comes from the new title's side.
 STILL_CHANGING = frozenset({"current", "upcoming"})
 
+# The relations that make two titles one franchise - and the ones the fetch
+# follows outward, past the catalogue. Shared characters and MAL's "other"
+# (music videos, commercials, collaborations) are recorded but not followed:
+# they would chain unrelated franchises together. processing/franchise.py joins
+# on exactly this set.
+STORY_RELATIONS = frozenset({
+    "sequel", "prequel",
+    "side_story", "parent_story", "spin_off",
+    "summary", "full_story",
+    "alternative_version", "alternative_setting",
+})
+
 SCHEMA = pa.schema([
     ("mal_id", pa.int64()),
     ("title", pa.string()),
@@ -104,17 +116,31 @@ def flatten_relations(response: dict[str, Any], run_date: str) -> list[dict[str,
     return rows
 
 
-def plan(catalogue: list[tuple[int, str | None]], fetched_ever: set[int], fetched_today: set[int]) -> list[int]:
-    """Which titles to fetch: never fetched first, then those still changing.
+def plan(
+    catalogue: list[tuple[int, str | None]],
+    fetched_ever: set[int],
+    fetched_today: set[int],
+    story_related: set[int] = frozenset(),
+) -> list[int]:
+    """Which titles to fetch, in order: catalogue titles never fetched, catalogue
+    titles still changing, then the frontier.
+
+    The frontier is every title a fetched title names through a story relation
+    that has not been fetched itself - the first season behind a sequel the
+    catalogue holds. Fetching only the catalogue stopped every franchise one step
+    outside it: Laid-Back Camp 3 reached Season 2 and never Season 1, because
+    nothing had asked Season 2 what came before it.
 
     `catalogue` is (mal_id, status) per title. Anything already fetched today is
     skipped, which is what makes an interrupted run resumable."""
-    never = sorted({m for m, _ in catalogue if m not in fetched_ever})
+    in_catalogue = {m for m, _ in catalogue}
+    never = sorted({m for m in in_catalogue if m not in fetched_ever})
     changing = sorted({
         m for m, status in catalogue
         if m in fetched_ever and m not in fetched_today and status in STILL_CHANGING
     })
-    return never + changing
+    frontier = sorted(set(story_related) - fetched_ever - in_catalogue)
+    return never + changing + frontier
 
 
 @dataclass
@@ -190,14 +216,23 @@ def _land(responses: list[dict[str, Any]], data_dir: Path, run_date: str, first_
     out.edges += sum(r["related_mal_id"] is not None for r in rows)
 
 
-def fetch_state(data_dir: Path, run_date: str) -> tuple[list[tuple[int, str | None]], set[int], set[int]]:
-    """(mal_id, status) for every catalogue title with a MAL id; the titles ever
-    fetched; and those already fetched on `run_date` - what plan() needs."""
+@dataclass
+class State:
+    catalogue: list[tuple[int, str | None]]
+    fetched_ever: set[int]
+    fetched_today: set[int]
+    story_related: set[int]
+
+
+def fetch_state(data_dir: Path, run_date: str) -> State:
+    """What plan() needs: (mal_id, status) for every catalogue title with a MAL
+    id, the titles ever fetched, those fetched on `run_date`, and every title a
+    fetched title's current list names through a story relation."""
     import duckdb
 
     warehouse = data_dir / "warehouse.duckdb"
     if not warehouse.exists():  # a first run, before any catalogue: nothing to plan
-        return [], set(), set()
+        return State([], set(), set(), set())
     con = duckdb.connect(str(warehouse), read_only=True)
     try:
         catalogue = con.execute(
@@ -206,34 +241,80 @@ def fetch_state(data_dir: Path, run_date: str) -> tuple[list[tuple[int, str | No
     finally:
         con.close()
 
-    glob = data_dir / "processed" / "mal_relations" / "*" / "*.parquet"
-    if not list(glob.parent.parent.glob("*/*.parquet")):
-        return catalogue, set(), set()
-    rows = duckdb.sql(
-        f"SELECT DISTINCT mal_id, fetched_on FROM read_parquet('{glob}')"
-    ).fetchall()
-    return catalogue, {m for m, _ in rows}, {m for m, d in rows if d == run_date}
+    relations = data_dir / "processed" / "mal_relations"
+    if not list(relations.glob("*/*.parquet")):
+        return State(catalogue, set(), set(), set())
+    glob = f"{relations}/*/*.parquet"
+    fetched = duckdb.sql(f"SELECT DISTINCT mal_id, fetched_on FROM read_parquet('{glob}')").fetchall()
+    story = ", ".join(f"'{r}'" for r in sorted(STORY_RELATIONS))
+    related = duckdb.sql(f"""
+        SELECT DISTINCT related_mal_id FROM (
+            SELECT *, MAX(fetched_on) OVER (PARTITION BY mal_id) AS _latest FROM read_parquet('{glob}')
+        ) WHERE fetched_on = _latest AND relation_type IN ({story})
+    """).fetchall()
+    return State(
+        catalogue,
+        {m for m, _ in fetched},
+        {m for m, d in fetched if d == run_date},
+        {r for (r,) in related},
+    )
+
+
+def fetch_until_complete(
+    data_dir: Path,
+    run_date: str,
+    budget: int | None = None,
+    client: MalClient | None = None,
+) -> Fetched:
+    """Fetch in passes until nothing is left to ask about, or `budget` requests
+    have been spent.
+
+    Each pass fetches the plan, and what it lands can put new titles on the
+    frontier - a first season named by the second - so the next pass starts from
+    the new state. A franchise is complete when a pass finds nothing new. Titles
+    that fail are tried once per run, not once per pass."""
+    client = client or MalClient()
+    total = Fetched()
+    tried: set[int] = set()
+    while budget is None or len(tried) < budget:
+        state = fetch_state(data_dir, run_date)
+        ids = [m for m in plan(state.catalogue, state.fetched_ever, state.fetched_today, state.story_related)
+               if m not in tried]
+        if budget is not None:
+            ids = ids[: budget - len(tried)]
+        if not ids:
+            break
+        tried.update(ids)
+        result = fetch_relations(ids, data_dir, run_date, client=client)
+        total.titles += result.titles
+        total.edges += result.edges
+        total.gone += result.gone
+        total.failed += result.failed
+    return total
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--run-date", required=True, help="the capture date to stamp, e.g. 2026-09-11")
-    parser.add_argument("--limit", type=int, default=None, help="fetch at most this many titles")
+    parser.add_argument("--limit", type=int, default=None, help="spend at most this many requests")
     parser.add_argument("--dry-run", action="store_true", help="say what would be fetched, fetch nothing")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    catalogue, ever, today = fetch_state(args.data_dir, args.run_date)
-    ids = plan(catalogue, ever, today)[: args.limit]
-    never = sum(m not in ever for m in ids)
-    print(f"{len(catalogue)} catalogue titles with a MAL id; {len(ever)} fetched before, "
-          f"{len(today)} already today. Fetching {len(ids)}: {never} never fetched, "
-          f"{len(ids) - never} still airing or upcoming. ~{round(len(ids) * 0.8 / 60)} min.")
-    if args.dry_run or not ids:
+    state = fetch_state(args.data_dir, args.run_date)
+    first = plan(state.catalogue, state.fetched_ever, state.fetched_today, state.story_related)
+    in_catalogue = {m for m, _ in state.catalogue}
+    never = sum(m in in_catalogue and m not in state.fetched_ever for m in first)
+    frontier = sum(m not in in_catalogue for m in first)
+    print(f"{len(state.catalogue)} catalogue titles with a MAL id; {len(state.fetched_ever)} fetched before, "
+          f"{len(state.fetched_today)} already today. First pass {len(first)}: {never} never fetched, "
+          f"{len(first) - never - frontier} still airing or upcoming, {frontier} beyond the catalogue; "
+          "later passes follow what these name.")
+    if args.dry_run or not first:
         return 0
 
-    result = fetch_relations(ids, args.data_dir, args.run_date)
+    result = fetch_until_complete(args.data_dir, args.run_date, budget=args.limit)
     print(f"landed {result.titles} titles and {result.edges} edges; "
           f"{len(result.gone)} gone from MAL, {len(result.failed)} failed (retried next run)")
     return 0

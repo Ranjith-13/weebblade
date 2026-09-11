@@ -34,14 +34,12 @@ import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+# Which relations join a franchise is defined beside the fetch, which follows
+# exactly these outward past the catalogue; the two must never disagree.
+from ingestion.mal.fetch_relations import STORY_RELATIONS
+
 logger = logging.getLogger(__name__)
 
-STORY_RELATIONS = frozenset({
-    "sequel", "prequel",
-    "side_story", "parent_story", "spin_off",
-    "summary", "full_story",
-    "alternative_version", "alternative_setting",
-})
 
 MEMBERS_RELPATH = Path("processed") / "franchise" / "members.parquet"
 

@@ -117,3 +117,76 @@ def test_a_timeout_is_one_failed_title_not_a_failed_run(tmp_path):
 
     assert result.failed == [2]
     assert result.titles == 2
+
+
+# --- past the catalogue ----------------------------------------------------------------
+
+import pyarrow as pa  # noqa: E402
+
+from processing.duckdb_catalog import refresh_catalog  # noqa: E402
+
+
+def test_the_frontier_comes_after_the_catalogue_and_skips_what_is_known():
+    ids = fr.plan([(10, "finished")], fetched_ever={10, 7}, fetched_today=set(), story_related={5, 7, 10})
+
+    # 5 is named by a fetched title and never fetched itself; 7 was fetched
+    # already; 10 is catalogue, and finished.
+    assert ids == [5]
+
+
+class _Graph:
+    """MAL as a small graph: 30 is the catalogue's sequel, 20 and 10 the seasons
+    before it, 99 a cameo special linked by shared characters only."""
+
+    EDGES = {30: [(20, "prequel"), (99, "character")], 20: [(10, "prequel"), (30, "sequel")],
+             10: [(20, "sequel")], 99: []}
+
+    def __init__(self, fail=()):
+        self.asked, self.fail = [], set(fail)
+
+    def get(self, url, params=None):
+        mal_id = int(url.rsplit("/", 1)[1])
+        self.asked.append(mal_id)
+        if mal_id in self.fail:
+            raise RuntimeError("MAL request failed after 5 attempts")
+        return _response(mal_id, self.EDGES[mal_id])
+
+
+def _catalogue(tmp_path, *mal_ids):
+    rows = [{"source": "mal", "source_id": str(m), "mal_id": m, "status": "finished",
+             "title_english": f"T{m}", "run_date": "2026-09-11"} for m in mal_ids]
+    path = tmp_path / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-09-11" / "p.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist(rows), path)
+    refresh_catalog(tmp_path, tmp_path / "warehouse.duckdb")
+
+
+def test_passes_follow_story_relations_back_to_the_first_season(tmp_path):
+    """Fetching only the catalogue stopped at the prequel's door: Laid-Back Camp 3
+    reached Season 2 and never Season 1."""
+    _catalogue(tmp_path, 30)
+    mal = _Graph()
+
+    result = fr.fetch_until_complete(tmp_path, "2026-09-11", client=mal)
+
+    assert mal.asked == [30, 20, 10]  # one hop per pass, and never the cameo
+    assert result.titles == 3
+
+
+def test_a_budget_stops_the_passes(tmp_path):
+    _catalogue(tmp_path, 30)
+    mal = _Graph()
+
+    fr.fetch_until_complete(tmp_path, "2026-09-11", budget=2, client=mal)
+
+    assert mal.asked == [30, 20]
+
+
+def test_a_failing_title_is_tried_once_a_run_not_once_a_pass(tmp_path):
+    _catalogue(tmp_path, 30)
+    mal = _Graph(fail={20})
+
+    result = fr.fetch_until_complete(tmp_path, "2026-09-11", client=mal)
+
+    assert mal.asked == [30, 20]
+    assert result.failed == [20]
