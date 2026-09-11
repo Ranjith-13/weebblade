@@ -64,6 +64,8 @@ class _MAL:
             raise requests.HTTPError(response=response)
         if answer == "down":
             raise RuntimeError("MAL request failed after 5 attempts")
+        if answer == "slow":
+            raise requests.exceptions.ReadTimeout("Read timed out. (read timeout=30)")
         return _response(mal_id, [(mal_id + 1000, "sequel")])
 
 
@@ -106,3 +108,12 @@ def test_a_run_of_failures_stops_the_fetch_and_keeps_what_landed(tmp_path):
     assert len(client.asked) == 12  # 1, 2, then ten failures
     rows = pq.read_table(tmp_path / "processed" / "mal_relations" / "2026-09-11" / "from-1.parquet").to_pylist()
     assert sorted({r["mal_id"] for r in rows}) == [1, 2]
+
+
+def test_a_timeout_is_one_failed_title_not_a_failed_run(tmp_path):
+    """The first full fetch died on a single read timeout inside its first chunk
+    of a 73-minute job, and landed nothing."""
+    result = fr.fetch_relations([1, 2, 3], tmp_path, "2026-09-11", client=_MAL({2: "slow"}))
+
+    assert result.failed == [2]
+    assert result.titles == 2

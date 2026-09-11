@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
 _NODE = "id,title,main_picture,media_type,start_date"
 FIELDS = f"{_NODE},related_anime{{relation_type,node{{{_NODE}}}}}"
 
-CHUNK = 250
+# Small enough that a crash nothing anticipated costs a minute of fetching.
+CHUNK = 100
 
 # Consecutive failures that mean MAL is refusing the key or is down, rather
 # than one title being awkward. Stopping says so; skipping 5,000 titles would not.
@@ -153,7 +154,10 @@ def fetch_relations(
                 else:
                     out.failed.append(mal_id)
                     consecutive += 1
-            except RuntimeError:
+            except (requests.RequestException, RuntimeError):
+                # A timeout, a dropped connection, or retries run out: this title
+                # is left for the next run. The first full fetch died on a single
+                # 30-second read timeout before this caught it.
                 out.failed.append(mal_id)
                 consecutive += 1
             if consecutive >= MAX_CONSECUTIVE_FAILURES:
