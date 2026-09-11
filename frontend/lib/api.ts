@@ -12,6 +12,7 @@ import {
   type Anime,
   type AnimeListResponse,
   type Digest,
+  type Franchise,
 } from "./types";
 
 /* Server-only data layer. The client-safe pieces (types, API_BASE, pure
@@ -362,6 +363,14 @@ export async function getTitle(wbId: string): Promise<Anime | null> {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
   }
+}
+
+/** A title's franchise, oldest first: see GET /anime/{wb_id}/franchise. Empty
+ *  for a title in no franchise, which is most one-offs and every music video. */
+export async function getFranchise(wbId: string): Promise<Franchise> {
+  "use cache";
+  cacheLife("hours");
+  return getJson<Franchise>(buildUrl(`/anime/${encodeURIComponent(wbId)}/franchise`));
 }
 
 export async function getLatestDigest(): Promise<Digest | null> {

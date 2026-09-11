@@ -95,6 +95,47 @@ export type SearchResult = {
 
 export type SearchResponse = { query: string; results: SearchResult[] };
 
+/** One title in a franchise, oldest first. `wb_id` is null for an entry older
+ *  than the catalogue, which the API describes from MAL's relation data. */
+export type FranchiseEntry = {
+  mal_id: number;
+  wb_id: string | null;
+  title: string | null;
+  format: string | null;
+  /** ISO, possibly partial: "2019", "2019-06", "2019-06-01". */
+  start_date: string | null;
+  season: string | null;
+  season_year: number | null;
+  poster_url: string | null;
+  score_100: number | null;
+  /** How this entry relates to the title asked about, when linked directly. */
+  relation: string | null;
+  is_this: boolean;
+};
+
+export type Franchise = { franchise_id: string | null; entries: FranchiseEntry[] };
+
+/* MAL's relation types, in words. "Parent story" is the far end of both a side
+   story and a spin-off; the two character/other links can name a franchise
+   member that is also joined some other way, so they get words too. */
+const RELATION_LABELS: Record<string, string> = {
+  prequel: "Prequel",
+  sequel: "Sequel",
+  side_story: "Side story",
+  parent_story: "Parent story",
+  spin_off: "Spin-off",
+  summary: "Summary",
+  full_story: "Full story",
+  alternative_version: "Alternative version",
+  alternative_setting: "Alternative setting",
+  character: "Shares characters",
+  other: "Related",
+};
+
+export function relationLabel(relation: string | null): string | null {
+  return relation ? (RELATION_LABELS[relation] ?? null) : null;
+}
+
 export type AnimeQuery = {
   season?: string;
   season_year?: number;

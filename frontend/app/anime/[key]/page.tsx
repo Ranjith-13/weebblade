@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound, permanentRedirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
+import { FranchiseSection } from "@/components/Franchise";
 import { ParallaxPoster } from "@/components/motion/ParallaxPoster";
 import { NextAiring } from "@/components/NextAiring";
 import { Trailer } from "@/components/Trailer";
@@ -433,6 +434,14 @@ async function AnimeDetail({
         </p>
       </div>
     </div>
+
+    {/* Streams after the title itself: the franchise is a second request, and
+        the page is complete without it. */}
+    {anime.wb_id && (
+      <Suspense fallback={null}>
+        <FranchiseSection wbId={anime.wb_id} />
+      </Suspense>
+    )}
     </>
   );
 }
