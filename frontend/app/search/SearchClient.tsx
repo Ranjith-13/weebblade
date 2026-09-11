@@ -6,17 +6,6 @@ import { useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { API_BASE, formatLabel, SCORE_MAX, scoreOutOfTen, type SearchResponse, type SearchResult } from "@/lib/types";
 
-/** Trimmed season row handed down from the server so results can be rendered as
- *  real plates. Field names are short because this ships in the HTML payload
- *  for all 142 titles. */
-export type PlateLite = {
-  t: string;
-  p: string | null;
-  s: number | null;
-  f: string | null;
-  c: boolean;
-};
-
 const EXAMPLES = [
   "quiet show about cooking",
   "revenge story with swords",
@@ -35,13 +24,7 @@ type State =
  * server-side would pool every visitor into one shared budget — client-side,
  * each visitor spends their own. Queries are unique per user, so server caching
  * would buy nothing, and results have no SEO value worth prerendering. */
-export function SearchClient({
-  lookup,
-  total,
-}: {
-  lookup: Record<string, PlateLite>;
-  total: number;
-}) {
+export function SearchClient({ total }: { total: number }) {
   const [state, setState] = useState<State>({ status: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
   // Guards against an earlier slow request resolving after a later one and
@@ -158,7 +141,7 @@ export function SearchClient({
       <div className="mt-9" aria-live="polite" aria-atomic="false">
         {state.status === "idle" && (
           <p className="max-w-[52ch] text-[0.85rem] leading-relaxed text-ink-soft">
-            Nothing searched yet. All {total} titles in the catalogue are indexed.
+            Nothing searched yet. All {total.toLocaleString()} titles in the catalogue are indexed.
           </p>
         )}
 
@@ -183,7 +166,7 @@ export function SearchClient({
 
         {state.status === "done" && state.results.length === 0 && (
           <p className="max-w-[52ch] leading-relaxed text-ink-soft">
-            Nothing came back for &ldquo;{state.query}&rdquo;. The index covers {total}
+            Nothing came back for &ldquo;{state.query}&rdquo;. The index covers {total.toLocaleString()}
             titles, so it is a small pool to match against.
           </p>
         )}
@@ -195,8 +178,8 @@ export function SearchClient({
             </p>
             <ol className="mt-5 grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
               {state.results.map((result) => {
-                const meta = lookup[`${result.source}:${result.source_id}`];
-                const known = meta?.s !== null && meta?.s !== undefined;
+                const score = result.score_100 ?? null;
+                const known = score !== null;
                 const bar = closeness(state.results, result.distance);
                 return (
                   <li key={`${result.source}:${result.source_id}`}>
@@ -208,12 +191,12 @@ export function SearchClient({
                         className={[
                           "relative aspect-[3/4] overflow-hidden border border-ink",
                           known ? "plate-known" : "plate-unknown",
-                          meta?.p ? "" : "plate-empty bg-plate",
+                          result.poster_url ? "" : "plate-empty bg-plate",
                         ].join(" ")}
                       >
-                        {meta?.p ? (
+                        {result.poster_url ? (
                           <Image
-                            src={meta.p}
+                            src={result.poster_url}
                             alt=""
                             fill
                             sizes="(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 15vw"
@@ -221,7 +204,7 @@ export function SearchClient({
                           />
                         ) : (
                           <span className="absolute inset-0 flex items-end p-2.5 font-display text-[0.95rem] font-bold leading-[1.1] text-ink-soft">
-                            {meta?.t ?? result.title}
+                            {result.title}
                           </span>
                         )}
                         <span
@@ -232,7 +215,7 @@ export function SearchClient({
                               : "border-b border-r border-ink bg-paper text-[0.8rem] text-ink-soft",
                           ].join(" ")}
                         >
-                          {known ? scoreOutOfTen(meta!.s) : "—"}
+                          {known ? scoreOutOfTen(score) : "—"}
                           <span className="sr-only">
                             {known ? ` out of ${SCORE_MAX}` : "no score available for this title"}
                           </span>
@@ -240,7 +223,7 @@ export function SearchClient({
                       </div>
 
                       <h3 className="mt-2 line-clamp-2 text-[0.78rem] font-medium leading-[1.3] transition-colors group-hover:text-flag">
-                        {meta?.t ?? result.title}
+                        {result.title}
                       </h3>
 
                       {/* Similarity, shown as a rail plus the real figure. */}
@@ -251,7 +234,7 @@ export function SearchClient({
                         />
                       </div>
                       <p className="meta mt-1 flex justify-between gap-2">
-                        <span>{meta ? formatLabel(meta.f) : "—"}</span>
+                        <span>{result.format ? formatLabel(result.format) : "—"}</span>
                         <span className="tnum">{result.distance.toFixed(2)}</span>
                       </p>
                     </Link>

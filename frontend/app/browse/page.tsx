@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
-import { getCatalogue, getFacets, getSeason, getSeasons } from "@/lib/api";
+import { facetsOf, getFacets, getSeason, getSeasons, getStudio } from "@/lib/api";
 import {
   DEFAULT_FORMAT,
   FORMAT_ALL,
@@ -95,12 +95,19 @@ async function BrowseResults({
   // below is scoped to it. Absent means the newest season the warehouse holds,
   // so a backfill of an older season never changes what the bare URL shows.
   const seasonParam = read("season");
-  const [season, facets, seasons, catalogue] = await Promise.all([
-    getSeason(seasonParam),
-    getFacets(seasonParam),
+  const studioParam = read("studio");
+  /* A studio view spans every season, so it loads none: its results, chips and
+     counts all come from the studio's own titles. It used to fetch the newest
+     season regardless and offer that season's chips over MAPPA's titles from
+     2024 - counts describing something that was not on screen. */
+  const [seasons, season, seasonFacets, studioItems] = await Promise.all([
     getSeasons(),
-    getCatalogue(),
+    studioParam ? null : getSeason(seasonParam),
+    studioParam ? null : getFacets(seasonParam),
+    studioParam ? getStudio(studioParam) : null,
   ]);
+  const pool = studioItems ?? season?.items ?? [];
+  const facets = seasonFacets ?? facetsOf(pool);
 
   const sortKey: SortKey = (["score", "popularity", "title"] as const).includes(
     read("sort") as SortKey,
@@ -114,7 +121,7 @@ async function BrowseResults({
     format: read("format"),
     service: read("service"),
     material: read("material"),
-    studio: read("studio"),
+    studio: studioParam,
     rated: read("rated"),
     sort: sortKey,
     page: read("page"),
@@ -132,8 +139,9 @@ async function BrowseResults({
      data: clicking a studio yields more than one title 42% of the time within a
      season and 64% across the catalogue, and TMS Entertainment goes from 5
      titles to 11. Every other filter stays season-scoped, because every other
-     filter is a facet with chips that have to match what is on screen. */
-  let items = current.studio ? catalogue : season.items;
+     filter is a facet with chips that have to match what is on screen. The API
+     answers it (getStudio), so this page never holds the whole catalogue. */
+  let items = pool;
   if (current.genre) {
     const g = current.genre.toLowerCase();
     items = items.filter((a) => a.genres.some((x) => x.toLowerCase() === g));
@@ -188,7 +196,7 @@ async function BrowseResults({
      change drops the facet filters, because genre and service chips differ per
      season and one carried across would silently return nothing. Format, sort
      and "Rated only" mean the same thing in every season, so they stay. */
-  const at = seasons.findIndex((s) => s.key === season.key);
+  const at = season ? seasons.findIndex((s) => s.key === season.key) : -1;
   const earlier = at >= 0 ? seasons[at + 1] : undefined;
   const later = at > 0 ? seasons[at - 1] : undefined;
   const toSeason = (key: string) =>
@@ -210,7 +218,7 @@ async function BrowseResults({
       ? [
           {
             value: current.genre,
-            count: season.items.filter((a) =>
+            count: pool.filter((a) =>
               a.genres.some((x) => x.toLowerCase() === current.genre!.toLowerCase()),
             ).length,
           },
@@ -221,7 +229,7 @@ async function BrowseResults({
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
-        <h1 className={HEADING}>{current.studio ? current.studio : (season.label ?? "The season")}</h1>
+        <h1 className={HEADING}>{current.studio ? current.studio : (season?.label ?? "The season")}</h1>
         {!current.studio && (
           <nav aria-label="Other seasons" className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
             {earlier && (
@@ -412,8 +420,11 @@ async function BrowseResults({
         <div className="mt-14 max-w-prose">
           <p className="font-display text-2xl font-bold">Nothing matches that.</p>
           <p className="mt-2 text-ink-soft">
-            This view shows {activeFormat ? formatLabel(activeFormat) : "every format"} from a
-            season of {season.total} titles, so narrow combinations run out quickly.{" "}
+            This view shows {activeFormat ? formatLabel(activeFormat) : "every format"} from{" "}
+            {current.studio
+              ? `${pool.length} titles by ${current.studio}`
+              : `a season of ${pool.length} titles`}
+            , so narrow combinations run out quickly.{" "}
             <Link
               href={buildHref({}, { season: current.season })}
               className="text-data underline underline-offset-4"

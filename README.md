@@ -77,11 +77,17 @@ Consolidation is a **field-level** merge over the whole catalogue, not a union o
 
 ## API
 
-- `GET /anime` — filter by `season`, `season_year`, `genre`, `format`, `min_score`;
-  `sort` (`score_desc` | `popularity_desc` | `title`), `limit`, `offset`.
-- `GET /anime/{source}/{source_id}` — single title detail.
+- `GET /catalogue` — the seasons on file with their title counts, the sources that
+  contributed, and the total. What a client needs to know about the catalogue without
+  paging through it.
+- `GET /anime` — filter by `season`, `season_year`, `genre`, `format`, `min_score`,
+  `studio` (across every season); `sort` (`score_desc` | `popularity_desc` | `title`),
+  `limit`, `offset`.
+- `GET /anime/{wb_id}` — a title by its stable identity, following it if it merged.
+- `GET /anime/{source}/{source_id}` — a title by any source key it was ever made of.
 - `GET /digest`, `/digest/latest`, `/digest/{run_date}` — the weekly LLM trend digest.
-- `GET /search?q=...&n=...` — semantic similarity search over indexed titles.
+- `GET /search?q=...&n=...` — semantic similarity search over indexed titles; each result
+  carries its poster, score, format and `wb_id`.
 - `GET /health` — liveness.
 
 Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by default,

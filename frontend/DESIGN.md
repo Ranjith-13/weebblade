@@ -188,8 +188,10 @@ JS never runs, the page is complete and unstyled-back, not invisible.
 
 ## 8. Data-layer architecture
 
-`lib/api.ts` fetches the **whole season once** (two upstream requests, cached for hours) and
-derives every filter, sort, facet and page locally. This is not a performance flourish:
+`lib/api.ts` fetches the **whole season once** (a request per 100 titles, cached for hours) and
+derives every filter, sort, facet and page locally. It never fetches the whole catalogue: the
+season list comes from `GET /catalogue`, a studio's titles from `/anime?studio=`. This is not a
+performance flourish:
 
 - The upstream API rate-limits per client IP and every visitor shares this app's egress addresses,
   so caching is a **correctness boundary**, not a tweak.
@@ -198,9 +200,10 @@ derives every filter, sort, facet and page locally. This is not a performance fl
   genre list, none of which can be fixed downstream.
 
 `/search` is the deliberate exception: it runs **client-side** so each visitor spends their own
-20/min budget on their own unique queries. Search results carry no artwork from the API, so the
-server hands the client a trimmed lookup of the cached season and the results are joined locally —
-real plates, correct certainty treatment, zero extra upstream requests.
+20/min budget on their own unique queries. Each result arrives from the API with its poster, score
+and format, so it renders as a real plate with the correct certainty treatment. (This used to be a
+lookup of the whole catalogue handed to the client, 514 KB of HTML at 2,755 titles, to decorate
+twenty results.)
 
 `lib/types.ts` is client-safe; `lib/api.ts` imports `server-only`. Importing `API_BASE` from
 `api.ts` into a client component drags `cacheLife` into the browser bundle and fails the build —

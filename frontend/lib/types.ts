@@ -82,6 +82,15 @@ export type SearchResult = {
   /** Embedding distance - lower is a closer semantic match. Surfaced in the UI
    *  on purpose: it's what distinguishes this from a keyword search. */
   distance: number;
+  /* Decoration from the warehouse, so a result can be drawn as a plate without a
+     copy of the catalogue to look it up in. Null when the API could not place the
+     match - drawn then as a title with no artwork and no score, which is what the
+     API knows about it. */
+  wb_id?: string | null;
+  poster_url?: string | null;
+  score_100?: number | null;
+  format?: string | null;
+  status?: string | null;
 };
 
 export type SearchResponse = { query: string; results: SearchResult[] };

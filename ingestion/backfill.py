@@ -30,19 +30,19 @@ That is the right trade for finished shows, whose scores barely move, and it is
 why this is a command rather than something the DAG does every week.
 
 
-HOW DEEP, AND WHY NOT DEEPER
+HOW DEEP
 
-The frontend fetches the whole catalogue on every render (see getCatalogue in
-frontend/lib/api.ts), paging it at 100 per request, against an API that allows
-60 requests a minute per IP. That design assumes a few hundred titles. Measured,
-a past season adds about 300, so:
+Depth used to be capped by the frontend, which fetched the whole catalogue on
+every render, 100 titles a request, against an API that allows 60 requests a
+minute per IP. At 2,755 titles that was 28 requests and a 6.6s render; five
+years back (~6,500) would have gone over the limit and taken the site down.
+That is why the first backfill stopped at two years.
 
-    two years back   ~2,300 titles   ~23 requests   comfortable
-    five years back  ~6,500 titles   ~65 requests   over the limit - the site fails
-
-So the first backfill is two years, and anything deeper waits for a frontend
-that reads by season instead of all at once. The command prints the projected
-size before writing so that ceiling is never crossed by accident.
+The frontend now reads one season at a time: the season list from GET
+/catalogue, then the season on screen (see getSeason in frontend/lib/api.ts).
+A render costs one request per 100 titles in that season plus one, however
+many seasons are stored, so depth no longer moves it. What can still move it is
+the size of a single season, and that is what the command reports.
 """
 
 from __future__ import annotations
@@ -62,9 +62,9 @@ logger = logging.getLogger(__name__)
 
 _ORDER = ["WINTER", "SPRING", "SUMMER", "FALL"]
 
-# Titles per page the frontend requests, and the API's per-IP ceiling. Mirrors
-# frontend/lib/api.ts and backend/app/limiter.py; if either moves, this check is
-# what goes stale.
+# Titles per page the frontend requests when it reads a season, and the API's
+# per-IP ceiling. Mirrors frontend/lib/api.ts and backend/app/limiter.py; if
+# either moves, this check is what goes stale.
 _FRONTEND_PAGE = 100
 _API_REQUESTS_PER_MINUTE = 60
 
@@ -201,8 +201,15 @@ def main(argv: list[str] | None = None) -> int:
     estimate = round(fetched * 0.7)
     print(f"\nfetched {fetched} source rows across {len(landed) - len(failed)} snapshot(s); "
           f"roughly {estimate} titles once merged")
-    print(f"the frontend would need ~{projected_requests(estimate)} more requests per catalogue "
-          f"fetch, against a limit of {_API_REQUESTS_PER_MINUTE} a minute")
+    per_season: dict[str, int] = {}
+    for l in landed:
+        per_season[l.partition] = per_season.get(l.partition, 0) + l.rows
+    if per_season:
+        largest = max(per_season, key=per_season.get)
+        titles = round(per_season[largest] * 0.7)
+        # +1: the season list, fetched alongside the season itself.
+        print(f"the largest, {largest} at ~{titles} titles, takes ~{projected_requests(titles) + 1} "
+              f"requests to render, against a limit of {_API_REQUESTS_PER_MINUTE} a minute")
     for l in failed:
         print(f"  FAILED {l.source} {l.partition}: {l.error}")
     return 1 if failed else 0

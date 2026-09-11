@@ -73,27 +73,34 @@ first two lead the facts list and `mal_id` is what `sourceLinks()` uses to reach
 
 ## Seasons
 
-The warehouse holds more than one season. `getCatalogue()` fetches every title once and the
-per-season views are sliced from it locally. That was written when the catalogue was a few hundred
-rows, and **it is now at its ceiling.**
+The warehouse holds ten seasons (Spring 2024 to Summer 2026, 2,755 titles), and **a page reads
+one of them, never the catalogue.** `getSeason(key)` fetches that season whole (`sort=title`, 100
+a page) and every view is derived from it as before. Nothing fetches the whole catalogue:
 
-A historical backfill (2026-09-10, `ingestion/backfill.py`) took the catalogue from 481 titles to
-**2,755 across ten seasons**, Spring 2024 to Summer 2026. Fetching it is 28 sequential requests,
-measured cold at **6.6s** for the first render each hour (it was about 1s at 481). The API allows
-60 requests a minute per IP, and on Vercel every visitor shares one set of addresses.
+- the season list, the sources and the total come from `GET /catalogue` (`getCatalogueSummary`),
+  one small request;
+- a studio's titles, the one question that spans seasons, come from `/anime?studio=` (`getStudio`),
+  and a studio view loads no season at all: its chips are built from its own titles (`facetsOf`);
+- search results arrive from the API with their poster, score and format, so `/search` no longer
+  ships a lookup of every title.
 
-| Catalogue | Requests | Cold first render |
+It used to be one `getCatalogue()` that every page shared, sliced locally. Fine at 481 titles;
+after the backfill it was 28 requests per cache period, and five years of history would have gone
+over the API's 60 a minute and taken the site down. Measured 2026-09-11, production builds of both
+on one machine against the live API:
+
+| | Whole catalogue (before) | Per season (now) |
 |---|---|---|
-| 481 | 5 | ~1s |
-| 2,160 | 22 | 3.9s |
-| **2,755** | **28** | **6.6s** |
-| ~6,500 (five years) | ~65 | over the rate limit: the site fails |
+| Cold render of a season | 28 requests, 4.4s | 4 requests (summary + 3 pages), 0.9s first, 0.3-0.5s after |
+| Studio view | from the catalogue | 1 request, 0.4s |
+| `/search` HTML | 514 KB | 22 KB |
+| Build-time page generation | 6.7s | 1.9s |
+| As the catalogue grows | +1 request per 100 titles, on every page | unchanged; only one season's size counts |
 
-**Do not backfill further while this pattern stands.** More history is wanted - franchise pages
-still only find 7 of 15 prequels, because most sequel gaps exceed two years - but it needs a
-frontend that reads one season at a time rather than the whole catalogue. That is the rebuild's job,
-and `backfill.py` prints its projected request count precisely so this ceiling is not crossed by
-accident.
+So **backfill depth no longer touches the frontend.** What can still move a render is the size of a
+single season, and `backfill.py` reports the largest season's request count for that reason. Do not
+reintroduce a read of the whole catalogue: if a new view seems to need one, it needs an API
+endpoint that answers the question instead, the way `/catalogue` and `studio=` do.
 
 `getSeason(key?)` and `getFacets(key?)` both default to the **newest season present**, derived from
 the data - so backfilling an older season never changes what a bare URL shows. Ordering is by year

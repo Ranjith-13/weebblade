@@ -39,10 +39,23 @@ import {
  *   3. The genre filter list had to be hardcoded, and had drifted: "Sci-Fi"
  *      matched nothing because the real tag is "Science Fiction".
  *
- * The season is 142 titles. Fetching all of it once and deriving
+ * A season is two to four hundred titles. Fetching all of it once and deriving
  * every view locally fixes all three, and costs FEWER upstream requests than
- * before (two, per cache period, total) — which matters because the API rate
- * limits per IP and every visitor shares this app's egress addresses.
+ * passing views through — which matters because the API rate limits per IP and
+ * every visitor shares this app's egress addresses.
+ *
+ * ONE SEASON, NEVER THE CATALOGUE
+ * This used to fetch the whole catalogue and slice seasons out of it locally.
+ * Fine at 481 titles (5 requests); at 2,755 after the backfill it was 28
+ * requests and a 6.6s cold render, and five years of history would have gone
+ * over the API's 60 a minute and taken the site down. Three things needed the
+ * catalogue, and none now does:
+ *   - the season list and the sources come from /catalogue, one small request;
+ *   - a studio's other titles, the one question that spans seasons, is asked of
+ *     the API directly (getStudio);
+ *   - search results arrive with their own artwork and score.
+ * So a page costs the season it shows (a request per 100 titles) plus the
+ * summary, however many seasons the warehouse holds.
  */
 
 const PAGE = 100; // API caps `limit` at 100
@@ -121,24 +134,55 @@ export type Season = {
   nonTvTotal: number;
 };
 
-/** Every title the warehouse holds, across every season. One fetch, cached, and
- *  the per-season views are derived from it: the whole catalogue is a few
- *  hundred rows, so slicing locally is cheaper than a request per season. */
-export async function getCatalogue(): Promise<Anime[]> {
+/** Every row an /anime query matches, all pages of it.
+ *
+ *  sort=title is load-bearing, not cosmetic: it is the only stable ordering the
+ *  API offers, and without it paging returns a different subset per call. The
+ *  first page says how many there are; the rest are fetched together, so a
+ *  300-title season is two round trips rather than three in a row. */
+async function fetchAll(filter: Record<string, unknown>): Promise<Anime[]> {
+  const page = (offset: number) =>
+    getJson<AnimeListResponse>(buildUrl("/anime", { ...filter, limit: PAGE, offset, sort: "title" }));
+  const first = await page(0);
+  const offsets: number[] = [];
+  for (let offset = PAGE; offset < first.total; offset += PAGE) offsets.push(offset);
+  const rest = await Promise.all(offsets.map(page));
+  return [first, ...rest].flatMap((r) => r.items);
+}
+
+export type CatalogueSummary = {
+  total: number;
+  sources: string[];
+  seasons: { season: string; season_year: number; count: number }[];
+};
+
+/** The catalogue's shape - its seasons, sources and size - without its titles.
+ *  One small request; see GET /catalogue. */
+export async function getCatalogueSummary(): Promise<CatalogueSummary> {
   "use cache";
   cacheLife("hours");
+  return getJson<CatalogueSummary>(buildUrl("/catalogue"));
+}
 
-  // sort=title is load-bearing, not cosmetic: it is the only stable ordering
-  // the API offers, and without it paging returns a different subset per call.
-  const first = await getJson<AnimeListResponse>(buildUrl("/anime", { limit: PAGE, sort: "title" }));
-  const rows = [...first.items];
-  for (let offset = PAGE; offset < first.total; offset += PAGE) {
-    const next = await getJson<AnimeListResponse>(
-      buildUrl("/anime", { limit: PAGE, offset, sort: "title" }),
-    );
-    rows.push(...next.items);
-  }
-  return dedupeAnime(rows);
+/** One season's rows. Keyed by the resolved season, so the bare URL and the
+ *  newest season's own key share a single cache entry and a single fetch. */
+async function getSeasonRows(season: string, year: number): Promise<Anime[]> {
+  "use cache";
+  cacheLife("hours");
+  return fetchAll({ season, season_year: year });
+}
+
+/** Every title a studio worked on, in every season.
+ *
+ *  The one catalogue-wide question the site asks. Anime studios are long-tail -
+ *  most make one show a season - so "what else did they make" answered within a
+ *  season says "nothing" far too often; across the catalogue TMS Entertainment
+ *  goes from 5 titles to 11. It used to be answered from a local copy of the
+ *  whole catalogue; now the API filters. */
+export async function getStudio(name: string): Promise<Anime[]> {
+  "use cache";
+  cacheLife("hours");
+  return dedupeAnime(await fetchAll({ studio: name }));
 }
 
 export type ScheduleDay = { day: string; items: Anime[] };
@@ -188,9 +232,10 @@ export async function getSources(): Promise<{ live: string[]; configured: number
   "use cache";
   cacheLife("hours");
 
-  const items = await getCatalogue();
-  const live = [...new Set(items.map((a) => a.source))].sort();
-  return { live, configured: ALL_SOURCES.length };
+  // Every source with a row in the catalogue, including one that never wins a
+  // merge: MAL's studios and source material are on titles Kitsu wins.
+  const { sources } = await getCatalogueSummary();
+  return { live: [...sources].sort(), configured: ALL_SOURCES.length };
 }
 
 /** Seasons present in the warehouse, newest first. Derived, so a backfill of an
@@ -199,25 +244,19 @@ export async function getSeasons(): Promise<SeasonRef[]> {
   "use cache";
   cacheLife("hours");
 
-  const items = await getCatalogue();
-  const byKey = new Map<string, SeasonRef>();
-  for (const a of items) {
-    if (!a.season || !a.season_year) continue;
-    const key = seasonKey(a.season, a.season_year);
-    const existing = byKey.get(key);
-    if (existing) existing.count += 1;
-    else
-      byKey.set(key, {
-        key,
-        season: a.season,
-        year: a.season_year,
-        label: seasonLabel(a.season, a.season_year),
-        count: 1,
-      });
-  }
+  const { seasons } = await getCatalogueSummary();
   // Newest first: by year, then by the industry's quarterly order rather than
-  // alphabetically, which would put FALL before SPRING before SUMMER.
-  return [...byKey.values()]
+  // alphabetically, which would put FALL before SPRING before SUMMER. The API
+  // already orders them so; sorting again keeps that a guarantee of this
+  // function rather than an assumption about another service.
+  return seasons
+    .map((s) => ({
+      key: seasonKey(s.season, s.season_year),
+      season: s.season,
+      year: s.season_year,
+      label: seasonLabel(s.season, s.season_year),
+      count: s.count,
+    }))
     .filter((s) => s.count >= MIN_SEASON_TITLES)
     .sort(
       (a, b) => b.year - a.year || SEASON_ORDER.indexOf(b.season) - SEASON_ORDER.indexOf(a.season),
@@ -230,20 +269,16 @@ export async function getSeason(key?: string): Promise<Season> {
   "use cache";
   cacheLife("hours");
 
-  const all = await getCatalogue();
   const seasons = await getSeasons();
   const target = seasons.find((s) => s.key === key) ?? seasons[0];
-  const items = target
-    ? all.filter(
-        (a) => a.season === target.season && a.season_year === target.year,
-      )
-    : all;
+  const rows = target ? await getSeasonRows(target.season, target.year) : [];
+  const items = dedupeAnime(rows);
   const tv = items.filter(isTv);
 
   return {
     items,
     total: items.length,
-    rawTotal: all.length,
+    rawTotal: rows.length,
     scored: items.filter((a) => a.score_100 !== null).length,
     airing: items.filter((a) => a.status === "current").length,
     withArtwork: items.filter((a) => a.poster_url).length,
@@ -261,12 +296,14 @@ export async function getSeason(key?: string): Promise<Season> {
  *  worse than no chip. Only genres with enough titles to be worth a click are
  *  offered; the long tail (98 distinct genres across 142 titles) is not a
  *  usable filter row. */
-export async function getFacets(seasonKeyParam?: string): Promise<{
+export type Facets = {
   genres: { value: string; count: number }[];
   formats: { value: string; count: number }[];
   services: { value: string; count: number }[];
   materials: { value: string; count: number }[];
-}> {
+};
+
+export async function getFacets(seasonKeyParam?: string): Promise<Facets> {
   "use cache";
   cacheLife("hours");
 
@@ -274,6 +311,12 @@ export async function getFacets(seasonKeyParam?: string): Promise<{
   // season you are looking at is the same dead-control bug as the old hardcoded
   // "Sci-Fi", just arrived at from a different direction.
   const { items } = await getSeason(seasonKeyParam);
+  return facetsOf(items);
+}
+
+/** The facets of whatever is being browsed: a season, or a studio's titles
+ *  across every season. Chips have to describe what is on screen. */
+export function facetsOf(items: Anime[]): Facets {
   const tally = (values: (string | null)[]) => {
     const map = new Map<string, number>();
     for (const v of values) {
