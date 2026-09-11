@@ -175,6 +175,26 @@ winner did and every link made before broke.
   with the shell. Only the proxy can send a real 404, which is why an unknown old key gets one and
   an unknown identity does not. Keys not shaped like an identity are rejected before any API call.
 
+## Franchises
+
+A title page ends with its franchise (`components/Franchise.tsx`), from
+`GET /anime/{wb_id}/franchise`: every title joined to it by MAL's story relations, oldest first.
+What joins a franchise, and why shared characters and MAL's "other" do not, is in
+`processing/franchise.py`.
+
+- **It lists titles the catalogue does not hold.** The prequel from before Fall 2021, an
+  announced sequel: the API describes them from MAL's relation data, with no `wb_id`. They link
+  to MyAnimeList and say "On MyAnimeList", and they are screened back, because there is no score
+  for them here. That is the certainty treatment meaning what it always means, not a new state.
+- **A listing, not a grid,** like the schedule: the year is the column the eye runs down, the
+  relation to this title (Prequel, Side story) sits on the right, and this title is marked where
+  it falls. Two columns on a wide screen, filled top to bottom so it still reads as a timeline.
+- **Long franchises open on the twelve entries around this title** (`FranchiseList`), with the
+  rest behind "Show all". Gundam runs to 130 and Detective Conan to 129; the entries next to this
+  one are the ones anyone came for.
+- **It never takes the page down.** The section streams in its own `<Suspense>` after the title,
+  a failed franchise request renders nothing, and a title in no franchise gets no section.
+
 ## The catalogue defaults to TV
 
 `/browse` with no `format` param shows **TV only**, not everything. `resolveFormat()` in

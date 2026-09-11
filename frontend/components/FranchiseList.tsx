@@ -12,11 +12,10 @@ import {
   type FranchiseEntry,
 } from "@/lib/types";
 
-/* Most franchises are a handful of entries. A few are enormous - long-running
-   robot and monster franchises run to dozens - and a list that long buries the
-   entries next to this one, which are the ones anyone came for. So a long
-   franchise opens on the WINDOW entries around this title, with the rest one
-   click away. */
+/* Most franchises are a handful of entries. A few are enormous - Gundam runs to
+   130 and Detective Conan to 129 - and a list that long buries the entries next
+   to this one, which are the ones anyone came for. So a long franchise opens on
+   the WINDOW entries around this title, with the rest one click away. */
 const WINDOW = 12;
 
 function around(entries: FranchiseEntry[], size: number): FranchiseEntry[] {

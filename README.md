@@ -37,6 +37,9 @@ Kitsu  ───┘         │
                     │
                     ▼
             DuckDB views over Parquet (dated snapshots + a "latest per title" view)
+                    │         ▲
+                    │         └── franchise graph ◄── MAL related titles, followed
+                    │                                 past the catalogue until complete
                     │
         ┌───────────┼───────────┐
         ▼           ▼           ▼
@@ -75,6 +78,30 @@ Consolidation is a **field-level** merge over the whole catalogue, not a union o
   vocabulary are the thing most likely to be got wrong when adding a source, and a whole
   column on the wrong scale is far cheaper to catch at ingest than on the live site.
 
+### Franchises
+
+A title page lists the rest of its franchise: prequels, sequels, side stories, spin-offs and
+alternative versions, oldest first, including entries older than the catalogue itself.
+
+- MAL keeps a title's related titles off its season listing, so they are fetched one request
+  per title. Each chunk lands raw and processed as it arrives, so a fetch that dies resumes
+  where it stopped, and a title gone from MAL is recorded rather than retried every week.
+- The fetch follows **story** relations outward past the catalogue, in passes, until a pass
+  finds nothing new: a sequel the catalogue holds leads to its prequel, and that prequel to the
+  first season. Stopping at the catalogue's edge had every franchise begin one step outside it.
+- A franchise is a connected component over story relations only. Shared characters and MAL's
+  "other" link are stored but do not join: a cameo special or a collaboration music video
+  would chain unrelated franchises into one.
+- After the first full fetch a weekly run asks only about new titles, airing ones, and what
+  they newly name, within a budget.
+
+The first build fetched 8,589 titles in all - the 5,493 catalogue titles with a MAL id, then
+3,096 beyond it over 19 passes that shrank from 845 to one. It holds 895 franchises over 5,173
+titles, 2,041 of them in the catalogue. The largest are what they should be: Gundam (130),
+Detective Conan (129), Doraemon (108), Pokémon (95), One Piece (72). Laid-Back Camp runs from
+its 2018 first season to a 2027 fourth; stopping at the catalogue's edge had it begin at the
+second.
+
 ## API
 
 - `GET /catalogue` — the seasons on file with their title counts, the sources that
@@ -84,6 +111,8 @@ Consolidation is a **field-level** merge over the whole catalogue, not a union o
   `studio` (across every season); `sort` (`score_desc` | `popularity_desc` | `title`),
   `limit`, `offset`.
 - `GET /anime/{wb_id}` — a title by its stable identity, following it if it merged.
+- `GET /anime/{wb_id}/franchise` — the title's franchise, oldest first, each entry with its
+  relation to the title; entries older than the catalogue come from MAL, with no `wb_id`.
 - `GET /anime/{source}/{source_id}` — a title by any source key it was ever made of.
 - `GET /digest`, `/digest/latest`, `/digest/{run_date}` — the weekly LLM trend digest.
 - `GET /search?q=...&n=...` — semantic similarity search over indexed titles; each result
@@ -111,8 +140,10 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 ## Repository layout
 
 ```
-ingestion/    anilist/ jikan/ mal/ kitsu/ — each: client, fetch_season, transform
-processing/   spark session, schema normalization, consolidation, DuckDB catalog
+ingestion/    anilist/ jikan/ mal/ kitsu/ — each: client, fetch_season, transform;
+              mal/ also fetch_relations (the franchise graph's edges); backfill, reprocess
+processing/   spark session, schema normalization, consolidation, identity registry,
+              franchise graph, DuckDB catalog
 ai/           digest/ (Groq prompt + generation), search/ (embed, index, query)
 backend/      FastAPI app — routers, schemas, DuckDB access, rate limiter
 frontend/     Next.js app (see frontend/README.md and frontend/DESIGN.md)
