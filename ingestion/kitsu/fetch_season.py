@@ -41,24 +41,58 @@ def fetch_season(
 ) -> list[dict[str, Any]]:
     """Fetch every anime airing in a given season from Kitsu, including genre/category names.
 
-    Deduplicates by id across pages - confirmed live that Kitsu's own pagination is not
-    reliable (an offset=20 request returned byte-identical data to offset=0 for the
-    same query), so trusting page boundaries alone silently doubles some rows.
+    Kitsu's offset paging is broken, and not only in the way first noticed. The page at
+    offset 20 comes back as a copy of the page at offset 0 - every time, in any sort
+    order - so one walk through a season never serves a block of it. Deduplicating by id
+    hid the copies but not the hole: Fall 2023 reports 235 titles and a walk returns 220,
+    and every stored season came back a round multiple of 20.
+
+    So the season is walked in one order and, if that falls short of the count Kitsu
+    reports, walked again in reverse. The block one walk cannot reach sits at the far end
+    of the other, and the union is complete: 235 of 235 for Fall 2023, 144 of 144 for the
+    live Summer 2026, measured against the API.
     """
     client = client or KitsuClient()
     results: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
 
+    count = None
+    for sort in ("id", "-id"):
+        count = _walk(client, season, season_year, sort, results, seen_ids)
+        if count is not None and len(results) >= count:
+            break
+
+    if count is not None and len(results) < count:
+        logger.warning(
+            "Kitsu reports %s titles for %s %s but only %s could be fetched",
+            count, season, season_year, len(results),
+        )
+    return results
+
+
+def _walk(
+    client: KitsuClient,
+    season: str,
+    season_year: int,
+    sort: str,
+    results: list[dict[str, Any]],
+    seen_ids: set[str],
+) -> int | None:
+    """Follow a season's pages in one sort order, adding titles not yet seen.
+
+    Returns the season's size as Kitsu reports it, if it does."""
     url = f"{KITSU_API_URL}/anime"
     params = {
         "filter[season]": season.lower(),
         "filter[seasonYear]": season_year,
         "page[limit]": PAGE_LIMIT,
+        "sort": sort,
         "include": "categories,streamingLinks,mappings",
     }
-
+    count = None
     while url:
         payload = client.get(url, params=params)
+        count = (payload.get("meta") or {}).get("count", count)
         for item in _attach_metadata(payload, season, season_year):
             if item["id"] in seen_ids:
                 continue
@@ -68,8 +102,7 @@ def fetch_season(
 
         url = (payload.get("links") or {}).get("next")
         params = None  # the 'next' link already carries all query params
-
-    return results
+    return count
 
 
 def _attach_metadata(
