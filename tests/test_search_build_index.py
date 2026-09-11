@@ -120,4 +120,5 @@ def test_a_successful_rebuild_replaces_the_live_index_and_any_leftover(warehouse
     build_index(db, tmp_path / "chroma")
 
     assert sorted(client.cols) == ["anime_media"]
-    assert client.cols["anime_media"].ids == [f"kitsu:{i}" for i in range(4)]
+    # Sorted: the warehouse scan has no defined row order, and CI reads it differently.
+    assert sorted(client.cols["anime_media"].ids) == [f"kitsu:{i}" for i in range(4)]
