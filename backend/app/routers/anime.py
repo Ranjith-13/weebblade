@@ -4,7 +4,7 @@ import duckdb
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..db import get_db, run_query
-from ..schemas import Anime, AnimeListResponse
+from ..schemas import Anime, AnimeListResponse, Franchise, FranchiseEntry
 
 router = APIRouter(prefix="/anime", tags=["anime"])
 
@@ -139,6 +139,91 @@ def get_anime_by_identity(
     if not rows:
         raise HTTPException(404, f"No title with identity {wb_id}")
     return rows[0]
+
+
+# A link recorded on only one side reads the other way from the other side.
+# parent_story is the far end of both a side story and a spin-off, and MAL does
+# not say which, so the near end of a parent_story reads as a side story.
+_INVERSE = {
+    "prequel": "sequel", "sequel": "prequel",
+    "side_story": "parent_story", "spin_off": "parent_story", "parent_story": "side_story",
+    "summary": "full_story", "full_story": "summary",
+    "alternative_version": "alternative_version", "alternative_setting": "alternative_setting",
+    "character": "character", "other": "other",
+}
+
+
+def _date(row: dict) -> str | None:
+    """The catalogue's own start date where it has one, as a sortable ISO string."""
+    if not row.get("start_year"):
+        return None
+    parts = [f"{int(row['start_year']):04d}"]
+    for key in ("start_month", "start_day"):  # a day means nothing without its month
+        if not row.get(key):
+            break
+        parts.append(f"{int(row[key]):02d}")
+    return "-".join(parts)
+
+
+# Declared before /{source}/{source_id}, which would otherwise take
+# /wb_x/franchise as source "wb_x", source_id "franchise".
+@router.get("/{wb_id}/franchise", response_model=Franchise)
+def get_franchise(wb_id: str, con: duckdb.DuckDBPyConnection = Depends(get_db)) -> Franchise:
+    """Every title in this title's franchise, oldest first.
+
+    Entries in the catalogue come as the catalogue has them; entries older than
+    it come from MAL's description of them, with no wb_id. A title in no
+    franchise - or one with no MAL id, or before any franchises are built - gets
+    an empty list rather than an error: having no sequels is not a failure.
+    """
+    titles = _by_identity(con, wb_id)
+    if not titles:
+        raise HTTPException(404, f"No title with identity {wb_id}")
+    mal_id = titles[0].get("mal_id")
+    if mal_id is None:
+        return Franchise()
+
+    found = _optional(con, "SELECT franchise_id FROM franchise_member WHERE mal_id = ?", [mal_id])
+    if not found:
+        return Franchise()
+    franchise_id = found[0]["franchise_id"]
+
+    rows = _optional(
+        con,
+        "SELECT f.mal_id, f.title AS mal_title, f.format AS mal_format, f.start_date AS mal_start, "
+        "f.poster_url AS mal_poster, m.wb_id, m.title_english, m.title_romaji, m.format, m.poster_url, "
+        "m.score_100, m.season, m.season_year, m.start_year, m.start_month, m.start_day "
+        "FROM franchise_member f LEFT JOIN anime_media_latest m ON m.mal_id = f.mal_id "
+        "WHERE f.franchise_id = ?",
+        [franchise_id],
+    )
+    direct = {
+        r["related_mal_id"]: r["relation_type"]
+        for r in _optional(con, "SELECT related_mal_id, relation_type FROM anime_relation WHERE mal_id = ?", [mal_id])
+    }
+    pointing_here = {
+        r["mal_id"]: _INVERSE.get(r["relation_type"])
+        for r in _optional(con, "SELECT mal_id, relation_type FROM anime_relation WHERE related_mal_id = ?", [mal_id])
+    }
+
+    entries = [
+        FranchiseEntry(
+            mal_id=r["mal_id"],
+            wb_id=r["wb_id"],
+            title=r["title_english"] or r["title_romaji"] or r["mal_title"],
+            format=r["format"] or r["mal_format"],
+            start_date=_date(r) or r["mal_start"],
+            season=r["season"],
+            season_year=r["season_year"],
+            poster_url=r["poster_url"] or r["mal_poster"],
+            score_100=r["score_100"],
+            relation=direct.get(r["mal_id"]) or pointing_here.get(r["mal_id"]),
+            is_this=r["mal_id"] == mal_id,
+        )
+        for r in rows
+    ]
+    entries.sort(key=lambda e: (e.start_date is None, e.start_date or "", e.title or ""))
+    return Franchise(franchise_id=franchise_id, entries=entries)
 
 
 @router.get("/{source}/{source_id}", response_model=Anime)

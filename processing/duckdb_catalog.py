@@ -51,8 +51,40 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
                 "Refreshed view anime_media_latest (latest run per %s)",
                 "identity" if has_registry else "source row",
             )
+
+        created += _franchise_views(con, data_dir)
     finally:
         con.close()
+    return created
+
+
+def _franchise_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> list[str]:
+    """Related titles and franchises, where they have been built. See
+    ingestion/mal/fetch_relations.py and processing/franchise.py.
+
+    `anime_relation` is each title's current list of related titles: its most
+    recent fetch, the edges only. `franchise_member` is the built table as is.
+    """
+    created = []
+    relations = data_dir / "processed" / "mal_relations"
+    if list(relations.glob("*/*.parquet")):
+        con.execute(
+            "CREATE OR REPLACE VIEW anime_relation AS "
+            "SELECT * EXCLUDE (_latest) FROM ("
+            "  SELECT *, MAX(fetched_on) OVER (PARTITION BY mal_id) AS _latest"
+            f"  FROM read_parquet('{relations}/*/*.parquet', union_by_name=true)"
+            ") WHERE fetched_on = _latest AND related_mal_id IS NOT NULL"
+        )
+        created.append("anime_relation")
+    else:
+        logger.warning("No related titles fetched yet (%s), skipping anime_relation", relations)
+
+    members = data_dir / "processed" / "franchise" / "members.parquet"
+    if members.exists():
+        con.execute(f"CREATE OR REPLACE VIEW franchise_member AS SELECT * FROM read_parquet('{members}')")
+        created.append("franchise_member")
+    else:
+        logger.warning("No franchises built yet (%s), skipping franchise_member", members)
     return created
 
 

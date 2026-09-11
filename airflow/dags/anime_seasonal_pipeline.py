@@ -164,8 +164,42 @@ def anime_seasonal_pipeline():
         count = build_index(DATA_DIR / "warehouse.duckdb", DATA_DIR / "chroma")
         logger.info("Indexed %s titles", count)
 
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def fetch_mal_relations(data_interval_end=None):
+        """MAL's related titles, for the franchise graph. See
+        ingestion/mal/fetch_relations.py.
+
+        After the catalogue refresh because the plan reads this week's titles:
+        the new ones have never been fetched, and the airing ones may have
+        gained a sequel. A few hundred requests a week once the first full fetch
+        is done. Skips cleanly without MAL_CLIENT_ID, like fetch_mal."""
+        from ingestion.mal.client import MissingClientId
+        from ingestion.mal.fetch_relations import fetch_state, fetch_relations, plan
+
+        _, _, run_date, _ = capture_for(data_interval_end)
+        catalogue, ever, today = fetch_state(DATA_DIR, run_date)
+        ids = plan(catalogue, ever, today)
+        try:
+            result = fetch_relations(ids, DATA_DIR, run_date)
+        except MissingClientId as exc:
+            logger.warning("Skipping MAL relations: %s", exc)
+            return
+        logger.info("Related titles: %s fetched, %s edges, %s failed", result.titles, result.edges, len(result.failed))
+
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def build_franchises():
+        """Rebuild the franchise table from every stored relation, then refresh
+        the warehouse views so the first build is queryable at once."""
+        from processing.duckdb_catalog import refresh_catalog as _refresh_catalog
+        from processing.franchise import build_franchises as _build
+
+        logger.info("Franchises: %s", _build(DATA_DIR))
+        _refresh_catalog(DATA_DIR, DATA_DIR / "warehouse.duckdb")
+
     fetches = [fetch_anilist(), fetch_jikan(), fetch_mal(), fetch_kitsu()]
-    catalog = fetches >> consolidate() >> refresh_catalog()
+    # In a line, not in parallel: each of these opens the warehouse file, and
+    # DuckDB allows one writer. The digest and the index read it after.
+    catalog = fetches >> consolidate() >> refresh_catalog() >> fetch_mal_relations() >> build_franchises()
     catalog >> [generate_digest(), build_search_index()]
 
 

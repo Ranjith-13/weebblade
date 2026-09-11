@@ -90,6 +90,31 @@ class DigestResponse(BaseModel):
     content: str
 
 
+class FranchiseEntry(BaseModel):
+    mal_id: int
+    # Null for an entry older than the catalogue - a 2019 prequel a current sequel
+    # points at. It is still listed, from what MAL says about it, because it is
+    # exactly what someone looking at the sequel wants to know exists.
+    wb_id: str | None = None
+    title: str | None = None
+    format: str | None = None
+    # ISO date, possibly partial ("2019", "2019-04"); MAL does not always know the day.
+    start_date: str | None = None
+    season: str | None = None
+    season_year: int | None = None
+    poster_url: str | None = None
+    score_100: float | None = None
+    # How this entry relates to the title asked about - "prequel", "side_story" -
+    # when the two are linked directly. Null for the rest of the franchise.
+    relation: str | None = None
+    is_this: bool = False
+
+
+class Franchise(BaseModel):
+    franchise_id: str | None = None
+    entries: list[FranchiseEntry] = []
+
+
 class SeasonCount(BaseModel):
     season: str
     season_year: int
