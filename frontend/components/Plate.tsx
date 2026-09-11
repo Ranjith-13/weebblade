@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { displayTitle, formatLabel, isKnown, SCORE_MAX, scoreOutOfTen, type Anime } from "@/lib/types";
+import { displayTitle, formatLabel, isKnown, SCORE_MAX, scoreOutOfTen, titleHref, type Anime } from "@/lib/types";
 
 /* A "plate" in the printing sense. This component is where the design's one
  * idea lives, so it is worth stating plainly:
@@ -29,7 +29,7 @@ export function Plate({
 
   return (
     <Link
-      href={`/anime/${anime.source}/${anime.source_id}`}
+      href={titleHref(anime)}
       className="group block focus:outline-none"
     >
       <div

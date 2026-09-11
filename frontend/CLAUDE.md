@@ -153,6 +153,28 @@ ingested.
 After a backfill, the frontend serves the previous season list for up to an hour - `cacheLife`
 is doing its job. In dev, `use cache` survives a Fast Refresh; clear `.next` to see new data.
 
+## Title addresses
+
+A title page lives at **`/anime/{wb_id}`**, the title's stable identity (`processing/identity.py`).
+Build every link with `titleHref()` in `lib/types.ts`; never compose `/anime/{source}/{source_id}`.
+That old address named whichever source won the title's merge that week, so it moved whenever the
+winner did and every link made before broke.
+
+- **`proxy.ts` answers the old form with a 308** to the identity address. The API resolves any source
+  key a title was ever made of, including one that since lost its merge (`mal/58877` reaches Ace of
+  the Diamond act II S2, whose page Kitsu's row now wins). An unknown key falls through to a real
+  404. It is in the proxy because a redirect thrown inside a streamed page becomes a client-side
+  meta refresh with a 200; the proxy runs before rendering.
+- **A merged identity still answers.** Its page loads the survivor from the API and redirects to
+  the survivor's address (client-side, in the stream) with a canonical link. Merges are too rare to
+  justify an API call in the proxy on every title view.
+- **`getTitle` returns `null` for a missing title rather than throwing.** An error leaving a
+  `"use cache"` function does not reliably arrive as the same class; a thrown 404 was recognised by
+  the page and missed by its metadata, which then served an indexable page titled "Title".
+- **A not-found inside a streamed page is a 200 with `noindex`**, never a 404: the status is sent
+  with the shell. Only the proxy can send a real 404, which is why an unknown old key gets one and
+  an unknown identity does not. Keys not shaped like an identity are rejected before any API call.
+
 ## The catalogue defaults to TV
 
 `/browse` with no `format` param shows **TV only**, not everything. `resolveFormat()` in

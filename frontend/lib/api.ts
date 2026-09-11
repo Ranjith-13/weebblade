@@ -344,12 +344,24 @@ export function facetsOf(items: Anime[]): Facets {
   };
 }
 
-export async function getAnime(source: string, sourceId: string): Promise<Anime> {
+/** A title by its stable identity, or null if there is none. The API follows an
+ *  identity that has since merged into another, so the title that comes back
+ *  may carry a different wb_id from the one asked for - the page redirects to it.
+ *
+ *  A missing title is returned, not thrown. An error leaving a "use cache"
+ *  function does not reliably arrive as the same class, so a thrown 404 was
+ *  recognised on one render pass and not on another: the page showed the 404
+ *  while its metadata took the error for a failure and served "Title" without a
+ *  noindex. null is an ordinary cached value and means the same everywhere. */
+export async function getTitle(wbId: string): Promise<Anime | null> {
   "use cache";
   cacheLife("hours");
-  return getJson<Anime>(
-    buildUrl(`/anime/${encodeURIComponent(source)}/${encodeURIComponent(sourceId)}`),
-  );
+  try {
+    return await getJson<Anime>(buildUrl(`/anime/${encodeURIComponent(wbId)}`));
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 export async function getLatestDigest(): Promise<Digest | null> {

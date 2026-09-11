@@ -9,6 +9,7 @@ import {
   formatLabel,
   isKnown,
   SCHEDULE_DAYS,
+  titleHref,
   weekdayLabel,
   type Anime,
 } from "@/lib/types";
@@ -39,7 +40,7 @@ function Slot({ anime }: { anime: Anime }) {
       </span>
 
       <Link
-        href={`/anime/${anime.source}/${anime.source_id}`}
+        href={titleHref(anime)}
         className="group flex min-w-0 flex-1 items-center gap-3 focus:outline-none"
       >
         <span

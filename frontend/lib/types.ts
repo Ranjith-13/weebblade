@@ -119,6 +119,23 @@ export class ApiError extends Error {
   }
 }
 
+/** The shape of a title's own identity, e.g. wb_67666c4a0e. */
+export const WB_ID = /^wb_[0-9a-f]{10}$/;
+
+/** A title's address on this site: /anime/{wb_id}, its stable identity.
+ *
+ *  Addresses used to be /anime/{source}/{source_id}, which named whichever
+ *  source won the title's merge that week. When the winner changed, the address
+ *  changed with it, and every link made before went to a key the title no longer
+ *  answered to. The identity does not move. The source-key form remains only for
+ *  a title that has no identity, and proxy.ts turns any such address into the
+ *  identity one. */
+export function titleHref(a: { wb_id?: string | null; source: string; source_id: string }): string {
+  return a.wb_id
+    ? `/anime/${a.wb_id}`
+    : `/anime/${encodeURIComponent(a.source)}/${encodeURIComponent(a.source_id)}`;
+}
+
 /** Best title to show, in the order a mostly-English-reading audience wants it.
  *  Every title field is independently nullable, hence the fallback chain. */
 export function displayTitle(

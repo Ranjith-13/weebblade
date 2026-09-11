@@ -4,7 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { API_BASE, formatLabel, SCORE_MAX, scoreOutOfTen, type SearchResponse, type SearchResult } from "@/lib/types";
+import {
+  API_BASE,
+  formatLabel,
+  SCORE_MAX,
+  scoreOutOfTen,
+  titleHref,
+  type SearchResponse,
+  type SearchResult,
+} from "@/lib/types";
 
 const EXAMPLES = [
   "quiet show about cooking",
@@ -184,7 +192,7 @@ export function SearchClient({ total }: { total: number }) {
                 return (
                   <li key={`${result.source}:${result.source_id}`}>
                     <Link
-                      href={`/anime/${result.source}/${result.source_id}`}
+                      href={titleHref(result)}
                       className="group block focus:outline-none"
                     >
                       <div

@@ -1,14 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { ParallaxPoster } from "@/components/motion/ParallaxPoster";
 import { NextAiring } from "@/components/NextAiring";
 import { Trailer } from "@/components/Trailer";
-import { getAnime, getSeasons, seasonKey } from "@/lib/api";
+import { getSeasons, getTitle, seasonKey } from "@/lib/api";
 import {
   ageRatingLabel,
-  ApiError,
   displayTitle,
   FORMAT_ALL,
   formatAirDate,
@@ -22,29 +21,42 @@ import {
   scoreOutOfTen,
   sourceLinks,
   streamingLinks,
+  WB_ID,
   type Anime,
 } from "@/lib/types";
 
-async function load(source: string, id: string): Promise<Anime> {
-  try {
-    return await getAnime(source, id);
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) notFound();
-    throw err;
-  }
+/* A title page lives at /anime/{wb_id}, the title's stable identity - see
+ * titleHref() in lib/types.ts. The old /anime/{source}/{source_id} addresses are
+ * turned into these by proxy.ts before any page renders.
+ *
+ * A key that is not shaped like an identity is a 404 without asking the API:
+ * nothing else lives at this depth, and a request per stray URL would spend the
+ * shared rate limit on junk. */
+async function load(key: string): Promise<Anime> {
+  if (!WB_ID.test(key)) notFound();
+  const anime = await getTitle(key);
+  if (!anime) notFound();
+  return anime;
 }
 
-export async function generateMetadata(props: PageProps<"/anime/[source]/[id]">) {
-  const { source, id } = await props.params;
+export async function generateMetadata(props: PageProps<"/anime/[key]">) {
+  const { key } = await props.params;
   try {
-    const anime = await load(source, id);
+    const anime = await load(key);
     return {
       title: displayTitle(anime),
       description: anime.synopsis?.slice(0, 200) ?? undefined,
+      // An identity that merged into another still answers here, with the
+      // surviving title; the canonical address is the survivor's.
+      alternates: anime.wb_id ? { canonical: `/anime/${anime.wb_id}` } : undefined,
     };
-  } catch {
-    // Metadata must never be the thing that breaks a page — the page's own
-    // load() will surface a real error or 404 on its own.
+  } catch (err) {
+    // A missing title is Next's own not-found signal, not a failure: let it
+    // through, so the 404 carries its noindex. Swallowing it here served every
+    // unknown identity as an indexable page titled "Title".
+    unstable_rethrow(err);
+    // Anything else must not be the thing that breaks a page — the page's own
+    // load() will surface a real error on its own.
     return { title: "Title" };
   }
 }
@@ -52,7 +64,7 @@ export async function generateMetadata(props: PageProps<"/anime/[source]/[id]">)
 /* Shell prerenders; the params-dependent body streams inside <Suspense>.
  * Required by Cache Components — reading `params` outside a boundary makes the
  * route unprerenderable and blocks first paint on an upstream round-trip. */
-export default function AnimeDetailPage(props: PageProps<"/anime/[source]/[id]">) {
+export default function AnimeDetailPage(props: PageProps<"/anime/[key]">) {
   return (
     <article className="mx-auto max-w-[1340px] px-5 py-9 sm:px-7">
       <Suspense fallback={<DetailSkeleton />}>
@@ -93,10 +105,18 @@ function DetailBodySkeleton() {
 async function AnimeDetail({
   params,
 }: {
-  params: PageProps<"/anime/[source]/[id]">["params"];
+  params: PageProps<"/anime/[key]">["params"];
 }) {
-  const { source, id } = await params;
-  const [anime, seasons] = await Promise.all([load(source, id), getSeasons()]);
+  const { key } = await params;
+  const [anime, seasons] = await Promise.all([load(key), getSeasons()]);
+
+  /* An identity can merge into another when a later fetch shows two records to
+     be one show - four did on 2026-09-11, when Kitsu's missing pages came in.
+     Their addresses keep working and land on the survivor's. This redirects
+     inside the streamed page, so it is a client-side redirect rather than a
+     308; merges are too rare to justify an API call in the proxy on every title
+     view to catch them earlier. */
+  if (anime.wb_id && anime.wb_id !== key) permanentRedirect(`/anime/${anime.wb_id}`);
 
   const title = displayTitle(anime);
   const secondary = secondaryTitle(anime);
