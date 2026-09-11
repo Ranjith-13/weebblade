@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { ParallaxPoster } from "@/components/motion/ParallaxPoster";
 import { NextAiring } from "@/components/NextAiring";
 import { Trailer } from "@/components/Trailer";
-import { getAnime } from "@/lib/api";
+import { getAnime, getSeasons, seasonKey } from "@/lib/api";
 import {
   ageRatingLabel,
   ApiError,
@@ -14,6 +14,7 @@ import {
   formatAirDate,
   formatLabel,
   isKnown,
+  isTv,
   broadcastSlotLabel,
   secondaryTitle,
   sourceMaterialLabel,
@@ -54,9 +55,6 @@ export async function generateMetadata(props: PageProps<"/anime/[source]/[id]">)
 export default function AnimeDetailPage(props: PageProps<"/anime/[source]/[id]">) {
   return (
     <article className="mx-auto max-w-[1340px] px-5 py-9 sm:px-7">
-      <Link href="/browse" className="meta inline-block py-2 transition-colors hover:text-flag">
-        Back to the season
-      </Link>
       <Suspense fallback={<DetailSkeleton />}>
         <AnimeDetail params={props.params} />
       </Suspense>
@@ -64,7 +62,22 @@ export default function AnimeDetailPage(props: PageProps<"/anime/[source]/[id]">
   );
 }
 
+const BACK_LINK = "meta inline-block py-2 transition-colors hover:text-flag";
+
 function DetailSkeleton() {
+  return (
+    <>
+      {/* A working link while the title loads, the same size as the season-named
+          one that replaces it. */}
+      <Link href="/browse" className={BACK_LINK}>
+        Back to the season
+      </Link>
+      <DetailBodySkeleton />
+    </>
+  );
+}
+
+function DetailBodySkeleton() {
   return (
     <div className="mt-7 grid gap-x-12 gap-y-8 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
       <div className="plate-empty aspect-[3/4] border border-rule bg-plate" />
@@ -83,11 +96,38 @@ async function AnimeDetail({
   params: PageProps<"/anime/[source]/[id]">["params"];
 }) {
   const { source, id } = await params;
-  const anime = await load(source, id);
+  const [anime, seasons] = await Promise.all([load(source, id), getSeasons()]);
 
   const title = displayTitle(anime);
   const secondary = secondaryTitle(anime);
   const known = isKnown(anime);
+
+  /* Every link out of this page stays in the title's own season. They used to
+     drop it, and /browse without a season is the newest one - so on any title
+     from an earlier season, clicking a genre opened a different season filtered
+     by that genre. Iyashikei from Laid-Back Camp 3 (Spring 2024) returned zero
+     results. A season /browse does not offer (fewer than ten titles) is left
+     out rather than linked to the wrong one. */
+  const filed = seasons.find(
+    (s) => anime.season && anime.season_year && s.key === seasonKey(anime.season, anime.season_year),
+  );
+  /* A title that is not TV would be hidden by the browse default, so a link from
+     it asks for every format, and the title can see itself in what it opens. */
+  const inSeason = (filter: Record<string, string>) => {
+    const qs = new URLSearchParams({
+      ...(filed ? { season: filed.key } : {}),
+      ...(isTv(anime) ? {} : { format: FORMAT_ALL }),
+      ...filter,
+    });
+    return `/browse?${qs}`;
+  };
+  /* The padding makes a 27px target of a 15px line, and the equal negative margin
+     takes it back out of the layout, so a linked row is exactly as tall as the
+     plain ones around it. Each sits alone in a 40px row, so nothing overlaps.
+     min-w-6 covers the short values - "TV" is 17px wide - and text-right keeps
+     them flush with the column like every other value. */
+  const linkClass =
+    "-my-1.5 inline-block min-w-6 py-1.5 text-right underline decoration-rule underline-offset-4 transition-colors hover:text-flag";
 
   /* Only fields the data actually carries, which is now a different set than
      it was. Studios and Source material were removed when they were null for
@@ -112,7 +152,7 @@ async function AnimeDetail({
               {i > 0 && ", "}
               <Link
                 href={`/browse?studio=${encodeURIComponent(studio)}&format=${FORMAT_ALL}`}
-                className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+                className={linkClass}
               >
                 {studio}
               </Link>
@@ -120,10 +160,40 @@ async function AnimeDetail({
           )),
         ]
       : null,
-    sourceMaterialLabel(anime.source_material)
-      ? ["Adapted from", sourceMaterialLabel(anime.source_material)!]
+    filed
+      ? [
+          "Season",
+          <Link key="season" href={`/browse?season=${filed.key}`} className={linkClass}>
+            {filed.label}
+          </Link>,
+        ]
       : null,
-    ["Format", formatLabel(anime.format)],
+    sourceMaterialLabel(anime.source_material)
+      ? [
+          "Adapted from",
+          <Link
+            key="material"
+            href={inSeason({ material: anime.source_material! })}
+            className={linkClass}
+          >
+            {sourceMaterialLabel(anime.source_material)}
+          </Link>,
+        ]
+      : null,
+    [
+      "Format",
+      anime.format ? (
+        <Link
+          key="format"
+          href={inSeason({ format: anime.format })}
+          className={linkClass}
+        >
+          {formatLabel(anime.format)}
+        </Link>
+      ) : (
+        formatLabel(anime.format)
+      ),
+    ],
     ["Status", anime.status === "current" ? "Airing now" : "Finished"],
     anime.episodes ? ["Episodes", String(anime.episodes)] : null,
     anime.duration_minutes ? ["Episode length", `${anime.duration_minutes} min`] : null,
@@ -141,7 +211,7 @@ async function AnimeDetail({
       ? ["Popularity rank", `#${Math.round(anime.popularity).toLocaleString()}`]
       : null,
     anime.rating_rank ? ["Rating rank", `#${anime.rating_rank.toLocaleString()}`] : null,
-  ].filter(Boolean) as [string, string][];
+  ].filter(Boolean) as [string, React.ReactNode][];
 
   const watch = streamingLinks(anime);
   const links = sourceLinks(anime);
@@ -149,6 +219,10 @@ async function AnimeDetail({
 
   return (
     <>
+      <Link href={filed ? `/browse?season=${filed.key}` : "/browse"} className={BACK_LINK}>
+        {filed ? `Back to ${filed.label}` : "Back to the season"}
+      </Link>
+
       {/* Cover art exists for only ~17% of the season, so this is an enhancement
           and never a layout assumption: when it is absent the page simply starts
           at the poster, with nothing reserved and nothing to shift. It carries
@@ -229,7 +303,7 @@ async function AnimeDetail({
             {anime.genres.map((genre) => (
               <li key={genre}>
                 <Link
-                  href={`/browse?genre=${encodeURIComponent(genre)}`}
+                  href={inSeason({ genre })}
                   className="inline-block border border-rule px-2.5 py-1.5 text-[0.72rem] transition-colors hover:border-ink hover:text-flag"
                 >
                   {genre}
@@ -327,7 +401,7 @@ async function AnimeDetail({
                 href={link.href}
                 target="_blank"
                 rel="noreferrer"
-                className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+                className="inline-block py-1 underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
               >
                 {link.label}
               </a>

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
@@ -9,13 +10,32 @@ import {
   formatLabel,
   isKnown,
   resolveFormat,
+  SEASON_INDEX_ID,
   sortAnime,
   SORTS,
   sourceMaterialLabel,
   type SortKey,
 } from "@/lib/types";
 
-export const metadata = { title: "The season" };
+/* The tab names what the page shows: "Fall 2025", "Iyashikei, Spring 2024",
+   "8bit, every season". It said "The season" whichever season was open, so ten
+   tabs of this page were indistinguishable. Resolved the way getSeason() does,
+   an unknown key falling back to the newest season. The page already renders at
+   request time, so reading searchParams here costs no prerendering. */
+export async function generateMetadata(props: PageProps<"/browse">): Promise<Metadata> {
+  const sp = await props.searchParams;
+  const read = (key: string) => {
+    const raw = sp[key];
+    return (Array.isArray(raw) ? raw[0] : raw) || undefined;
+  };
+  const studio = read("studio");
+  if (studio) return { title: `${studio}, every season` };
+
+  const seasons = await getSeasons();
+  const label = (seasons.find((s) => s.key === read("season")) ?? seasons[0])?.label ?? "Seasons";
+  const genre = read("genre");
+  return { title: genre ? `${genre}, ${label}` : label };
+}
 
 const PAGE_SIZE = 30;
 
@@ -36,9 +56,6 @@ function buildHref(current: Current, patch: Current) {
 export default function BrowsePage(props: PageProps<"/browse">) {
   return (
     <div className="mx-auto max-w-[1340px] px-5 py-9 sm:px-7">
-      <h1 className="font-display text-[clamp(2.2rem,6vw,3.4rem)] font-black leading-none">
-        The season
-      </h1>
       <Suspense fallback={<BrowseSkeleton />}>
         <BrowseResults searchParams={props.searchParams} />
       </Suspense>
@@ -46,9 +63,14 @@ export default function BrowsePage(props: PageProps<"/browse">) {
   );
 }
 
+/* The heading names the season, so it waits for the URL like everything else.
+   The placeholder is the heading's own box, so nothing moves when it lands. */
+const HEADING = "font-display text-[clamp(2.2rem,6vw,3.4rem)] font-black leading-none";
+
 function BrowseSkeleton() {
   return (
     <>
+      <div className="h-[clamp(2.2rem,6vw,3.4rem)] w-[min(18rem,70%)] bg-plate" aria-hidden />
       <div className="mt-8 h-32 border-y border-rule" />
       <div className="mt-9">
         <PlateGridSkeleton count={18} />
@@ -162,8 +184,75 @@ async function BrowseResults({
   );
   const scoredHere = items.filter(isKnown).length;
 
+  /* Earlier and later are neighbours in the list, which is newest first. A season
+     change drops the facet filters, because genre and service chips differ per
+     season and one carried across would silently return nothing. Format, sort
+     and "Rated only" mean the same thing in every season, so they stay. */
+  const at = seasons.findIndex((s) => s.key === season.key);
+  const earlier = at >= 0 ? seasons[at + 1] : undefined;
+  const later = at > 0 ? seasons[at - 1] : undefined;
+  const toSeason = (key: string) =>
+    buildHref(current, {
+      season: key,
+      genre: undefined,
+      service: undefined,
+      material: undefined,
+      studio: undefined,
+      page: undefined,
+    });
+
+  /* A genre can arrive from a title page with fewer than the four titles a chip
+     needs. It still filters; this puts it in the row so the filter is visible and
+     one click from gone, instead of an unexplained short grid. */
+  const genreChips =
+    current.genre &&
+    !facets.genres.some((g) => g.value.toLowerCase() === current.genre!.toLowerCase())
+      ? [
+          {
+            value: current.genre,
+            count: season.items.filter((a) =>
+              a.genres.some((x) => x.toLowerCase() === current.genre!.toLowerCase()),
+            ).length,
+          },
+          ...facets.genres,
+        ]
+      : facets.genres;
+
   return (
     <>
+      <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
+        <h1 className={HEADING}>{current.studio ? current.studio : (season.label ?? "The season")}</h1>
+        {!current.studio && (
+          <nav aria-label="Other seasons" className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+            {earlier && (
+              <Link
+                href={toSeason(earlier.key)}
+                className="inline-block py-1.5 text-[0.85rem] transition-colors hover:text-flag"
+              >
+                <span className="meta mr-1.5">Earlier</span>
+                {earlier.label}
+              </Link>
+            )}
+            {later && (
+              <Link
+                href={toSeason(later.key)}
+                className="inline-block py-1.5 text-[0.85rem] transition-colors hover:text-flag"
+              >
+                <span className="meta mr-1.5">Later</span>
+                {later.label}
+              </Link>
+            )}
+            <button
+              type="button"
+              popoverTarget={SEASON_INDEX_ID}
+              className="inline-block border-b-2 border-flag py-1 text-[0.85rem] font-medium transition-colors hover:text-flag"
+            >
+              All {seasons.length} seasons
+            </button>
+          </nav>
+        )}
+      </div>
+
       <p className="mt-3 text-[0.85rem] text-ink-soft">
         <span className="tnum font-semibold text-ink">{items.length.toLocaleString()}</span>{" "}
         {hasFilters ? "matching" : "titles"},{" "}
@@ -184,31 +273,11 @@ async function BrowseResults({
         )}
       </p>
 
+      {/* Season is not in this block any more. It was the first of six chip rows
+          here, which is exactly where nobody looked for it: the heading above now
+          names the season and steps to its neighbours, and the header's index
+          reaches any of them from any page. */}
       <div className="mt-7 space-y-4 border-y border-rule py-5">
-        {seasons.length > 1 && (
-          <FilterRow label="Season">
-            {seasons.map((sn) => (
-              <Chip
-                key={sn.key}
-                href={buildHref(current, {
-                  season: sn.key,
-                  // Genre and service facets differ per season, so a filter
-                  // carried across would silently return nothing.
-                  genre: undefined,
-                  service: undefined,
-                  material: undefined,
-                  studio: undefined,
-                  page: undefined,
-                })}
-                active={season.key === sn.key}
-                count={sn.count}
-              >
-                {sn.label}
-              </Chip>
-            ))}
-          </FilterRow>
-        )}
-
         <FilterRow label="Genre">
           <Chip href={buildHref(current, { genre: undefined, page: undefined })} active={!current.genre}>
             All
@@ -216,7 +285,7 @@ async function BrowseResults({
           {/* Derived from the live data with real counts. The previous build
               hardcoded this list and it had drifted: "Sci-Fi" matched nothing,
               because the tag is actually "Science Fiction". */}
-          {facets.genres.map((g) => (
+          {genreChips.map((g) => (
             <Chip
               key={g.value}
               href={buildHref(current, { genre: g.value, page: undefined })}
@@ -405,10 +474,13 @@ async function BrowseResults({
   );
 }
 
+/* A fixed label column. The old flex row gave labels 3.5rem, so "Adapted from"
+   and "Watch on" broke over two lines, and a long chip row like Genre dropped
+   below its label instead of beside it, leaving every row aligned differently. */
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-      <span className="stamp w-14 shrink-0">{label}</span>
+    <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-[6.5rem_minmax(0,1fr)] sm:items-baseline">
+      <span className="stamp">{label}</span>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2">{children}</div>
     </div>
   );

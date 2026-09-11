@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Archivo, Bodoni_Moda } from "next/font/google";
 import Link from "next/link";
 import { Suspense } from "react";
+import { NavList, PrimaryNav } from "@/components/nav/PrimaryNav";
 import { Provenance, PROVENANCE_FALLBACK } from "@/components/Provenance";
+import { SeasonIndex } from "@/components/SeasonIndex";
 import "./globals.css";
 
 /* Bodoni Moda for the masthead. A didone: the historical face of printed
@@ -43,13 +45,6 @@ export const metadata: Metadata = {
   },
 };
 
-const NAV = [
-  { href: "/browse", label: "The season" },
-  { href: "/schedule", label: "The week" },
-  { href: "/search", label: "Search" },
-  { href: "/digest", label: "Digest" },
-] as const;
-
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -63,30 +58,27 @@ export default function RootLayout({
           Skip to content
         </a>
 
-        <header className="border-b-2 border-ink">
-          <div className="mx-auto flex max-w-[1340px] flex-wrap items-baseline justify-between gap-x-8 gap-y-2 px-5 py-3 sm:px-7">
+        {/* The nav reads the pathname to mark the current section, and on a
+            route with an unknown param (a title, a dated digest) that suspends
+            during prerender. The fallback is the same nav with nothing marked,
+            so the header never waits on the page below it. */}
+        <header id="site-header" className="border-b-2 border-ink">
+          <div className="mx-auto flex max-w-[1340px] flex-wrap items-end justify-between gap-x-8 px-5 sm:px-7">
             <Link
               href="/"
-              className="inline-block py-1.5 font-display text-[1.4rem] font-black leading-none tracking-[-0.02em]"
+              className="inline-block pt-3.5 pb-2.5 font-display text-[1.55rem] font-black leading-none tracking-[-0.02em] sm:pb-3 sm:text-[1.75rem]"
             >
               WeebBlade
             </Link>
-            <nav aria-label="Primary">
-              <ul className="flex gap-6">
-                {NAV.map((item) => (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className="inline-block border-b-2 border-transparent py-2 text-[0.8rem] transition-colors duration-150 hover:border-flag hover:text-flag"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </nav>
+            <Suspense fallback={<NavList active={null} />}>
+              <PrimaryNav />
+            </Suspense>
           </div>
         </header>
+
+        <Suspense fallback={null}>
+          <SeasonIndex />
+        </Suspense>
 
         <main id="main" className="flex-1">
           {children}

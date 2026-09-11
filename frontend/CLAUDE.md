@@ -103,6 +103,32 @@ Facets are scoped per season. Offering a genre chip that matches nothing in the 
 is the same dead-control bug as the old hardcoded `Sci-Fi`, reached from a different direction.
 Switching season therefore clears `genre` and `service`.
 
+### Getting to a season
+
+Ten seasons were on file and the site hid nine of them: the header linked to "The season",
+singular, the front page named one season in its largest type, and the only switcher was the first
+of six chip rows inside `/browse`'s filter block. So there are now three ways in, and one index:
+
+- **The season index** (`components/SeasonIndex.tsx`) is a native `popover` rendered once in the
+  layout, listing every season by year with its count and one sentence on what a season is here.
+  Anything with `popoverTarget={SEASON_INDEX_ID}` opens it: the header's **Seasons** button, the
+  `/browse` heading, the front page's masthead. Being a popover it opens without JS, closes on
+  Escape or an outside click, and sits in the top layer where no `overflow` can clip it. It prerenders
+  with nothing marked current (a layout gets no `searchParams`) and the live version marks the season
+  in view and closes itself on navigation.
+- **`/browse`'s heading is the season's name**, with its earlier and later neighbours beside it. The
+  season chip row is gone from the filter block; do not put it back there.
+- **A title page links into its own season.** Its genres, format, source material, the new Season
+  fact and the back link all carry `season=`, and `format=all` when the title is not TV (the browse
+  default would hide it from its own results). Before this they dropped the season, so on any older
+  title a genre click opened the *newest* season: Iyashikei from Laid-Back Camp 3 (Spring 2024) found
+  nothing. A genre below the four-title chip threshold still filters, and `/browse` shows it as the
+  active chip so it can be seen and cleared.
+
+The header marks the current section with a flag bar laid over its ink rule. That reads the pathname
+in a client component, which suspends during prerender on routes with an unknown param, so it sits in
+`<Suspense>` with the same nav, unmarked, as the fallback. Without that boundary the build fails.
+
 **Both sources tag a title to its START season only**, so a show that began in Spring and is still
 airing appears under Spring, not Summer. Kitsu does this natively; MAL does not, and its season
 endpoint returns everything *airing* in a season - One Piece and Sazae-san included, each carrying

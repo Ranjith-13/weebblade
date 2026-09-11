@@ -3,12 +3,12 @@ import { Suspense } from "react";
 import Markdown from "react-markdown";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
 import { ProvenanceLines } from "@/components/Provenance";
-import { getLatestDigest, getSeason } from "@/lib/api";
+import { getLatestDigest, getSeason, getSeasons } from "@/lib/api";
 import { MastheadScroll } from "@/components/motion/MastheadScroll";
 import { PinnedAside } from "@/components/motion/PinnedAside";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
 import { halftone } from "@/lib/design-tokens";
-import { byScoreThenPopularity, isTv } from "@/lib/types";
+import { byScoreThenPopularity, isTv, SEASON_INDEX_ID } from "@/lib/types";
 
 function dateline(runDate: string): string {
   const parsed = new Date(`${runDate}T00:00:00Z`);
@@ -44,7 +44,11 @@ function HomeSkeleton() {
 }
 
 async function Home() {
-  const [digest, season] = await Promise.all([getLatestDigest(), getSeason()]);
+  const [digest, season, seasons] = await Promise.all([
+    getLatestDigest(),
+    getSeason(),
+    getSeasons(),
+  ]);
 
   /* TV only, matching what /browse defaults to. Ranking the whole season put
      music videos and shorts in a list headed "rated highest", which they can
@@ -92,6 +96,20 @@ async function Home() {
               <Suspense fallback={null}>
                 <ProvenanceLines />
               </Suspense>
+              {/* The masthead names one season in the largest type on the site,
+                  which read as though it were the only one. */}
+              {seasons.length > 1 && (
+                <>
+                  <br />
+                  <button
+                    type="button"
+                    popoverTarget={SEASON_INDEX_ID}
+                    className="inline-block py-1 underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+                  >
+                    All {seasons.length} seasons
+                  </button>
+                </>
+              )}
             </p>
           </div>
         </MastheadScroll>

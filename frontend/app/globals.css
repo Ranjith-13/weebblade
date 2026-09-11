@@ -186,6 +186,63 @@ body > * {
   outline-offset: 2px;
 }
 
+/* Selected text in the palette rather than the browser's blue: paper on flag,
+   the same 4.91:1 pair the score tabs already use. */
+::selection {
+  background: var(--color-flag);
+  color: var(--color-paper);
+}
+
+/* The season index (components/SeasonIndexPanel.tsx). A native popover, so it
+   opens without JavaScript, dismisses on Escape or a click outside, and sits in
+   the top layer where no ancestor's overflow can clip it. The browser's popover
+   defaults - centred, bordered, fit-content - are replaced with a full-width
+   band that reads as part of the masthead: same paper, closed by the same 2px
+   ink rule. --season-index-top is the header's bottom edge, set on open. */
+.season-index {
+  position: fixed;
+  inset: var(--season-index-top, 0px) 0 auto 0;
+  width: 100%;
+  max-width: none;
+  height: auto;
+  max-height: calc(100dvh - var(--season-index-top, 0px));
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 0;
+  border-bottom: 2px solid var(--color-ink);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    translate 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    overlay 160ms allow-discrete,
+    display 160ms allow-discrete;
+}
+.season-index:not(:popover-open) {
+  opacity: 0;
+  translate: 0 -6px;
+}
+@starting-style {
+  .season-index:popover-open {
+    opacity: 0;
+    translate: 0 -6px;
+  }
+}
+/* The page stays readable behind it; the scrim only says "this is on top". It
+   starts below the header so the masthead, and the Seasons button that closes
+   the index, stay at full strength. ::backdrop inherits from the popover, so it
+   can read the offset the popover was given. */
+.season-index::backdrop {
+  inset: var(--season-index-top, 0px) 0 0 0;
+  background: color-mix(in srgb, var(--color-paper) 55%, transparent);
+}
+body:has(.season-index:popover-open) .season-index-toggle svg {
+  rotate: 180deg;
+}
+
 /* Digest prose. Not @tailwindcss/typography — its defaults (rounded code
    blocks, its own grey scale) fight this palette, and the digest is plain
    Markdown: headings, paragraphs, lists, emphasis. */

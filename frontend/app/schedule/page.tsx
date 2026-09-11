@@ -14,7 +14,7 @@ import {
 } from "@/lib/types";
 
 export const metadata = {
-  title: "The week",
+  title: "Schedule",
   description:
     "What is airing this week, by broadcast day in Japan, with each slot converted to your own time.",
 };
@@ -160,7 +160,7 @@ export default function SchedulePage() {
     <div className="mx-auto max-w-[1340px] px-5 py-9 sm:px-7">
       <div className="max-w-[62ch]">
         <h1 className="font-display text-[clamp(2.2rem,6vw,3.4rem)] font-black leading-none">
-          The week
+          Schedule
         </h1>
       </div>
 

@@ -330,6 +330,11 @@ export const FORMAT_ALL = "all";
 
 export const DEFAULT_FORMAT = "TV";
 
+/** The season index popover (components/SeasonIndex.tsx). One index, opened by
+ *  anything carrying popoverTarget={SEASON_INDEX_ID}: the header's Seasons
+ *  button, the catalogue heading, the front page's masthead. */
+export const SEASON_INDEX_ID = "season-index";
+
 export function isTv(a: Anime): boolean {
   return (a.format ?? "").toLowerCase() === "tv";
 }
