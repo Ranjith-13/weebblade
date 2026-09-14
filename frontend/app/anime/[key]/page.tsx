@@ -19,6 +19,9 @@ import {
   isTv,
   broadcastSlotLabel,
   calendarDate,
+  changeDate,
+  changeSentence,
+  joinSources,
   jstAirdate,
   secondaryTitle,
   sourceMaterialLabel,
@@ -38,6 +41,10 @@ import {
  * A key that is not shaped like an identity is a 404 without asking the API:
  * nothing else lives at this depth, and a request per stray URL would spend the
  * shared rate limit on junk. */
+/* Enough for a season of weekly changes; a long-running title's older history
+   is counted rather than listed. */
+const CHANGES_SHOWN = 12;
+
 async function load(key: string): Promise<Anime> {
   if (!WB_ID.test(key)) notFound();
   const anime = await getTitle(key);
@@ -253,6 +260,8 @@ async function AnimeDetail({
   // markup and the browser's first render agree on it.
   const airdates = (anime.upcoming_episodes ?? []).map((e) => ({ ...e, label: jstAirdate(e.airing_at) }));
   const checked = anime.upcoming_episodes?.[0]?.fetched_on;
+  const changes = anime.changes ?? [];
+  const shownChanges = changes.slice(0, CHANGES_SHOWN);
 
   return (
     <>
@@ -440,6 +449,36 @@ async function AnimeDetail({
               This is the regular broadcast slot, not a confirmed airdate
             </p>
           </div>
+        )}
+
+        {/* What the sources have said differently week to week, per source.
+            Only where there is something: the weekly run refetches the current
+            season alone, so most older titles have no history to show, and an
+            empty section would read as "nothing changed" rather than "not
+            watched". */}
+        {changes.length > 0 && (
+          <section className="mt-7 border-t border-rule pt-5">
+            <h2 className="stamp mb-3">What changed</h2>
+            <ol>
+              {shownChanges.map((c, i) => (
+                <li
+                  key={`${c.run_date}-${c.field}-${c.old}-${c.new}-${i}`}
+                  className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-4 border-b border-rule py-2 text-[0.85rem]"
+                >
+                  <span className="tnum text-ink-soft">{changeDate(c.run_date, changes[0].run_date)}</span>
+                  <span>
+                    {changeSentence(c)}
+                    <span className="meta block">per {joinSources(c.sources)}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="meta mt-2 max-w-[46ch] !leading-[1.6]">
+              {changes.length > CHANGES_SHOWN && `${changes.length - CHANGES_SHOWN} earlier not shown. `}
+              Each source compared with its own previous fetch; only the current season is refetched
+              each week.
+            </p>
+          </section>
         )}
 
         <p className="meta mt-6 flex flex-wrap items-baseline gap-x-5 gap-y-1">

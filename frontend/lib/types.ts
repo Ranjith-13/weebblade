@@ -78,6 +78,26 @@ export type Anime = {
   anilist_status: string | null;
   anilist_ended_on: string | null;
   anilist_checked_on: string | null;
+  /** What its sources have said differently from one fetch to the next, newest
+   *  first. Only a single title carries them; lists leave it empty. */
+  changes: Change[];
+};
+
+/** Mirrors backend/app/schemas.py:Change - something a source reports
+ *  differently from its previous fetch. See processing/changes.py. */
+export type Change = {
+  /** status, episodes, score, premiere, season, broadcast, trailer, streaming,
+   *  or listed: an entry a source created since its last fetch. */
+  field: string;
+  old: string | null;
+  new: string | null;
+  /** The service, for a streaming link; `new` is its URL. */
+  label: string | null;
+  /** The fetch it was seen in, and the one it was compared with. */
+  run_date: string;
+  since: string | null;
+  /** Every source that reported it, in merge order. */
+  sources: string[];
 };
 
 /** Mirrors backend/app/schemas.py:AiringEpisode. `airing_at` is ISO 8601 UTC. */
@@ -625,6 +645,65 @@ export function statusLabel(a: Anime): string {
   if (a.status === "finished") return "Finished";
   // upcoming, unreleased, tba: not aired yet, whatever each source calls it.
   return a.status ? "Not yet aired" : "Unknown";
+}
+
+const CHANGE_STATUS: Record<string, string> = {
+  current: "airing",
+  finished: "finished",
+  upcoming: "not yet aired",
+};
+
+/** "2026", "October 2026" or "4 October 2026", from the change log's ISO-ish
+ *  value. By hand, not Intl: Node and browsers disagree on short month names. */
+function premiereWords(value: string): string {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!month) return String(year);
+  return `${day ? `${day} ` : ""}${MONTH_NAMES[month - 1]} ${year}`;
+}
+
+function seasonWords(value: string): string {
+  const [season, year] = value.split(" ");
+  return `${season.charAt(0)}${season.slice(1).toLowerCase()} ${year ?? ""}`.trim();
+}
+
+/** One change as a sentence: "Now finished, was airing", "Score 7.2 to 7.4". */
+export function changeSentence(c: Change): string {
+  const was = c.old;
+  const now = c.new ?? "";
+  switch (c.field) {
+    case "status": {
+      const word = (s: string) => CHANGE_STATUS[s] ?? s;
+      return was ? `Now ${word(now)}, was ${word(was)}` : `Now ${word(now)}`;
+    }
+    case "episodes":
+      return was ? `Episode count changed from ${was} to ${now}` : `Episode count announced: ${now}`;
+    case "score":
+      return was ? `Score ${was} to ${now}` : `First scored: ${now}`;
+    case "premiere":
+      return was
+        ? `Premiere moved from ${premiereWords(was)} to ${premiereWords(now)}`
+        : `Premiere date set: ${premiereWords(now)}`;
+    case "season":
+      return was ? `Moved from ${seasonWords(was)} to ${seasonWords(now)}` : `Filed under ${seasonWords(now)}`;
+    case "broadcast": {
+      const [day, time] = now.split(" ");
+      return `Broadcast slot now ${broadcastSlotLabel(day, time) ?? now}`;
+    }
+    case "trailer":
+      return was ? "New trailer" : "Trailer added";
+    case "streaming":
+      return `Now on ${c.label ?? now}`;
+    case "listed":
+      return "Newly listed";
+    default:
+      return `${c.field} changed`;
+  }
+}
+
+/** "13 September", with the year only where it is not the newest change's. */
+export function changeDate(runDate: string, newest: string): string {
+  const year = runDate.slice(0, 4);
+  return year === newest.slice(0, 4) ? calendarDate(runDate) : `${calendarDate(runDate)} ${year}`;
 }
 
 /** "Saturdays 23:00 JST" - the slot itself, which is what we actually know. */
