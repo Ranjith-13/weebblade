@@ -65,7 +65,7 @@ def test_flatten_media_handles_missing_optional_fields():
 
 
 def test_service_name_maps_known_hosts_and_falls_back_to_the_bare_host():
-    from ingestion.kitsu.transform import _service_name
+    from ingestion.streaming import service_name as _service_name
 
     assert _service_name("https://www.crunchyroll.com/series/GR9P57W96/x") == "Crunchyroll"
     assert _service_name("https://www.netflix.com/title/81698957") == "Netflix"
@@ -142,7 +142,7 @@ def test_flatten_media_tolerates_every_new_field_being_absent():
 
 
 def test_youtube_short_domain_maps_to_youtube():
-    from ingestion.kitsu.transform import _service_name
+    from ingestion.streaming import service_name as _service_name
 
     # Kitsu uses both forms; they are the same service and must not appear as two.
     assert _service_name("https://youtu.be/P31CxorjHjI") == "YouTube"

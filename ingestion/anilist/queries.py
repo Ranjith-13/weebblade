@@ -23,6 +23,15 @@ query ($season: MediaSeason, $seasonYear: Int, $page: Int, $perPage: Int) {
         large
         medium
       }
+      bannerImage
+      trailer {
+        id
+        site
+      }
+      externalLinks {
+        url
+        type
+      }
       description(asHtml: false)
       format
       status

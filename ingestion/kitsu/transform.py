@@ -1,61 +1,8 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urlparse
-
+from ..streaming import is_usable_link, service_name
 from ..text import clean_synopsis
-
-# Streaming host -> display name. Kitsu gives a bare URL and no provider label, so
-# the mapping lives here rather than in the UI: the name is data about the row, and
-# deriving it once at ingest keeps every consumer (API, frontend, any future export)
-# agreeing on what to call a service.
-_STREAMING_SERVICES = {
-    "crunchyroll.com": "Crunchyroll",
-    "netflix.com": "Netflix",
-    "hulu.com": "Hulu",
-    "primevideo.com": "Prime Video",
-    "amazon.com": "Prime Video",
-    "disneyplus.com": "Disney+",
-    "hidive.com": "HIDIVE",
-    "youtube.com": "YouTube",
-    "youtu.be": "YouTube",
-    "bilibili.tv": "Bilibili",
-    "iq.com": "iQIYI",
-    "tubitv.com": "Tubi",
-    "retrocrush.tv": "RetroCrush",
-    "midnightpulp.com": "Midnight Pulp",
-    "vrv.co": "VRV",
-    "funimation.com": "Funimation",
-}
-
-
-def _is_usable_link(url: object) -> bool:
-    """Reject anything that is not an absolute http(s) URL.
-
-    Kitsu's streaming records are user-maintained and contain junk: the live season
-    carries a link whose entire url field is the string "a". Rendering that as a
-    clickable "Unknown" is worse than not showing it, so it is dropped at ingest
-    rather than pushed to every consumer to defend against.
-    """
-    if not isinstance(url, str):
-        return False
-    parsed = urlparse(url)
-    return parsed.scheme in ("http", "https") and bool(parsed.hostname)
-
-
-def _service_name(url: str) -> str:
-    """Map a streaming URL to a provider name, falling back to the bare host.
-
-    The fallback matters: Kitsu carries long-tail regional services this map will
-    never cover, and showing "anime-onegai.com" is more useful than dropping the
-    link or labelling it "Other".
-    """
-    host = (urlparse(url).hostname or "").lower().removeprefix("www.")
-    for domain, name in _STREAMING_SERVICES.items():
-        if host == domain or host.endswith("." + domain):
-            return name
-    return host or "Unknown"
-
 
 def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     """Flatten a raw Kitsu anime resource (as returned by fetch_season) into a flat row."""
@@ -70,8 +17,8 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
 
     average_rating = attrs.get("averageRating")
 
-    streaming_urls = [u for u in (media.get("_streaming_urls") or []) if _is_usable_link(u)]
-    streaming_services = [_service_name(u) for u in streaming_urls]
+    streaming_urls = [u for u in (media.get("_streaming_urls") or []) if is_usable_link(u)]
+    streaming_services = [service_name(u) for u in streaming_urls]
 
     return {
         "source": "kitsu",

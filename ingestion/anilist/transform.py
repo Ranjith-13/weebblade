@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..streaming import is_usable_link, service_name
 from ..text import clean_synopsis
 
 # AniList's vocabulary mapped onto the shared one: Kitsu's words for format and
@@ -77,6 +78,22 @@ def _genres(media: dict[str, Any]) -> list[str] | None:
     return list(seen) or None
 
 
+def _streaming(media: dict[str, Any]) -> tuple[list[str], list[str]] | tuple[None, None]:
+    """AniList's streaming links, named by their URLs the way Kitsu's are.
+
+    Only links AniList files as STREAMING - its external links also carry
+    official sites and social accounts - each once, in AniList's order. None,
+    not empty lists, where there are none: [] would read as a value to the merge.
+    """
+    urls: dict[str, None] = {}
+    for link in media.get("externalLinks") or []:
+        if link.get("type") == "STREAMING" and is_usable_link(link.get("url")):
+            urls.setdefault(link["url"], None)
+    if not urls:
+        return None, None
+    return list(urls), [service_name(u) for u in urls]
+
+
 def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     """Flatten a raw AniList Media object into a row of the shared schema.
 
@@ -89,6 +106,8 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
     start_date = media.get("startDate") or {}
     cover_image = media.get("coverImage") or {}
     studios = [s["name"] for s in (media.get("studios") or {}).get("nodes", [])]
+    trailer = media.get("trailer") or {}
+    streaming_urls, streaming_services = _streaming(media)
 
     return {
         "source": "anilist",
@@ -102,7 +121,9 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         # AniList's "large" is ~230x345, the same role Kitsu's "large" poster plays -
         # fall back to "medium" since coverImage sizes aren't guaranteed present.
         "poster_url": cover_image.get("large") or cover_image.get("medium"),
-        "cover_url": None,
+        # The wide banner, the role Kitsu's cover image plays. AniList ranks
+        # below Kitsu, so this fills titles Kitsu has no cover for.
+        "cover_url": media.get("bannerImage"),
         "synopsis": clean_synopsis(media.get("description")),
         "format": _FORMATS.get(media.get("format") or ""),
         "status": _STATUSES.get(media.get("status") or ""),
@@ -129,9 +150,12 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "broadcast_day": None,
         "broadcast_time": None,
         "slug": None,
-        "trailer_id": None,
-        "streaming_services": None,
-        "streaming_urls": None,
+        # A YouTube id, which is all the trailer component plays; AniList also
+        # lists Dailymotion ones, which it cannot.
+        "trailer_id": trailer.get("id") if trailer.get("site") == "youtube" else None,
+        # Parallel arrays, services[i] naming urls[i], as Kitsu's are.
+        "streaming_services": streaming_services,
+        "streaming_urls": streaming_urls,
         "start_year": start_date.get("year"),
         "start_month": start_date.get("month"),
         "start_day": start_date.get("day"),

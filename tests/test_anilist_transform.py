@@ -151,3 +151,38 @@ def test_every_source_emits_only_columns_the_merge_knows():
 
     assert {source: set(row) - shared for source, row in rows.items()} == {
         "anilist": set(), "mal": set(), "kitsu": set()}
+
+
+def test_the_banner_fills_the_cover_and_a_youtube_trailer_fills_the_trailer():
+    row = flatten_media({"id": 1, "title": {}, "startDate": {}, "bannerImage": "https://s4.anilist.co/banner/1.jpg",
+                         "trailer": {"id": "tcaxQBQMTEk", "site": "youtube"}})
+
+    assert (row["cover_url"], row["trailer_id"]) == ("https://s4.anilist.co/banner/1.jpg", "tcaxQBQMTEk")
+    # The trailer component plays YouTube, nothing else.
+    assert flatten_media({"id": 1, "title": {}, "startDate": {},
+                          "trailer": {"id": "x8abc", "site": "dailymotion"}})["trailer_id"] is None
+
+
+def test_streaming_links_are_named_by_their_urls_as_kitsus_are():
+    """AniList labels Prime Video "Amazon Prime Video". Named by the label, one
+    service would be two chips in the browse filter."""
+    links = [
+        {"url": "https://www.crunchyroll.com/series/G24H1N3MP/x", "type": "STREAMING"},
+        {"url": "https://www.amazon.com/gp/video/detail/B0D", "type": "STREAMING"},
+        {"url": "https://twitter.com/show_official", "type": "SOCIAL"},     # not somewhere to watch
+        {"url": "https://www.crunchyroll.com/series/G24H1N3MP/x", "type": "STREAMING"},  # listed twice
+        {"url": "a", "type": "STREAMING"},                                   # junk
+    ]
+    row = flatten_media({"id": 1, "title": {}, "startDate": {}, "externalLinks": links})
+
+    assert row["streaming_services"] == ["Crunchyroll", "Prime Video"]
+    assert row["streaming_urls"] == ["https://www.crunchyroll.com/series/G24H1N3MP/x",
+                                     "https://www.amazon.com/gp/video/detail/B0D"]
+
+
+def test_a_title_with_nowhere_to_watch_has_none_not_empty_lists():
+    """[] reads as a value to the merge, and would beat Kitsu's populated list."""
+    row = flatten_media({"id": 1, "title": {}, "startDate": {},
+                         "externalLinks": [{"url": "https://anime-official.jp", "type": "INFO"}]})
+
+    assert (row["streaming_services"], row["streaming_urls"]) == (None, None)

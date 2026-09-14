@@ -30,3 +30,12 @@ def test_the_listing_asks_for_the_full_list_of_source_types():
     fetch_season("SUMMER", 2026, client=client)
 
     assert "source(version: 3)" in client.queries[0]
+
+
+def test_the_listing_asks_for_banners_trailers_and_streaming_links():
+    client = _AniList()
+
+    fetch_season("SUMMER", 2026, client=client)
+
+    for field in ("bannerImage", "trailer {", "externalLinks {"):
+        assert field in client.queries[0]
