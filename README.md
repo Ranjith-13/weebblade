@@ -55,8 +55,8 @@ Kitsu  ───┘         │
 Each ingestion source runs as an independent Airflow task — one API being down doesn't
 block the others from landing data, and the downstream merge/digest/search tasks run over
 whatever actually arrived rather than requiring every source to succeed. That isn't
-theoretical: AniList and Jikan have both been down upstream for most of this project's
-life, and the catalogue has kept publishing on Kitsu and MAL throughout.
+theoretical: Jikan has been down upstream for this project's whole life, and AniList was
+until September 2026, and the catalogue kept publishing on Kitsu and MAL throughout.
 
 ### Merging, not stacking
 
@@ -64,19 +64,29 @@ The four sources describe the same shows in different vocabularies, on different
 under different transliterations, and don't agree which season a title starts in.
 Consolidation is a **field-level** merge over the whole catalogue, not a union of rows:
 
+- Rows are one title when they share a MAL id, or an exact title with the same format
+  and year, or an exact title and premiere date. Every row's own titles count, and matches
+  join transitively, so adding a source can only join titles: an AniList row carrying
+  MAL's id and Kitsu's title joined 47 pairs the catalogue had listed twice. Two rows of
+  one source mapped to different MAL ids are never joined by a title - MAL's two parts of
+  *The Tale of The Spirit Stone* share an English title, format and year.
 - Per column, the first non-null value in source-priority order wins — so a title takes
   its streaming links and cover art from Kitsu and its studios from MAL in the same row.
+  AniList ranks below both: it joined after five years of the catalogue were built from
+  them, so it fills gaps (75 scores, 237 studio lists) rather than replacing what they said.
 - Genres are the exception: tags add, so a title carries every source's genres, Kitsu's
   first. Taking one winner's list dropped MAL's tags wherever Kitsu also held the show.
   This works only because MAL's genre names are mapped onto Kitsu's at ingest, so
   Sci-Fi and Science Fiction never end up on the same title.
 - Sources are matched across snapshots, not per dated file — they aren't fetched on the
   same day, and an exact-date lookup silently dropped whole sources.
-- Scores are normalized to one scale (MAL rates 0–10, Kitsu 0–100; both land in
-  `score_100`, and the frontend shows them out of 10), and durations to one unit.
+- Scores are normalized to one scale (MAL rates 0–10, Kitsu and AniList 0–100; all land
+  in `score_100`, and the frontend shows them out of 10), and durations to one unit.
 - Every source is checked against the shared schema *before* it is written. Units and
   vocabulary are the thing most likely to be got wrong when adding a source, and a whole
   column on the wrong scale is far cheaper to catch at ingest than on the live site.
+  It caught AniList on its first live run, when its transform - written while AniList
+  was down - passed "MOVIE" and "RELEASING" straight through.
 
 ### Franchises
 
@@ -142,8 +152,8 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 ```
 ingestion/    anilist/ jikan/ mal/ kitsu/ — each: client, fetch_season, transform;
               mal/ also fetch_relations (the franchise graph's edges); backfill, reprocess
-processing/   spark session, schema normalization, consolidation, identity registry,
-              franchise graph, DuckDB catalog
+processing/   spark session, schema normalization, matching, consolidation, identity
+              registry, franchise graph, DuckDB catalog
 ai/           digest/ (Groq prompt + generation), search/ (embed, index, query)
 backend/      FastAPI app — routers, schemas, DuckDB access, rate limiter
 frontend/     Next.js app (see frontend/README.md and frontend/DESIGN.md)
@@ -190,14 +200,14 @@ The frontend is separate — see [frontend/README.md](frontend/README.md).
 ## Status
 
 Ingestion → merge → warehouse → both AI features → API → frontend → CI/CD are all live
-and verified end-to-end against real data: two seasons and ~480 titles in the catalogue
-today, digests publishing weekly.
+and verified end-to-end against real data: twenty seasons (Fall 2021 to Summer 2026) and
+6,148 titles from three live sources, a franchise graph over 895 franchises, and digests
+publishing weekly.
 
-Known gaps: AniList and Jikan are down upstream (the pipeline degrades rather than
-fails), and **the frontend has not been deployed yet** — it builds, typechecks and lints
-in CI on every push, but the Vercel import is a dashboard flow that hasn't been done, so
-the site currently runs locally only. Off-instance backups pull to a second machine
-rather than to S3, which still needs an IAM policy.
+Known gaps: Jikan is down upstream (the pipeline degrades rather than fails). The
+frontend runs locally only — it builds, typechecks and lints in CI on every push, but has
+not been imported to Vercel. Off-instance backups pull to a second machine rather than
+to S3, which still needs an IAM policy.
 
 ## License
 

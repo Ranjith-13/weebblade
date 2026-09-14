@@ -24,8 +24,8 @@ Measured against the live API, not assumed. Everything below drove a design deci
 | `favourites` | 142, range 0–25 | Noise dressed as a metric. Do not render |
 
 This table is from when the warehouse held one season. It now holds twenty (Fall 2021 to Summer
-2026, 6,102 titles), reached from the season index in the header; see frontend/CLAUDE.md, "Getting
-to a season".
+2026, 6,148 titles from Kitsu, MAL and AniList), reached from the season index in the header; see
+frontend/CLAUDE.md, "Getting to a season".
 
 ### Three upstream behaviours the UI must work around
 

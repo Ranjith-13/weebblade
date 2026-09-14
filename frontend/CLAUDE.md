@@ -73,7 +73,7 @@ first two lead the facts list and `mal_id` is what `sourceLinks()` uses to reach
 
 ## Seasons
 
-The warehouse holds twenty seasons (Fall 2021 to Summer 2026, 6,102 titles), and **a page reads
+The warehouse holds twenty seasons (Fall 2021 to Summer 2026, 6,148 titles), and **a page reads
 one of them, never the catalogue.** `getSeason(key)` fetches that season whole (`sort=title`, 100
 a page) and every view is derived from it as before. Nothing fetches the whole catalogue:
 
@@ -136,8 +136,8 @@ The header marks the current section with a flag bar laid over its ink rule. Tha
 in a client component, which suspends during prerender on routes with an unknown param, so it sits in
 `<Suspense>` with the same nav, unmarked, as the fallback. Without that boundary the build fails.
 
-**Both sources tag a title to its START season only**, so a show that began in Spring and is still
-airing appears under Spring, not Summer. Kitsu does this natively; MAL does not, and its season
+**The sources tag a title to its START season only**, so a show that began in Spring and is still
+airing appears under Spring, not Summer. Kitsu and AniList do this natively; MAL does not, and its season
 endpoint returns everything *airing* in a season - One Piece and Sazae-san included, each carrying
 its debut season. `ingestion/mal/fetch_season.py` drops those at ingest. Without it they reached
 the warehouse and gave this switcher 30 phantom entries of one to three titles each.

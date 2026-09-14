@@ -51,6 +51,13 @@ up from 7 at two years. The four still missing are older than five years - two
 films from 2018 and 2019, a short from Winter 2021, a series from 1991 - so
 the next step there is a lookup of specific prequels, not another decade of
 whole seasons.
+
+AniList was backfilled on its own over the same twenty seasons on 2026-09-14,
+the day after it came back: 2,124 rows, 95 to 133 a season. Its listing is
+about half the size of the others' because it leaves out most music videos and
+web series - Summer 2026's lacked 117 of the 240 titles the catalogue held, 93
+of them music or ONA. It added 86 titles neither Kitsu nor MAL listed, and
+joined 47 pairs the catalogue had held twice (see processing/matching.py).
 """
 
 from __future__ import annotations
