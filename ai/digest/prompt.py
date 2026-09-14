@@ -23,6 +23,16 @@ _STATUS_WORDS = {"current": "airing", "finished": "finished", "upcoming": "not y
 
 # Most lines of one kind a prompt carries; a busy week says how many were left out.
 _PER_KIND = 12
+# The smallest score move a digest names, in tenths of a point out of 10 - in
+# whole tenths because 7.3 - 7.0 is 0.2999... in floating point.
+_SCORE_NEWS_TENTHS = 3
+
+
+def _move(c: dict[str, Any]) -> int:
+    """A score change's size in tenths; 0 for a first score, which has no move."""
+    if c["old"] is None:
+        return 0
+    return abs(round(float(c["new"]) * 10) - round(float(c["old"]) * 10))
 
 
 def _change_line(c: dict[str, Any]) -> str:
@@ -51,8 +61,13 @@ def _changes_section(changes: list[dict[str, Any]]) -> list[str]:
     for field in ("status", "season", "premiere", "listed", "episodes", "score", "trailer", "streaming", "broadcast"):
         rows = by_field.get(field, [])
         if field == "score":
-            # The biggest moves first: a tenth either way is barely news.
-            rows = sorted(rows, key=lambda c: -abs(float(c["new"]) - float(c["old"] or c["new"])))
+            # Only moves a fan would notice, biggest first. The week to
+            # 2026-09-13 had 51 score changes and every one was a tenth, several
+            # crossing a rounding line and back: named, they read as news.
+            small = [c for c in rows if c["old"] is not None and _move(c) < _SCORE_NEWS_TENTHS]
+            rows = sorted((c for c in rows if c not in small), key=lambda c: -_move(c))
+            if small:
+                lines.append(f"- {len(small)} score moves under {_SCORE_NEWS_TENTHS / 10} out of 10, not listed")
         lines += [f"- {_change_line(c)}" for c in rows[:_PER_KIND]]
         if len(rows) > _PER_KIND:
             lines.append(f"- and {len(rows) - _PER_KIND} more {field} changes")

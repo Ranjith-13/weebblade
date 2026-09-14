@@ -136,10 +136,24 @@ def test_a_week_with_no_changes_has_no_section_and_no_instruction_about_one():
 
 
 def test_a_busy_week_names_the_biggest_score_moves_and_counts_the_rest():
-    moves = [_change("score", f"Show {i}", "7.0", f"{7 + i / 10:.1f}") for i in range(1, 16)]
+    moves = [_change("score", f"Show {i}", "7.0", f"{7 + i / 10:.1f}") for i in range(3, 18)]
 
     prompt = build_prompt(_STATS, moves)
 
-    assert prompt.index("Show 15:") < prompt.index("Show 14:")
-    assert "Show 1:" not in prompt and "Show 3:" not in prompt
+    assert prompt.index("Show 17:") < prompt.index("Show 16:")
+    assert "Show 3:" not in prompt and "Show 5:" not in prompt
     assert "- and 3 more score changes" in prompt
+
+
+def test_a_tenth_either_way_is_counted_not_named():
+    """Every one of the week's 51 score changes to 2026-09-13 was a tenth, some
+    crossing a rounding line and back."""
+    prompt = build_prompt(_STATS, [
+        _change("score", "Ogre's Bride", "6.9", "6.8"), _change("score", "Ogre's Bride", "6.8", "6.9"),
+        _change("score", "Big Mover", "6.8", "7.4"), _change("score", "Newly Scored", None, "7.1"),
+    ])
+
+    assert "Ogre's Bride" not in prompt
+    assert "- 2 score moves under 0.3 out of 10, not listed" in prompt
+    assert "- Big Mover: score 6.8 to 7.4 out of 10" in prompt
+    assert "- Newly Scored: score none to 7.1 out of 10" in prompt
