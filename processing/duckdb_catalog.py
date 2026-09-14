@@ -53,6 +53,7 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
             )
 
         created += _franchise_views(con, data_dir)
+        created += _airing_view(con, data_dir, has_registry)
     finally:
         con.close()
     return created
@@ -86,6 +87,40 @@ def _franchise_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> list[str
     else:
         logger.warning("No franchises built yet (%s), skipping franchise_member", members)
     return created
+
+
+def _airing_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool) -> list[str]:
+    """AniList's airing schedule from its newest fetch, each episode placed on
+    the title it belongs to. See ingestion/anilist/fetch_airing.py.
+
+    The newest file is chosen when the view is READ, not when it is made: the
+    glob is evaluated per query. The schedule is fetched daily and this view is
+    made weekly, and neither has to wait for the other - a new day's file is
+    served the moment it lands, with nothing opening the warehouse to write.
+
+    A title is found by its AniList id, then its MAL id: 13 of the 102 catalogue
+    titles airing in the week measured were missing from AniList's season
+    listing, so only the MAL id placed them. An episode neither places has a
+    null wb_id and is still served - One Piece is on the schedule whether or not
+    the catalogue holds it.
+    """
+    airing = data_dir / "processed" / "anilist_airing"
+    if not list(airing.glob("*.parquet")):
+        logger.warning("No airing schedule fetched yet (%s), skipping anime_airing", airing)
+        return []
+
+    files = f"read_parquet('{airing}/*.parquet', union_by_name=true)"
+    latest = f"SELECT * FROM {files} WHERE fetched_on = (SELECT MAX(fetched_on) FROM {files})"
+    if has_registry:
+        sql = (
+            f"SELECT l.*, COALESCE(a.wb_id, m.wb_id) AS wb_id FROM ({latest}) l "
+            "LEFT JOIN anime_identity a ON a.source_key = 'anilist:' || CAST(l.anilist_id AS VARCHAR) "
+            "LEFT JOIN anime_identity m ON m.source_key = 'mal:' || CAST(l.mal_id AS VARCHAR)"
+        )
+    else:
+        sql = f"SELECT *, CAST(NULL AS VARCHAR) AS wb_id FROM ({latest})"
+    con.execute(f"CREATE OR REPLACE VIEW anime_airing AS {sql}")
+    return ["anime_airing"]
 
 
 def _identity_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> bool:

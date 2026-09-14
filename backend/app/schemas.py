@@ -3,6 +3,16 @@ from __future__ import annotations
 from pydantic import BaseModel, field_validator
 
 
+class AiringEpisode(BaseModel):
+    episode: int | None = None
+    # ISO 8601 in UTC. A client converts it for display; the API does not guess
+    # anyone's timezone.
+    airing_at: str
+    # The day AniList's schedule was fetched. It is refetched daily, and a
+    # broadcast that slips after that is not reflected until the next fetch.
+    fetched_on: str | None = None
+
+
 class Anime(BaseModel):
     source: str
     source_id: str
@@ -56,6 +66,10 @@ class Anime(BaseModel):
     # Every source row that became this title, as "source:source_id". Its
     # provenance, and the reason an old address for it still resolves.
     source_keys: list[str] = []
+    # The next few episodes from AniList's airing schedule, soonest first. Filled
+    # on a single title only (GET /anime/{wb_id}); empty in lists. Several, not
+    # one, so a client holding a cached copy can skip the ones that have aired.
+    upcoming_episodes: list[AiringEpisode] = []
 
     @field_validator(
         "genres", "studios", "streaming_services", "streaming_urls", "source_keys", mode="before"
@@ -137,6 +151,35 @@ class CatalogueSummary(BaseModel):
     sources: list[str]
     # Newest first: by year, then the broadcast quarter, not the alphabet.
     seasons: list[SeasonCount]
+
+
+class ScheduledEpisode(BaseModel):
+    # Null for a show the catalogue does not hold - a long-runner older than it,
+    # like One Piece. It is still on the schedule, described as AniList has it.
+    wb_id: str | None = None
+    anilist_id: int
+    mal_id: int | None = None
+    title: str | None = None
+    format: str | None = None
+    poster_url: str | None = None
+    score_100: float | None = None
+    episode: int | None = None
+    # How many episodes the show has, where known.
+    episodes: int | None = None
+    airing_at: str
+
+
+class Schedule(BaseModel):
+    """Every episode airing in a run of days, soonest first.
+
+    The days are Japan's: `start` is midnight in Tokyo today, because that is
+    the calendar the broadcasts keep, and `end` is `days` later.
+    """
+
+    start: str
+    end: str
+    fetched_on: str | None = None
+    episodes: list[ScheduledEpisode] = []
 
 
 class SearchResult(BaseModel):

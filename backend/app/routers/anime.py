@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..db import get_db, run_query
 from ..schemas import Anime, AnimeListResponse, Franchise, FranchiseEntry
+from .schedule import upcoming_episodes
 
 router = APIRouter(prefix="/anime", tags=["anime"])
 
@@ -138,7 +139,15 @@ def get_anime_by_identity(
     rows = _by_identity(con, wb_id)
     if not rows:
         raise HTTPException(404, f"No title with identity {wb_id}")
-    return rows[0]
+    return _with_airing(con, rows[0])
+
+
+def _with_airing(con: duckdb.DuckDBPyConnection, row: dict) -> Anime:
+    """One title, with its next episodes from AniList's schedule."""
+    title = Anime(**row)
+    if title.wb_id:
+        title.upcoming_episodes = upcoming_episodes(con, title.wb_id)
+    return title
 
 
 # A link recorded on only one side reads the other way from the other side.
@@ -246,7 +255,7 @@ def get_anime(
         [source, source_id],
     )
     if rows:
-        return rows[0]
+        return _with_airing(con, rows[0])
 
     known = _optional(
         con, "SELECT wb_id FROM anime_identity WHERE source_key = ?", [f"{source}:{source_id}"]
@@ -254,6 +263,6 @@ def get_anime(
     if known:
         rows = _by_identity(con, known[0]["wb_id"])
         if rows:
-            return rows[0]
+            return _with_airing(con, rows[0])
 
     raise HTTPException(404, f"No title found for {source}:{source_id}")
