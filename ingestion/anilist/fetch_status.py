@@ -28,9 +28,8 @@ from typing import Any
 
 import duckdb
 import pyarrow as pa
-import pyarrow.parquet as pq
 
-from ..storage import write_raw_json
+from ..storage import write_daily, write_raw_json
 from .client import AniListClient
 
 logger = logging.getLogger(__name__)
@@ -71,11 +70,19 @@ SCHEMA = pa.schema(
 
 def candidates(db_path: Path) -> tuple[list[int], list[int]]:
     """AniList ids, and MAL ids for titles with no AniList id, of every title the
-    catalogue calls airing. Read-only: the warehouse is only looked at."""
+    sources call airing. Read-only: the warehouse is only looked at.
+
+    The sources' status, merged_status, and not the status the warehouse serves,
+    which this check itself corrects. Asked by the corrected one, a title AniList
+    called finished yesterday would not be asked about today, would read as
+    airing again tomorrow, and would be asked again the day after - flipping
+    every day for as long as the sources lag."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
+        columns = {row[0] for row in con.execute("DESCRIBE anime_media_latest").fetchall()}
+        status = "merged_status" if "merged_status" in columns else "status"
         rows = con.execute(
-            "SELECT source_keys, mal_id FROM anime_media_latest WHERE status = 'current'"
+            f"SELECT source_keys, mal_id FROM anime_media_latest WHERE {status} = 'current'"
         ).fetchall()
     finally:
         con.close()
@@ -130,12 +137,8 @@ def land_status(data_dir: Path, run_date: str, client: AniListClient | None = No
     raw = fetch_status(anilist_ids, mal_ids, client)
     write_raw_json(raw, data_dir / "raw" / "anilist_status", run_date)
 
-    out = data_dir / "processed" / "anilist_status" / f"{run_date}.parquet"
-    out.parent.mkdir(parents=True, exist_ok=True)
     rows = [flatten_status(m, run_date) for m in raw]
-    tmp = out.with_name(out.name + ".tmp")
-    pq.write_table(pa.Table.from_pylist(rows, schema=SCHEMA), tmp)
-    tmp.replace(out)
+    write_daily(rows, SCHEMA, data_dir, "anilist_status", run_date)
     logger.info(
         "AniList status: asked about %s titles (%s by MAL id), %s answered",
         len(anilist_ids) + len(mal_ids), len(mal_ids), len(rows),

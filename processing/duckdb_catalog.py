@@ -44,17 +44,22 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
         if has_registry:
             created += ["anime_identity", "anime_alias"]
 
+        # Before anime_media_latest, which corrects its status from this.
+        status_view = _anilist_status_view(con, data_dir, has_registry)
+        created += status_view
+
         if "anime_media" in created:
-            con.execute(_latest_view_sql(con, has_registry))
+            latest = _status_corrected(con, _latest_view_sql(con, has_registry), bool(status_view))
+            con.execute(f"CREATE OR REPLACE VIEW anime_media_latest AS {latest}")
             created.append("anime_media_latest")
             logger.info(
-                "Refreshed view anime_media_latest (latest run per %s)",
+                "Refreshed view anime_media_latest (latest run per %s%s)",
                 "identity" if has_registry else "source row",
+                ", status checked against AniList" if status_view else "",
             )
 
         created += _franchise_views(con, data_dir)
         created += _airing_view(con, data_dir, has_registry)
-        created += _anilist_status_view(con, data_dir, has_registry)
     finally:
         con.close()
     return created
@@ -90,50 +95,97 @@ def _franchise_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> list[str
     return created
 
 
-def _newest_placed(
-    con: duckdb.DuckDBPyConnection, view: str, directory: Path, has_registry: bool
+def _current_placed(
+    con: duckdb.DuckDBPyConnection, view: str, name: str, data_dir: Path, has_registry: bool
 ) -> list[str]:
-    """A view over the newest of a directory's dated files, each row placed on
-    the title it belongs to: by AniList id, then MAL id.
+    """A view over a daily fetch's current file, each row placed on the title it
+    belongs to: by AniList id, then MAL id. See ingestion.storage.write_daily.
 
-    The newest file is chosen when the view is READ, not when it is made: the
-    glob is evaluated per query. These are fetched daily and the views are made
-    weekly, and neither has to wait for the other - a new day's file is served
-    the moment it lands, with nothing opening the warehouse to write.
+    The file is read per query, not when the view is made. These are fetched
+    daily and the views are made weekly, and neither waits for the other: a new
+    day's file is served the moment it is moved into place, with nothing opening
+    the warehouse to write. One file, not the dated glob, because the dated glob
+    would cost every query a file more each day - and the status check is joined
+    into anime_media_latest, which every request reads.
 
     AniList id first, then MAL id: 13 of the 102 catalogue titles airing in the
     week first measured were missing from AniList's season listing, so only
     the MAL id placed them. A row neither places has a null wb_id and is still
     served - One Piece is on the schedule whether or not the catalogue holds it.
     """
-    if not list(directory.glob("*.parquet")):
-        logger.warning("Nothing fetched yet for %s (%s), skipping it", view, directory)
+    current = data_dir / "processed" / "current" / f"{name}.parquet"
+    if not current.exists():
+        logger.warning("Nothing fetched yet for %s (%s), skipping it", view, current)
         return []
 
-    files = f"read_parquet('{directory}/*.parquet', union_by_name=true)"
-    latest = f"SELECT * FROM {files} WHERE fetched_on = (SELECT MAX(fetched_on) FROM {files})"
+    rows = f"read_parquet('{current}')"
     if has_registry:
         sql = (
-            f"SELECT l.*, COALESCE(a.wb_id, m.wb_id) AS wb_id FROM ({latest}) l "
+            f"SELECT l.*, COALESCE(a.wb_id, m.wb_id) AS wb_id FROM {rows} l "
             "LEFT JOIN anime_identity a ON a.source_key = 'anilist:' || CAST(l.anilist_id AS VARCHAR) "
             "LEFT JOIN anime_identity m ON m.source_key = 'mal:' || CAST(l.mal_id AS VARCHAR)"
         )
     else:
-        sql = f"SELECT *, CAST(NULL AS VARCHAR) AS wb_id FROM ({latest})"
+        sql = f"SELECT *, CAST(NULL AS VARCHAR) AS wb_id FROM {rows}"
     con.execute(f"CREATE OR REPLACE VIEW {view} AS {sql}")
     return [view]
 
 
 def _airing_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool) -> list[str]:
     """AniList's airing schedule. See ingestion/anilist/fetch_airing.py."""
-    return _newest_placed(con, "anime_airing", data_dir / "processed" / "anilist_airing", has_registry)
+    return _current_placed(con, "anime_airing", "anilist_airing", data_dir, has_registry)
 
 
 def _anilist_status_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool) -> list[str]:
-    """AniList's own status for the titles the catalogue calls airing. See
-    ingestion/anilist/fetch_status.py."""
-    return _newest_placed(
-        con, "anime_anilist_status", data_dir / "processed" / "anilist_status", has_registry
+    """AniList's own status for the titles the sources call airing. See
+    ingestion/anilist/fetch_status.py. Without identities there is nothing to
+    place a check on, so no view."""
+    if not has_registry:
+        return []
+    return _current_placed(con, "anime_anilist_status", "anilist_status", data_dir, has_registry)
+
+
+def _status_corrected(con: duckdb.DuckDBPyConnection, latest: str, has_status: bool) -> str:
+    """anime_media_latest's rows, with their status checked against AniList.
+
+    The merged status is the winner's - Kitsu's, mostly - as of the snapshot a
+    title was filed in, and only the current season is refetched, so it goes on
+    calling shows airing long after their finale: 79 on 2026-09-14, Yu-Gi-Oh! Go
+    Rush!! a year and a half after its last episode. AniList is asked daily about
+    exactly the titles the sources call airing, and where it says one has
+    stopped, that is what the catalogue says - in lists, on the browse grid's
+    airing tabs, in the front page's counts and the digest, not only on the
+    title's own page.
+
+    Finished and cancelled become "finished"; not yet aired becomes "upcoming".
+    A hiatus leaves the status "current" - the series is still running, and the
+    shared vocabulary has no word for a pause - but anilist_status says so, and a
+    page reads it before offering a weekly slot.
+
+    The sources' own answer is kept as merged_status. The check asks about titles
+    by it, not by the corrected status - see fetch_status.candidates - and it is
+    what the sources still say where AniList overrules them.
+    """
+    columns = {row[0] for row in con.execute("DESCRIBE anime_media").fetchall()}
+    if "status" not in columns:
+        return latest
+    if has_status:
+        return (
+            "SELECT b.* EXCLUDE (status), "
+            "CASE WHEN b.status = 'current' AND s.status IN ('finished', 'cancelled') THEN 'finished' "
+            "     WHEN b.status = 'current' AND s.status = 'upcoming' THEN 'upcoming' "
+            "     ELSE b.status END AS status, "
+            "b.status AS merged_status, s.status AS anilist_status, "
+            "s.ended_on AS anilist_ended_on, s.fetched_on AS anilist_checked_on "
+            f"FROM ({latest}) b "
+            "LEFT JOIN (SELECT * FROM anime_anilist_status WHERE wb_id IS NOT NULL "
+            "           QUALIFY ROW_NUMBER() OVER (PARTITION BY wb_id ORDER BY anilist_id) = 1) s "
+            "  ON s.wb_id = b.wb_id"
+        )
+    return (
+        "SELECT b.*, b.status AS merged_status, CAST(NULL AS VARCHAR) AS anilist_status, "
+        "CAST(NULL AS VARCHAR) AS anilist_ended_on, CAST(NULL AS VARCHAR) AS anilist_checked_on "
+        f"FROM ({latest}) b"
     )
 
 
@@ -163,7 +215,7 @@ def _identity_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> bool:
 
 
 def _latest_view_sql(con: duckdb.DuckDBPyConnection, has_registry: bool) -> str:
-    """The newest row per TITLE, where title means its stable identity.
+    """The query for the newest row per TITLE, where title means its stable identity.
 
     anime_media keeps one row per title per run, which is right for history, but
     everything that renders the catalogue wants one row per title. It used to
@@ -205,7 +257,6 @@ def _latest_view_sql(con: duckdb.DuckDBPyConnection, has_registry: bool) -> str:
     if not candidates:
         # No identities anywhere yet: exactly the old view.
         return (
-            "CREATE OR REPLACE VIEW anime_media_latest AS "
             "SELECT * EXCLUDE (_rn) FROM ("
             "  SELECT *, ROW_NUMBER() OVER ("
             "    PARTITION BY source, source_id ORDER BY run_date DESC"
@@ -219,7 +270,6 @@ def _latest_view_sql(con: duckdb.DuckDBPyConnection, has_registry: bool) -> str:
         f"FROM anime_media m {' '.join(joins)}"
     )
     return (
-        "CREATE OR REPLACE VIEW anime_media_latest AS "
         "SELECT * EXCLUDE (_rn) FROM ("
         "  SELECT *, ROW_NUMBER() OVER ("
         "    PARTITION BY COALESCE(wb_id, CAST(source AS VARCHAR) || ':' || CAST(source_id AS VARCHAR))"

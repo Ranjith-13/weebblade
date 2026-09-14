@@ -8,7 +8,7 @@ import duckdb
 from fastapi import APIRouter, Depends, Query
 
 from ..db import get_db
-from ..schemas import AiringEpisode, AniListStatus, Schedule, ScheduledEpisode
+from ..schemas import AiringEpisode, Schedule, ScheduledEpisode
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 logger = logging.getLogger(__name__)
@@ -54,27 +54,6 @@ def upcoming_episodes(con: duckdb.DuckDBPyConnection, wb_id: str, limit: int = 4
         logger.warning("Could not read upcoming episodes for %s", wb_id, exc_info=True)
         return []
     return [AiringEpisode(episode=r["episode"], airing_at=iso(r["airing_at"]), fetched_on=r["fetched_on"]) for r in rows]
-
-
-def anilist_status(con: duckdb.DuckDBPyConnection, wb_id: str) -> AniListStatus | None:
-    """AniList's newest status check for a title, if it was asked about.
-
-    Like the upcoming episodes, a failure here costs the page this line, logged,
-    and nothing more."""
-    try:
-        rows = _airing(
-            con,
-            "SELECT status, ended_on, fetched_on FROM anime_anilist_status WHERE wb_id = ? "
-            "ORDER BY anilist_id LIMIT 1",
-            [wb_id],
-        )
-    except duckdb.Error:
-        logger.warning("Could not read AniList's status for %s", wb_id, exc_info=True)
-        return None
-    if not rows:
-        return None
-    r = rows[0]
-    return AniListStatus(status=r["status"], ended_on=r["ended_on"], checked_on=r["fetched_on"])
 
 
 @router.get("", response_model=Schedule)

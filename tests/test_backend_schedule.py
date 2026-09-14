@@ -13,6 +13,7 @@ from backend.app.main import app
 from backend.app.routers import schedule as schedule_module
 from ingestion.anilist.fetch_airing import SCHEMA
 from processing.duckdb_catalog import refresh_catalog
+from ingestion.storage import write_daily
 from processing.identity import Registry, assign, save
 
 JST = timezone(timedelta(hours=9))
@@ -32,9 +33,7 @@ def _episode(anilist_id, episode, at, mal=None, title=None, fetched_on="2026-09-
 
 
 def _write_airing(data, fetched_on, episodes):
-    path = data / "processed" / "anilist_airing" / f"{fetched_on}.parquet"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.Table.from_pylist(episodes, schema=SCHEMA), path)
+    write_daily(episodes, SCHEMA, data, "anilist_airing", fetched_on)
 
 
 @pytest.fixture
@@ -47,10 +46,10 @@ def world(tmp_path, monkeypatch):
     save(data, registry)
     catalogue = [
         {"source": "kitsu", "source_id": "1", "wb_id": ids[0], "source_keys": ["anilist:1", "kitsu:1"],
-         "title_english": "Frieren", "title_romaji": "Sousou no Frieren", "format": "TV", "poster_url": "https://kitsu/1.jpg", "score_100": 90.0,
+         "title_english": "Frieren", "title_romaji": "Sousou no Frieren", "format": "TV", "poster_url": "https://kitsu/1.jpg", "score_100": 90.0, "status": "current",
          "season": "FALL", "season_year": 2026, "run_date": "2026-09-14"},
         {"source": "kitsu", "source_id": "2", "wb_id": ids[1], "source_keys": ["kitsu:2", "mal:20"],
-         "title_english": "Only By MAL", "title_romaji": None, "format": "ONA", "poster_url": "https://kitsu/2.jpg", "score_100": None,
+         "title_english": "Only By MAL", "title_romaji": None, "format": "ONA", "poster_url": "https://kitsu/2.jpg", "score_100": None, "status": "current",
          "season": "FALL", "season_year": 2026, "run_date": "2026-09-14"},
     ]
     path = data / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-09-14" / "p.parquet"
@@ -105,8 +104,8 @@ def test_only_the_newest_fetch_is_served(world):
 
 
 def test_a_new_days_fetch_is_served_without_rebuilding_the_warehouse(world):
-    """The schedule is fetched daily and the views are made weekly. The glob is
-    read per query, so a new file is live the moment it lands."""
+    """The schedule is fetched daily and the views are made weekly. The current
+    file is read per query, so a new day is live the moment it lands."""
     client, _, data = world
     _write_airing(data, "2026-09-15", [_episode(1, 5, _at(15, 2), fetched_on="2026-09-15")])
 
@@ -182,33 +181,71 @@ def test_before_any_schedule_is_fetched_nothing_breaks(tmp_path, monkeypatch):
 from ingestion.anilist.fetch_status import SCHEMA as STATUS_SCHEMA  # noqa: E402
 
 
-def _write_status(data, fetched_on, rows):
-    path = data / "processed" / "anilist_status" / f"{fetched_on}.parquet"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.Table.from_pylist(rows, schema=STATUS_SCHEMA), path)
+def _check(data, fetched_on, rows):
+    write_daily(rows, STATUS_SCHEMA, data, "anilist_status", fetched_on)
+    refresh_catalog(data, data.parent / "warehouse.duckdb")  # the first check makes the view
 
 
-def _check(anilist_id, status, mal=None, ended_on=None, fetched_on="2026-09-14"):
+def _said(anilist_id, status, mal=None, ended_on=None, fetched_on="2026-09-14"):
     return {"anilist_id": anilist_id, "mal_id": mal, "status": status, "ended_on": ended_on,
             "fetched_on": fetched_on}
 
 
-def test_a_title_carries_anilists_newest_status_check(world):
+def test_a_title_anilist_says_has_finished_is_finished_in_the_catalogue(world):
+    """The sources still call it airing; AniList's check says it finished on the
+    10th. The catalogue believes AniList, and keeps what the sources said."""
     client, ids, data = world
-    _write_status(data, "2026-09-13", [_check(1, "current", fetched_on="2026-09-13")])
-    _write_status(data, "2026-09-14", [_check(1, "finished", ended_on="2026-09-10")])
-    refresh_catalog(data, data.parent / "warehouse.duckdb")
+    _check(data, "2026-09-13", [_said(1, "current", fetched_on="2026-09-13")])
+    _check(data, "2026-09-14", [_said(1, "finished", ended_on="2026-09-10")])
 
-    status = client.get(f"/anime/{ids[0]}").json()["anilist_status"]
+    title = client.get(f"/anime/{ids[0]}").json()
 
-    assert status == {"status": "finished", "ended_on": "2026-09-10", "checked_on": "2026-09-14"}
+    assert (title["status"], title["merged_status"]) == ("finished", "current")
+    assert (title["anilist_status"], title["anilist_ended_on"], title["anilist_checked_on"]) == (
+        "finished", "2026-09-10", "2026-09-14")
 
 
-def test_a_status_check_is_placed_by_mal_id_too_and_absent_where_never_asked(world):
+def test_lists_carry_the_corrected_status_too(world):
+    """The point of correcting the view rather than one page: browse, the front
+    page's counts and the digest all read lists."""
     client, ids, data = world
-    _write_status(data, "2026-09-14", [_check(99, "hiatus", mal=20)])
-    refresh_catalog(data, data.parent / "warehouse.duckdb")
+    _check(data, "2026-09-14", [_said(1, "finished"), _said(2, "cancelled", mal=20)])
 
-    assert client.get(f"/anime/{ids[1]}").json()["anilist_status"]["status"] == "hiatus"
-    assert client.get(f"/anime/{ids[0]}").json()["anilist_status"] is None
-    assert all(t["anilist_status"] is None for t in client.get("/anime?limit=10").json()["items"])
+    statuses = {t["wb_id"]: t["status"] for t in client.get("/anime?limit=10").json()["items"]}
+
+    assert statuses == {ids[0]: "finished", ids[1]: "finished"}
+
+
+def test_a_hiatus_leaves_the_series_current_but_says_so(world):
+    """No shared word for a pause: the series is still running, so status stays
+    current, and anilist_status tells a page not to offer a weekly slot."""
+    client, ids, data = world
+    _check(data, "2026-09-14", [_said(99, "hiatus", mal=20)])  # placed by MAL id
+
+    title = client.get(f"/anime/{ids[1]}").json()
+
+    assert (title["status"], title["anilist_status"]) == ("current", "hiatus")
+
+
+def test_a_title_anilist_has_not_aired_is_upcoming(world):
+    client, ids, data = world
+    _check(data, "2026-09-14", [_said(1, "upcoming")])
+
+    assert client.get(f"/anime/{ids[0]}").json()["status"] == "upcoming"
+
+
+def test_a_title_never_asked_about_keeps_the_sources_status(world):
+    client, ids, data = world
+    _check(data, "2026-09-14", [_said(1, "finished")])
+
+    title = client.get(f"/anime/{ids[1]}").json()
+
+    assert (title["status"], title["merged_status"], title["anilist_status"]) == ("current", "current", None)
+
+
+def test_before_any_check_the_status_is_the_sources_and_the_shape_is_the_same(world):
+    client, ids, _ = world
+
+    title = client.get(f"/anime/{ids[0]}").json()
+
+    assert (title["status"], title["merged_status"], title["anilist_status"]) == ("current", "current", None)

@@ -34,9 +34,8 @@ from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
-import pyarrow.parquet as pq
 
-from ..storage import write_raw_json
+from ..storage import write_daily, write_raw_json
 from .client import AniListClient
 from .transform import _FORMATS
 
@@ -146,17 +145,13 @@ def land_airing(
     """Fetch the window around `at`, land it raw and processed, return the count.
 
     One file per run date, so a retry rewrites the same file and a later run
-    never has to merge with an earlier one: the warehouse reads the newest.
+    never has to merge with an earlier one; see write_daily for the one file the
+    warehouse reads.
     """
     raw = fetch_airing(at - LOOKBACK_DAYS * 86400, at + WINDOW_DAYS * 86400, client)
     write_raw_json(raw, data_dir / "raw" / "anilist_airing", run_date)
-
-    out = data_dir / "processed" / "anilist_airing" / f"{run_date}.parquet"
-    out.parent.mkdir(parents=True, exist_ok=True)
     rows = [flatten_airing(n, run_date) for n in raw]
-    tmp = out.with_name(out.name + ".tmp")
-    pq.write_table(pa.Table.from_pylist(rows, schema=SCHEMA), tmp)
-    tmp.replace(out)
+    write_daily(rows, SCHEMA, data_dir, "anilist_airing", run_date)
     logger.info("AniList airing: %s episodes in the %s days from %s", len(rows), WINDOW_DAYS, run_date)
     return len(rows)
 
