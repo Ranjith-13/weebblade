@@ -365,10 +365,15 @@ shorter than a 1000px screen (6 of the 12 sparsest measured) to twice it, and on
 footer rose into view when content shorter than the fallback replaced it. Measured 2026-09-14 on
 a production build, 14 titles and the schedule, cold and warm: 0 at 1440x1000 and at 390x844.
 
-**Use the Playwright MCP browser, not the in-app Browser pane.** The pane cannot hydrate a PPR
-page: it leaves React's postponed markers (`<!--$~-->`) unresolved, so every client component below
-a Suspense boundary stays inert. Fibers attach to `body` and the static shell and stop — the
-trailer button does not respond and `NextAiring` renders an empty `<p>`. The same page in Playwright
-resolves to `<!--$-->` and hydrates fully. This cost a long debugging session chasing a component
-that was never broken; if a client component looks dead in the pane, confirm in Playwright before
-touching it.
+**A hidden browser never reveals streamed content.** React 19.2 batches the reveal of streamed
+Suspense boundaries behind an animation frame: `$RC` marks an arrived boundary `<!--$~-->` and
+leaves its content in a hidden `S:` div, and `$RV` only moves it into place after
+`requestAnimationFrame` fires (`$RT` is set on the first frame). A document that paints no frames -
+the in-app Browser pane while it is hidden, a background tab - therefore keeps every boundary at
+`$~`, and every client component inside one stays inert: the trailer button does not respond and
+the countdown renders nothing. One frame resolves all of it; confirmed 2026-09-14 on a title page,
+where a single screenshot of the hidden pane took 5 `$~` boundaries and 5 hidden segments to 0 and
+hydrated every button. This was first misread as the pane being unable to hydrate a PPR page, and
+cost a long session chasing a component that was never broken. In the pane, check
+`document.hidden`, or take a screenshot before judging a client component. Measurements still
+belong in the Playwright MCP browser, which paints headless and takes an exact viewport.
