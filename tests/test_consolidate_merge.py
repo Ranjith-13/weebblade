@@ -642,12 +642,13 @@ def test_the_premiere_pass_will_not_merge_titles_that_premiered_on_different_day
 
 def test_the_premiere_pass_needs_a_complete_date(spark):
     """A partial date would match far too much - every title that knows only its
-    year would collide with every other one sharing a name."""
+    year would collide with every other one sharing a name. (A series and a film:
+    ONA and special would now match on the title, as one short format.)"""
     df = spark.createDataFrame(
         [
-            _row("kitsu", "1", None, title_english="Same Name", fmt="ONA",
+            _row("kitsu", "1", None, title_english="Same Name", fmt="TV",
                  start_year=2026, start_month=None, start_day=None),
-            _row("mal", "2", 999, title_english="Same Name", fmt="special",
+            _row("mal", "2", 999, title_english="Same Name", fmt="movie",
                  start_year=2026, start_month=None, start_day=None),
         ],
         SCHEMA_F,
