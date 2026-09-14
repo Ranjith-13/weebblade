@@ -103,10 +103,13 @@ airing title's page and a week of dated episodes on `/schedule`, including long-
 the catalogue, like One Piece.
 
 The same DAG asks AniList whether the titles the sources call airing still are. The merged status
-is the winner's as of the title's snapshot, and it called 79 shows airing that AniList had as
+is the winner's as of the title's snapshot, and it called 81 shows airing that AniList had as
 finished, Yu-Gi-Oh! Go Rush!! a year and a half after its finale. The warehouse's latest-title view
 corrects `status` from AniList's answer, keeping the sources' own as `merged_status`, so every
 list, count and page agrees; a title page shows MAL's weekly slot only while a show is airing.
+Answers and episodes are placed on titles by AniList id, then MAL id - and for a title only Kitsu
+lists, by the MAL id Kitsu maps it to, where no other title carries it and neither AniList nor MAL
+knows the title under another id.
 Each daily fetch writes one current file for the views to read, so a query costs the same on day
 300 as on day one.
 

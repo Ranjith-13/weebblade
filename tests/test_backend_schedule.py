@@ -249,3 +249,80 @@ def test_before_any_check_the_status_is_the_sources_and_the_shape_is_the_same(wo
     title = client.get(f"/anime/{ids[0]}").json()
 
     assert (title["status"], title["merged_status"], title["anilist_status"]) == ("current", "current", None)
+
+
+# --- Titles no AniList or MAL row names, placed by the MAL id Kitsu maps them to ---------
+
+@pytest.fixture
+def mapped(tmp_path, monkeypatch):
+    """Titles only Kitsu lists, each carrying the MAL id Kitsu maps it to - all
+    the status check can ask AniList about them by."""
+    monkeypatch.setattr(schedule_module, "now", lambda: NOW.timestamp())
+    data = tmp_path / "data"
+    keys = [["kitsu:3"], ["kitsu:4"], ["kitsu:5"], ["kitsu:6", "mal:61"], ["kitsu:7", "anilist:7"]]
+    ids, registry, _ = assign(keys, Registry(), "2026-09-14")
+    save(data, registry)
+    catalogue = [
+        {"source": "kitsu", "source_id": k[0].split(":")[1], "wb_id": wb_id, "source_keys": k, "mal_id": mal_id,
+         "title_english": f"Kitsu {k[0]}", "title_romaji": None, "format": "TV", "poster_url": None,
+         "score_100": None, "status": "current", "season": "FALL", "season_year": 2026, "run_date": "2026-09-14"}
+        for k, wb_id, mal_id in zip(keys, ids, [
+            30,  # Dongitsune Season 2's case
+            40, 40,  # two titles Kitsu maps to one id
+            60,  # MAL knows this one as 61
+            70,  # and AniList this one as 7
+        ])
+    ]
+    path = data / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-09-14" / "p.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist(catalogue), path)
+    _write_airing(data, "2026-09-14", [_episode(300, 2, _at(16, 23), mal=30), _episode(400, 1, _at(16, 22), mal=40)])
+    db = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data, db)
+
+    def override():
+        con = duckdb.connect(str(db), read_only=True)
+        try:
+            yield con
+        finally:
+            con.close()
+
+    app.dependency_overrides[get_db] = override
+    yield TestClient(app), ids, data
+    app.dependency_overrides.clear()
+
+
+def test_a_title_only_kitsu_lists_is_placed_by_the_mal_id_kitsu_maps_it_to(mapped):
+    """No AniList or MAL key names it, so the check asked AniList by Kitsu's MAL
+    id. The answer, and the schedule, belong to it."""
+    client, ids, data = mapped
+    _check(data, "2026-09-14", [_said(300, "finished", mal=30, ended_on="2024-02-28")])
+
+    title = client.get(f"/anime/{ids[0]}").json()
+    on_schedule = {e["anilist_id"]: e["wb_id"] for e in client.get("/schedule").json()["episodes"]}
+
+    assert (title["status"], title["merged_status"], title["anilist_ended_on"]) == ("finished", "current", "2024-02-28")
+    assert [e["episode"] for e in title["upcoming_episodes"]] == [2]
+    assert on_schedule[300] == ids[0]
+
+
+def test_a_mal_id_kitsu_maps_two_titles_to_places_neither(mapped):
+    client, ids, data = mapped
+    _check(data, "2026-09-14", [_said(400, "finished", mal=40)])
+
+    statuses = [client.get(f"/anime/{wb_id}").json()["anilist_status"] for wb_id in ids[1:3]]
+    on_schedule = {e["anilist_id"]: e["wb_id"] for e in client.get("/schedule").json()["episodes"]}
+
+    assert statuses == [None, None]
+    assert on_schedule[400] is None
+
+
+def test_a_title_anilist_or_mal_knows_by_another_id_is_not_placed_by_kitsus(mapped):
+    """MAL files the first as 61 and AniList the second as 7. An AniList record
+    for MAL id 60 or 70 is some other work, whatever Kitsu says."""
+    client, ids, data = mapped
+    _check(data, "2026-09-14", [_said(600, "finished", mal=60), _said(700, "finished", mal=70)])
+
+    titles = [client.get(f"/anime/{wb_id}").json() for wb_id in ids[3:5]]
+
+    assert [(t["status"], t["anilist_status"]) for t in titles] == [("current", None), ("current", None)]

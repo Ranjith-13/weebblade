@@ -20,8 +20,9 @@ _VIEWS = {
 
 
 def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
-    """(Re)create views over the Parquet lake. Returns the view names that were
-    actually (re)created - a source/partition with no files yet is skipped with a
+    """(Re)create views over the Parquet lake, and the one small table that places
+    daily fetches (see _mapped_mal_ids). Returns the names that were actually
+    (re)created - a source/partition with no files yet is skipped with a
     warning rather than failing the whole refresh, since this runs even when some
     upstream sources are down.
     """
@@ -44,12 +45,18 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
         if has_registry:
             created += ["anime_identity", "anime_alias"]
 
+        # One row per title, as the sources have it; anime_media_latest is it
+        # with its status corrected.
+        titles = _latest_view_sql(con, has_registry, data_dir) if "anime_media" in created else None
+        mapped = _mapped_mal_ids(con, titles, has_registry)
+        created += mapped
+
         # Before anime_media_latest, which corrects its status from this.
-        status_view = _anilist_status_view(con, data_dir, has_registry)
+        status_view = _anilist_status_view(con, data_dir, has_registry, bool(mapped))
         created += status_view
 
-        if "anime_media" in created:
-            latest = _status_corrected(con, _latest_view_sql(con, has_registry, data_dir), bool(status_view))
+        if titles:
+            latest = _status_corrected(con, titles, bool(status_view))
             con.execute(f"CREATE OR REPLACE VIEW anime_media_latest AS {latest}")
             created.append("anime_media_latest")
             logger.info(
@@ -59,7 +66,7 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
             )
 
         created += _franchise_views(con, data_dir)
-        created += _airing_view(con, data_dir, has_registry)
+        created += _airing_view(con, data_dir, has_registry, bool(mapped))
     finally:
         con.close()
     return created
@@ -96,10 +103,11 @@ def _franchise_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> list[str
 
 
 def _current_placed(
-    con: duckdb.DuckDBPyConnection, view: str, name: str, data_dir: Path, has_registry: bool
+    con: duckdb.DuckDBPyConnection, view: str, name: str, data_dir: Path, has_registry: bool, mapped: bool
 ) -> list[str]:
     """A view over a daily fetch's current file, each row placed on the title it
-    belongs to: by AniList id, then MAL id. See ingestion.storage.write_daily.
+    belongs to: by AniList id, then MAL id, then the MAL id a title only Kitsu
+    lists is mapped to. See ingestion.storage.write_daily.
 
     The file is read per query, not when the view is made. These are fetched
     daily and the views are made weekly, and neither waits for the other: a new
@@ -110,8 +118,9 @@ def _current_placed(
 
     AniList id first, then MAL id: 13 of the 102 catalogue titles airing in the
     week first measured were missing from AniList's season listing, so only
-    the MAL id placed them. A row neither places has a null wb_id and is still
-    served - One Piece is on the schedule whether or not the catalogue holds it.
+    the MAL id placed them. A row none of the three places has a null wb_id and
+    is still served - One Piece is on the schedule whether or not the catalogue
+    holds it.
     """
     current = data_dir / "processed" / "current" / f"{name}.parquet"
     if not current.exists():
@@ -120,29 +129,72 @@ def _current_placed(
 
     rows = f"read_parquet('{current}')"
     if has_registry:
-        sql = (
-            f"SELECT l.*, COALESCE(a.wb_id, m.wb_id) AS wb_id FROM {rows} l "
-            "LEFT JOIN anime_identity a ON a.source_key = 'anilist:' || CAST(l.anilist_id AS VARCHAR) "
-            "LEFT JOIN anime_identity m ON m.source_key = 'mal:' || CAST(l.mal_id AS VARCHAR)"
-        )
+        placed, joins = ["a.wb_id", "m.wb_id"], [
+            "LEFT JOIN anime_identity a ON a.source_key = 'anilist:' || CAST(l.anilist_id AS VARCHAR)",
+            "LEFT JOIN anime_identity m ON m.source_key = 'mal:' || CAST(l.mal_id AS VARCHAR)",
+        ]
+        if mapped:
+            placed.append("k.wb_id")
+            joins.append("LEFT JOIN anime_mapped_mal_id k ON k.mal_id = CAST(l.mal_id AS BIGINT)")
+        sql = f"SELECT l.*, COALESCE({', '.join(placed)}) AS wb_id FROM {rows} l {' '.join(joins)}"
     else:
         sql = f"SELECT *, CAST(NULL AS VARCHAR) AS wb_id FROM {rows}"
     con.execute(f"CREATE OR REPLACE VIEW {view} AS {sql}")
     return [view]
 
 
-def _airing_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool) -> list[str]:
+def _mapped_mal_ids(con: duckdb.DuckDBPyConnection, titles: str | None, has_registry: bool) -> list[str]:
+    """The titles neither AniList nor MAL knows by key, by the MAL id they carry.
+
+    A title only Kitsu lists has no `mal:` key, since no MAL row carries it, but
+    Kitsu maps most titles to a MAL id and the merged row keeps it. The status
+    check asks AniList about such a title by that id (fetch_status.candidates),
+    and AniList answers - but nothing placed the answer. On 2026-09-14 that was
+    three of the 241 answers: Dongitsune Season 2, finished in February 2024,
+    and A Record of Mortal's Journey to Immortality Season 4 both went on
+    showing as airing.
+
+    Only titles with no AniList or MAL key at all: one they know under another
+    id is another work. And only where one title alone carries the id, because
+    Kitsu's mapping is not always MAL's - it gives some titles AniList's id
+    instead (see processing/matching.py).
+
+    The one table in the warehouse, made here rather than viewed. As a view it
+    derived every title again inside every request that reads
+    anime_media_latest, which the status check is joined into: a season went
+    from 13ms to 27ms. It changes only when the catalogue or the identities do,
+    and this runs straight after both.
+    """
+    columns = {row[0] for row in con.execute(f"DESCRIBE {titles}").fetchall()} if titles else set()
+    if not (has_registry and "mal_id" in columns):
+        con.execute("DROP TABLE IF EXISTS anime_mapped_mal_id")
+        return []
+    con.execute(
+        "CREATE OR REPLACE TABLE anime_mapped_mal_id AS "
+        "SELECT t.mal_id, t.wb_id FROM ("
+        "  SELECT CAST(mal_id AS BIGINT) AS mal_id, MIN(wb_id) AS wb_id, COUNT(*) AS n"
+        f"  FROM ({titles}) WHERE mal_id IS NOT NULL GROUP BY 1"
+        ") t WHERE t.n = 1 AND t.wb_id IS NOT NULL AND NOT EXISTS ("
+        "  SELECT 1 FROM anime_identity i WHERE i.wb_id = t.wb_id"
+        "  AND (i.source_key LIKE 'anilist:%' OR i.source_key LIKE 'mal:%'))"
+    )
+    return ["anime_mapped_mal_id"]
+
+
+def _airing_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool, mapped: bool) -> list[str]:
     """AniList's airing schedule. See ingestion/anilist/fetch_airing.py."""
-    return _current_placed(con, "anime_airing", "anilist_airing", data_dir, has_registry)
+    return _current_placed(con, "anime_airing", "anilist_airing", data_dir, has_registry, mapped)
 
 
-def _anilist_status_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool) -> list[str]:
+def _anilist_status_view(
+    con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool, mapped: bool
+) -> list[str]:
     """AniList's own status for the titles the sources call airing. See
     ingestion/anilist/fetch_status.py. Without identities there is nothing to
     place a check on, so no view."""
     if not has_registry:
         return []
-    return _current_placed(con, "anime_anilist_status", "anilist_status", data_dir, has_registry)
+    return _current_placed(con, "anime_anilist_status", "anilist_status", data_dir, has_registry, mapped)
 
 
 def _status_corrected(con: duckdb.DuckDBPyConnection, latest: str, has_status: bool) -> str:
@@ -150,7 +202,7 @@ def _status_corrected(con: duckdb.DuckDBPyConnection, latest: str, has_status: b
 
     The merged status is the winner's - Kitsu's, mostly - as of the snapshot a
     title was filed in, and only the current season is refetched, so it goes on
-    calling shows airing long after their finale: 79 on 2026-09-14, Yu-Gi-Oh! Go
+    calling shows airing long after their finale: 81 on 2026-09-14, Yu-Gi-Oh! Go
     Rush!! a year and a half after its last episode. AniList is asked daily about
     exactly the titles the sources call airing, and where it says one has
     stopped, that is what the catalogue says - in lists, on the browse grid's
