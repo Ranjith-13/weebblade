@@ -30,6 +30,24 @@ STREAMING_SERVICES = {
     "midnightpulp.com": "Midnight Pulp",
     "vrv.co": "VRV",
     "funimation.com": "Funimation",
+    # Hosts AniList's links brought in, first seen 2026-09-14. Several were one
+    # service under two names - play.max.com beside max.com, amazon.co.jp beside
+    # Prime Video - and so two chips in the browse filter.
+    "max.com": "Max",
+    "amazon.co.jp": "Prime Video",
+    "bilibili.com": "Bilibili",
+    "oceanveil.net": "OceanVeil",
+    "adultswim.com": "Adult Swim",
+    # A different company from Hulu, with a different catalogue: its own name.
+    "hulu.jp": "Hulu Japan",
+    "v.qq.com": "Tencent Video",
+    "nicovideo.jp": "Niconico",
+    "viki.com": "Viki",
+    "vimeo.com": "Vimeo",
+    "b-ch.com": "Bandai Channel",
+    "starplus.com": "Star+",
+    "disneynow.com": "DisneyNOW",
+    "coolmic.me": "Coolmic",
 }
 
 
