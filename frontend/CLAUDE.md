@@ -279,14 +279,17 @@ does. Two places use it:
   airdate, the MAL slot block below it is shown instead, caveat and all - **but only while the
   show is airing** (`isAiring`). MAL keeps the slot on a finished show, and 986 finished titles
   counted down to a "next slot" for a series that was over.
-- **AniList settles whether a show is still airing.** The catalogue's status is the merge
+- **AniList settles whether a show is still airing, in the warehouse.** The merged status is the
   winner's as of the title's snapshot, so it calls shows airing long after their finale. The daily
-  DAG asks AniList about exactly the titles the catalogue calls airing (`anilist_status` on a
-  title); where AniList says finished, cancelled or on hiatus, the slot goes and the Status fact
-  says "Finished, per AniList" - naming the source, because every other field still comes from
-  the ones that disagree. The first check hid 34 slots, Yu-Gi-Oh! Go Rush!! (finished March 2025)
-  among them; 80 of the 1,100 remain. Lists do not carry the check, so browse plates and the
-  front page's "Airing now" count still use the catalogue's status.
+  DAG asks AniList about exactly the titles the sources call airing, and `anime_media_latest`
+  corrects `status` from the answer, so every list agrees: browse's airing tabs and the front
+  page's counts as much as the title page. `merged_status` keeps what the sources said;
+  `anilist_status` is AniList's own word. A hiatus leaves `status` "current" (the series is
+  running, and there is no shared word for a pause), which is why "airing" in the frontend means
+  `isAiring()`, not `status === "current"` - use it everywhere. Where AniList overrules the
+  sources, the Status fact says "Finished, per AniList", naming the source, because every other
+  field still comes from the ones that disagree. The first check hid 34 slots, Yu-Gi-Oh! Go
+  Rush!! (finished March 2025) among them; 80 of the 1,100 remain.
 - **`/schedule`** is the next seven days of `GET /schedule`, one column per day in Japan. Each row
   is the time in Tokyo with its countdown under it, then the title, episode, format and the
   reader's own time. Shows the catalogue does not hold (One Piece, Detective Conan, long-runners

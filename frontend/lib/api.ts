@@ -5,6 +5,7 @@ import {
   API_BASE,
   ApiError,
   dedupeAnime,
+  isAiring,
   isTv,
   jstDayKey,
   type Anime,
@@ -287,13 +288,13 @@ export async function getSeason(key?: string): Promise<Season> {
     total: items.length,
     rawTotal: rows.length,
     scored: items.filter((a) => a.score_100 !== null).length,
-    airing: items.filter((a) => a.status === "current").length,
+    airing: items.filter(isAiring).length,
     withArtwork: items.filter((a) => a.poster_url).length,
     label: target?.label ?? null,
     key: target?.key ?? null,
     tvTotal: tv.length,
     tvScored: tv.filter((a) => a.score_100 !== null).length,
-    tvAiring: tv.filter((a) => a.status === "current").length,
+    tvAiring: tv.filter(isAiring).length,
     nonTvTotal: items.length - tv.length,
   };
 }

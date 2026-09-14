@@ -100,10 +100,13 @@ so the daily fetch never opens the warehouse to write. The site shows it as a co
 airing title's page and a week of dated episodes on `/schedule`, including long-runners older than
 the catalogue, like One Piece.
 
-The same DAG asks AniList whether the titles the catalogue calls airing still are. The catalogue's
-status is the merge winner's as of the title's snapshot, and it called 79 shows airing that AniList
-had as finished, Yu-Gi-Oh! Go Rush!! a year and a half after its finale. A title page trusts
-AniList here, and shows MAL's weekly slot only while a show is actually airing.
+The same DAG asks AniList whether the titles the sources call airing still are. The merged status
+is the winner's as of the title's snapshot, and it called 79 shows airing that AniList had as
+finished, Yu-Gi-Oh! Go Rush!! a year and a half after its finale. The warehouse's latest-title view
+corrects `status` from AniList's answer, keeping the sources' own as `merged_status`, so every
+list, count and page agrees; a title page shows MAL's weekly slot only while a show is airing.
+Each daily fetch writes one current file for the views to read, so a query costs the same on day
+300 as on day one.
 
 ### Franchises
 

@@ -8,10 +8,10 @@ on 2026-09-14 the catalogue called 79 titles airing that AniList had as
 finished, some of them for a year or more, and the page counted those with a
 MAL slot down to one that would not come again.
 
-So each day this asks AniList about exactly the titles the catalogue calls
-airing, and the page believes AniList when it says a show has stopped. The
-rest need no asking: a title the catalogue already calls finished shows no
-slot on its own account. The first check asked about 288 titles in seven
+So each day this asks AniList about exactly the titles the sources call
+airing, and the warehouse believes AniList when it says a show has stopped
+(processing/duckdb_catalog._status_corrected). The rest need no asking: a
+title the sources already call finished is finished everywhere. The first check asked about 288 titles in seven
 requests; AniList answered for 241 and had 79 of them finished, 34 with a MAL
 slot the page was counting down to - Yu-Gi-Oh! Go Rush!!, finished in March
 2025, among them.

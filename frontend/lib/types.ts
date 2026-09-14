@@ -68,17 +68,16 @@ export type Anime = {
    *  a single title carries them (GET /anime/{wb_id}); lists leave it empty.
    *  Several rather than one so a cached copy can skip those that have aired. */
   upcoming_episodes: AiringEpisode[];
-  /** AniList's own status from its daily check, for a title the catalogue calls
-   *  airing; null otherwise and in lists. */
-  anilist_status: AniListStatus | null;
-};
-
-/** Mirrors backend/app/schemas.py:AniListStatus. `status` is finished, current,
- *  upcoming, or one the catalogue has no word for: cancelled, hiatus. */
-export type AniListStatus = {
-  status: string | null;
-  ended_on: string | null;
-  checked_on: string;
+  /** `status` is checked against AniList in the warehouse: where the sources
+   *  call a title airing and AniList's daily check says it has finished or not
+   *  yet aired, `status` says so. `merged_status` is what the sources said.
+   *  The rest is AniList's own answer, for titles the sources call airing and
+   *  null otherwise - finished, current, upcoming, or cancelled or hiatus. A
+   *  hiatus leaves `status` "current" but means there is no weekly slot. */
+  merged_status: string | null;
+  anilist_status: string | null;
+  anilist_ended_on: string | null;
+  anilist_checked_on: string | null;
 };
 
 /** Mirrors backend/app/schemas.py:AiringEpisode. `airing_at` is ISO 8601 UTC. */
@@ -599,12 +598,11 @@ export function countdown(ms: number, short = false): string {
 
 /* Whether a title is airing, and how to say so.
  *
- * The catalogue's status is the merge winner's - usually Kitsu's - as of the
- * snapshot the title was filed in, and only the current season is refetched,
- * so it goes on calling a show airing long after its finale: 79 titles on
- * 2026-09-14, some for a year or more. AniList is asked daily about exactly
- * the titles the catalogue calls airing, and where it says a show has stopped,
- * that is believed. */
+ * `status` already carries AniList's word where it overrules the sources - the
+ * warehouse applies it (processing/duckdb_catalog._status_corrected) - so a
+ * finished show reads "finished" in every list. What is left here is the case
+ * the shared vocabulary cannot say: a show on hiatus is still "current", but
+ * it is not airing this week, and no weekly slot should be offered for it. */
 const STOPPED: Record<string, string> = {
   finished: "Finished",
   cancelled: "Cancelled",
@@ -613,18 +611,16 @@ const STOPPED: Record<string, string> = {
 };
 
 export function isAiring(a: Anime): boolean {
-  if (a.status !== "current") return false;
-  const checked = a.anilist_status?.status;
-  return !checked || checked === "current";
+  return a.status === "current" && (!a.anilist_status || a.anilist_status === "current");
 }
 
-/** The Status fact. Where AniList overrules the catalogue it says so, because
- *  every other field on the page still comes from the sources that disagree. */
+/** The Status fact. Where AniList overrules the sources it says so, because
+ *  every other field on the page still comes from the sources that disagree.
+ *  AniList is only asked about titles the sources call airing, so any other
+ *  answer from it is an overruling. */
 export function statusLabel(a: Anime): string {
-  const checked = a.anilist_status?.status;
-  if (a.status === "current" && checked && checked !== "current" && STOPPED[checked]) {
-    return `${STOPPED[checked]}, per AniList`;
-  }
+  const said = a.anilist_status;
+  if (said && said !== "current" && STOPPED[said]) return `${STOPPED[said]}, per AniList`;
   if (a.status === "current") return "Airing now";
   if (a.status === "finished") return "Finished";
   // upcoming, unreleased, tba: not aired yet, whatever each source calls it.
