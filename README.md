@@ -66,7 +66,8 @@ under different transliterations, and don't agree which season a title starts in
 Consolidation is a **field-level** merge over the whole catalogue, not a union of rows:
 
 - Rows are one title when they share a MAL id, or an exact title with the same format
-  and year, or an exact title and premiere date. Every row's own titles count, and matches
+  and year (ONA, OVA and special counting as one - the sources file a short release under
+  whichever they like), or an exact title and premiere date. Every row's own titles count, and matches
   join transitively, so adding a source can only join titles: an AniList row carrying
   MAL's id and Kitsu's title joined 47 pairs the catalogue had listed twice. Two rows of
   one source mapped to different MAL ids are never joined by a title - MAL's two parts of
@@ -74,7 +75,8 @@ Consolidation is a **field-level** merge over the whole catalogue, not a union o
 - Per column, the first non-null value in source-priority order wins — so a title takes
   its streaming links and cover art from Kitsu and its studios from MAL in the same row.
   AniList ranks below both: it joined after five years of the catalogue were built from
-  them, so it fills gaps (75 scores, 237 studio lists) rather than replacing what they said.
+  them, so it fills gaps rather than replacing what they said - 75 scores and 237 studio
+  lists, and banner art, trailers and streaming links for 529, 667 and 629 more titles.
 - Genres are the exception: tags add, so a title carries every source's genres, Kitsu's
   first. Taking one winner's list dropped MAL's tags wherever Kitsu also held the show.
   This works only because MAL's genre names are mapped onto Kitsu's at ingest, so
@@ -225,7 +227,7 @@ The frontend is separate — see [frontend/README.md](frontend/README.md).
 
 Ingestion → merge → warehouse → both AI features → API → frontend → CI/CD are all live
 and verified end-to-end against real data: twenty seasons (Fall 2021 to Summer 2026) and
-6,148 titles from three live sources, a franchise graph over 895 franchises, and digests
+6,145 titles from three live sources, a franchise graph over 895 franchises, and digests
 publishing weekly.
 
 Known gaps: Jikan is down upstream (the pipeline degrades rather than fails). The
