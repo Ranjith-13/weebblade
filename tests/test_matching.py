@@ -165,3 +165,25 @@ def test_a_series_its_film_and_its_song_still_do_not():
     same = dict(english="Same Name", year=2026)
     for a, b in (("TV", "ONA"), ("movie", "OVA"), ("music", "special")):
         assert len(_titles([_row("kitsu", "1", fmt=a, **same), _row("mal", "2", 2, fmt=b, **same)])) == 2, (a, b)
+
+
+def test_a_premiere_matches_on_the_romaji_as_well_as_the_display_title():
+    """The War of the Rohirrim: one romaji and one premiere date in both sources,
+    but Kitsu files it under 2025 with no English title, and AniList under 2024
+    in English. The year keeps the title rules apart; the date does not."""
+    romaji, date = "The Lord of the Rings: Rohan no Tatakai", (2024, 12, 13)
+    rows = [_row("kitsu", "44686", romaji=romaji, fmt="movie", year=2025, date=date),
+            _row("anilist", "185613", romaji=romaji, english="The Lord of the Rings: The War of the Rohirrim",
+                 fmt="movie", year=2024, date=date)]
+
+    assert len(_titles(rows)) == 1
+
+
+def test_two_films_released_the_same_day_under_different_titles_stay_two():
+    """The two Inazuma Eleven films both premiered on 27 December 2024."""
+    rows = [_row("mal", "59709", 59709, romaji="Inazuma Eleven: Soushuuhen - Densetsu no Kickoff", fmt="movie",
+                 year=2024, date=(2024, 12, 27)),
+            _row("mal", "59710", 59710, romaji="Inazuma Eleven: Aratanaru Eiyuutachi no Joshou", fmt="movie",
+                 year=2024, date=(2024, 12, 27))]
+
+    assert len(_titles(rows)) == 2

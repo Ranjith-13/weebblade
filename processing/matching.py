@@ -19,14 +19,19 @@ THE FOUR RULES
    such live pairs agree on the English title. The fallback matters: two of
    them have no English title on the Kitsu side, and match Kitsu's romaji
    against MAL's English.
-4. Display title + exact premiere date, with no format, for pairs the sources
-   file under different formats - `special` against `ONA` for the Re:Zero
+4. Display title or romaji + exact premiere date, with no format or year, for
+   pairs the sources file differently - `special` against `ONA` for the Re:Zero
    break-time shorts, eight live pairs. A same-day premiere under an identical
    title is stronger evidence than format would be. All three date parts are
    required; a partial date would match far too much. Three live pairs whose
    sources disagree on the date as well, by one to four days, are left apart:
    a window wide enough to bridge them is wide enough to join a series to its
-   compilation film.
+   compilation film. The romaji counts as well as the display title: The Lord
+   of the Rings: The War of the Rohirrim premiered on 13 December 2024 under
+   one romaji in both sources, but Kitsu files it under 2025 and titles it only
+   in romaji, and AniList in English. Measured over every live row, the romaji
+   joined nine such pairs, the two Inazuma Eleven films of 27 December 2024
+   each to its own twin and not to each other.
 
 Rules 2-4 are deliberately narrow: an exact (case- and whitespace-insensitive)
 title AND the same format AND the same year, or the same title AND the same
@@ -141,8 +146,9 @@ def keys(row: dict[str, Any]) -> list[tuple[str, str]]:
             out.append(("display", f"{display}|{fmt}|{year}"))
 
     date = (row.get("start_year"), row.get("start_month"), row.get("start_day"))
-    if display and None not in date:
-        out.append(("premiere", f"{display}|{date[0]}-{date[1]}-{date[2]}"))
+    if None not in date:
+        for title in {display, romaji} - {None}:
+            out.append(("premiere", f"{title}|{date[0]}-{date[1]}-{date[2]}"))
     return out
 
 
