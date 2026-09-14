@@ -37,6 +37,15 @@ whole catalogue, because sources disagree about which season a title starts
 in, and the year keeps apart the generic names music videos and specials
 reuse from one year to the next.
 
+One widening of "the same format": ONA, OVA and special count as one. The
+sources file a short release under whichever of the three they like, and it
+was the last thing keeping pairs apart - Plus-Sized Elf Specials (ONA against
+special), Fuyu no Okurimono (ONA against special, under its English title on
+Kitsu), the fourth Opantsu OVA (ONA against OVA). Measured over every live row
+it joined exactly those three and refused one more key, which named two MAL
+entries. TV, film and music stay apart: that is what keeps a series from its
+compilation film, and a song from the show it is the theme of.
+
 
 EVERY ROW'S OWN TITLES, JOINED TRANSITIVELY
 
@@ -109,6 +118,10 @@ def _clean(title: str | None) -> str | None:
     return title or None
 
 
+# The short forms the sources file interchangeably; see "One widening" above.
+_SHORT_FORMS = {"ona", "ova", "special"}
+
+
 def keys(row: dict[str, Any]) -> list[tuple[str, str]]:
     """Every (rule, key) this row can be matched on."""
     out = []
@@ -116,6 +129,8 @@ def keys(row: dict[str, Any]) -> list[tuple[str, str]]:
         out.append(("mal_id", str(row["mal_id"])))
 
     fmt = _clean(row.get("format"))
+    if fmt in _SHORT_FORMS:
+        fmt = "short"
     year = row.get("season_year")
     romaji = _clean(row.get("title_romaji"))
     display = _clean(row.get("title_english")) or romaji

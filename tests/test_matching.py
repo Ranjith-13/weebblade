@@ -72,7 +72,7 @@ def test_a_name_shared_by_two_works_of_one_source_joins_neither():
     groups, report = group(rows)
 
     assert _titles(rows) == [["kitsu:45779", "mal:50849"], ["kitsu:47158", "mal:53498"]]
-    assert report.ambiguous == ["display:the tale of the spirit stone|ona|2022"]
+    assert report.ambiguous == ["display:the tale of the spirit stone|short|2022"]
 
 
 def test_two_music_videos_with_one_name_stay_two():
@@ -121,8 +121,8 @@ def test_the_narrow_rules_stay_narrow():
     assert len(_titles([_row("kitsu", "1", year=2026, **same), _row("mal", "2", 2, year=2011, **same)])) == 2
     assert len(_titles([_row("kitsu", "1", fmt=None, **same), _row("mal", "2", 2, fmt=None, **same)])) == 2
     # Different formats, so only the premiere date could join these, and it is partial.
-    assert len(_titles([_row("kitsu", "1", fmt="ONA", date=(2026, None, None), **same),
-                        _row("mal", "2", 2, fmt="special", date=(2026, None, None), **same)])) == 2
+    assert len(_titles([_row("kitsu", "1", fmt="TV", date=(2026, None, None), **same),
+                        _row("mal", "2", 2, fmt="movie", date=(2026, None, None), **same)])) == 2
     # A blank title is no title, however it is padded.
     assert len(_titles([_row("kitsu", "1", romaji=" "), _row("mal", "2", 2, romaji="  ")])) == 2
 
@@ -150,3 +150,18 @@ def test_the_titles_do_not_depend_on_the_order_rows_arrive_in():
         shuffled = rows[:]
         random.Random(seed).shuffle(shuffled)
         assert group(shuffled)[0] == expected
+
+
+def test_the_short_forms_the_sources_file_interchangeably_count_as_one_format():
+    """Plus-Sized Elf Specials: an ONA to AniList, a special to Kitsu, a day apart."""
+    title = "Plus-Sized Elf Specials"
+    rows = [_row("anilist", "179126", 59820, english=title, fmt="ONA", year=2024, date=(2024, 10, 6)),
+            _row("kitsu", "49034", english=title, fmt="special", year=2024, date=(2024, 10, 5))]
+
+    assert _titles(rows) == [["anilist:179126", "kitsu:49034"]]
+
+
+def test_a_series_its_film_and_its_song_still_do_not():
+    same = dict(english="Same Name", year=2026)
+    for a, b in (("TV", "ONA"), ("movie", "OVA"), ("music", "special")):
+        assert len(_titles([_row("kitsu", "1", fmt=a, **same), _row("mal", "2", 2, fmt=b, **same)])) == 2, (a, b)
