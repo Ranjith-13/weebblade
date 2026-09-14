@@ -64,6 +64,42 @@ export type Anime = {
   wb_id: string | null;
   /** Every source row this title was assembled from, as "source:source_id". */
   source_keys: string[];
+  /** The next few episodes from AniList's airing schedule, soonest first. Only
+   *  a single title carries them (GET /anime/{wb_id}); lists leave it empty.
+   *  Several rather than one so a cached copy can skip those that have aired. */
+  upcoming_episodes: AiringEpisode[];
+};
+
+/** Mirrors backend/app/schemas.py:AiringEpisode. `airing_at` is ISO 8601 UTC. */
+export type AiringEpisode = {
+  episode: number | null;
+  airing_at: string;
+  /** The day AniList's schedule was fetched; it is refetched daily. */
+  fetched_on: string | null;
+};
+
+/** Mirrors backend/app/schemas.py:ScheduledEpisode. */
+export type ScheduledEpisode = {
+  /** Null for a show the catalogue does not hold (One Piece, Detective Conan):
+   *  it is on the schedule as AniList describes it, and links there. */
+  wb_id: string | null;
+  anilist_id: number;
+  mal_id: number | null;
+  title: string | null;
+  format: string | null;
+  poster_url: string | null;
+  score_100: number | null;
+  episode: number | null;
+  episodes: number | null;
+  airing_at: string;
+};
+
+export type Schedule = {
+  /** Midnight today in Tokyo, as ISO 8601 UTC, and `days` after it. */
+  start: string;
+  end: string;
+  fetched_on: string | null;
+  episodes: ScheduledEpisode[];
 };
 
 export type AnimeListResponse = {
@@ -447,48 +483,6 @@ const WEEKDAYS = [
   "saturday",
 ];
 
-/* The week as a schedule is read: Monday first.
- *
- * WEEKDAYS above is Sunday-first because its index has to line up with
- * getUTCDay(). That is arithmetic, not presentation, and the two should not be
- * the same list. */
-export const SCHEDULE_DAYS = [
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-  "sunday",
-] as const;
-
-export function weekdayLabel(day: string): string {
-  return day.charAt(0).toUpperCase() + day.slice(1);
-}
-
-export function hasBroadcastSlot(a: Anime): boolean {
-  return slotMinutes(a) !== null;
-}
-
-/** Minutes past midnight JST, for ordering a day's listings. Null when the slot
- *  is missing or unparseable, which is also what makes it the has-a-slot test.
- *
- *  Sorted chronologically within the calendar day, so a 00:26 broadcast opens
- *  its day rather than closing the previous one. Japanese listings often bill
- *  that as the previous evening's late-night block, but the source reports a
- *  calendar day and re-mapping it here would be this site inventing a
- *  convention the data never stated. */
-export function slotMinutes(a: Anime): number | null {
-  const day = a.broadcast_day?.trim().toLowerCase();
-  if (!day || !WEEKDAYS.includes(day) || !a.broadcast_time) return null;
-
-  const [hours, minutes] = a.broadcast_time.split(":").map(Number);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
-  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
-
-  return hours * 60 + minutes;
-}
-
 /** The next instant the show's slot comes round, or null if the slot is
  *  unparseable. Japan does not observe DST, so a fixed +09:00 is exact. */
 export function nextAiring(
@@ -518,6 +512,78 @@ export function nextAiring(
   if (slot.getTime() <= jstNow.getTime()) slot.setUTCDate(slot.getUTCDate() + 7);
 
   return new Date(slot.getTime() - JST_OFFSET_MS);
+}
+
+/* ---------------------------------------------------------------------------
+ * Airdates, from AniList's schedule.
+ *
+ * Written out by hand rather than with Intl, because these render on the server
+ * AND hydrate in the browser, and the two do not agree: Node's ICU and a
+ * browser's abbreviate September differently ("Sept" against "Sep"), which is a
+ * hydration mismatch waiting on the calendar. Fixed names cannot drift.
+ *
+ * Japan's times, because that is the calendar broadcasts keep. The reader's own
+ * time is added in the browser, where their timezone is known.
+ * ------------------------------------------------------------------------ */
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** The instant shifted so its UTC fields read as the wall clock in Tokyo. */
+function inJapan(iso: string): Date {
+  return new Date(Date.parse(iso) + JST_OFFSET_MS);
+}
+
+/** "2026-09-14": the day in Tokyo an instant falls on. */
+export function jstDayKey(iso: string): string {
+  return inJapan(iso).toISOString().slice(0, 10);
+}
+
+/** "22:30" in Tokyo. */
+export function jstClock(iso: string): string {
+  return inJapan(iso).toISOString().slice(11, 16);
+}
+
+/** "Monday 14 September, 20:57 JST". */
+export function jstAirdate(iso: string): string {
+  const d = inJapan(iso);
+  return `${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_NAMES[d.getUTCMonth()]}, ${jstClock(iso)} JST`;
+}
+
+/** A day key as a schedule column is headed: weekday, and "14 Sep". */
+export function dayKeyLabel(key: string): { weekday: string; date: string } {
+  const d = new Date(`${key}T00:00:00Z`);
+  return {
+    weekday: DAY_NAMES[d.getUTCDay()],
+    date: `${d.getUTCDate()} ${MONTH_NAMES[d.getUTCMonth()].slice(0, 3)}`,
+  };
+}
+
+/** "14 September", for a YYYY-MM-DD date. */
+export function calendarDate(key: string): string {
+  const d = new Date(`${key}T00:00:00Z`);
+  return `${d.getUTCDate()} ${MONTH_NAMES[d.getUTCMonth()]}`;
+}
+
+/** How long until an episode airs. Minute resolution: nothing here is shown
+ *  finer, and a per-second tick would re-render for nothing. `short` is for
+ *  the schedule's rows, where a hundred of them sit side by side. */
+export function countdown(ms: number, short = false): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (short) {
+    if (days >= 1) return `${days}d ${hours % 24}h`;
+    if (hours >= 1) return `${hours}h ${minutes % 60}m`;
+    return `${minutes}m`;
+  }
+  if (days >= 1) return hours % 24 ? `${unit(days, "day")} ${unit(hours % 24, "hour")}` : unit(days, "day");
+  if (hours >= 1) return minutes % 60 ? `${unit(hours, "hour")} ${unit(minutes % 60, "minute")}` : unit(hours, "hour");
+  return minutes >= 1 ? unit(minutes, "minute") : "under a minute";
 }
 
 /** "Saturdays 23:00 JST" - the slot itself, which is what we actually know. */

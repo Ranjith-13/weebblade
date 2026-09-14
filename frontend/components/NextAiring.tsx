@@ -18,6 +18,9 @@ import { nextAiring } from "@/lib/types";
  * regular weekly slot projected forward, and a broadcast that slips will not be
  * reflected here. The wording says "next slot" for that reason, and the caveat
  * is on the page rather than buried in a tooltip.
+ *
+ * The fallback now: a title AniList has an airdate for shows EpisodeCountdown
+ * (components/Airing.tsx) instead.
  */
 export function NextAiring({
   broadcastDay,

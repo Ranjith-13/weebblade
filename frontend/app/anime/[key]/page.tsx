@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound, permanentRedirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
+import { EpisodeCountdown } from "@/components/Airing";
 import { FranchiseSection } from "@/components/Franchise";
 import { ParallaxPoster } from "@/components/motion/ParallaxPoster";
 import { NextAiring } from "@/components/NextAiring";
@@ -16,6 +17,8 @@ import {
   isKnown,
   isTv,
   broadcastSlotLabel,
+  calendarDate,
+  jstAirdate,
   secondaryTitle,
   sourceMaterialLabel,
   SCORE_MAX,
@@ -237,6 +240,10 @@ async function AnimeDetail({
   const watch = streamingLinks(anime);
   const links = sourceLinks(anime);
   const slot = broadcastSlotLabel(anime.broadcast_day, anime.broadcast_time);
+  // AniList's dated episodes, with Japan's time rendered here so the server's
+  // markup and the browser's first render agree on it.
+  const airdates = (anime.upcoming_episodes ?? []).map((e) => ({ ...e, label: jstAirdate(e.airing_at) }));
+  const checked = anime.upcoming_episodes?.[0]?.fetched_on;
 
   return (
     <>
@@ -389,7 +396,19 @@ async function AnimeDetail({
           ))}
         </dl>
 
-        {slot && (
+        {airdates.length > 0 ? (
+          /* A confirmed airdate, episode by episode, where AniList has one. It
+             supersedes MAL's slot below: a slot says when a show usually airs,
+             this says when this week's episode does, delays included as of
+             the last daily check. */
+          <div className="mt-5 border-l-2 border-data pl-4">
+            <EpisodeCountdown episodes={airdates} total={anime.episodes} />
+            <p className="meta mt-1 max-w-[46ch] !leading-[1.6]">
+              From AniList&apos;s airing schedule{checked ? `, checked ${calendarDate(checked)}` : ""}. A
+              broadcast that slips is picked up at the next daily check.
+            </p>
+          </div>
+        ) : slot && (
           <div className="mt-5 border-l-2 border-data pl-4">
             <p className="text-[0.9rem]">
               Airs <span className="font-semibold">{slot}</span>
