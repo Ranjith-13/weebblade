@@ -75,8 +75,11 @@ def changes(
     grouped = _GROUPED.format(where="run_date > ?")
     rows = _read(
         con,
-        f"SELECT c.*, COALESCE(m.title_english, m.title_romaji) AS title, m.format, m.poster_url, "
-        f"m.season, m.season_year FROM ({grouped}) c JOIN anime_media_latest m ON m.wb_id = c.wb_id",
+        # Cast: a title column null in every row of a snapshot reads as INTEGER,
+        # and the DuckDB CI pins refuses to COALESCE that with VARCHAR.
+        f"SELECT c.*, COALESCE(CAST(m.title_english AS VARCHAR), CAST(m.title_romaji AS VARCHAR)) AS title, "
+        f"m.format, m.poster_url, m.season, m.season_year "
+        f"FROM ({grouped}) c JOIN anime_media_latest m ON m.wb_id = c.wb_id",
         [since],
     )
     # By kind of change, newest first within each, then by title.

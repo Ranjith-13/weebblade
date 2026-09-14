@@ -100,7 +100,7 @@ STATS_QUERIES = {
 CHANGES_THIS_WEEK = """
     WITH newest AS (SELECT MAX(run_date) AS d FROM anime_change)
     SELECT c.field, c.old, c.new, ANY_VALUE(c.label) AS label, LIST(DISTINCT c.source) AS sources,
-           COALESCE(m.title_english, m.title_romaji) AS title, m.format
+           COALESCE(CAST(m.title_english AS VARCHAR), CAST(m.title_romaji AS VARCHAR)) AS title, m.format
     FROM anime_change c
     JOIN anime_media_latest m ON m.wb_id = c.wb_id
     CROSS JOIN newest
