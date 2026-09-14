@@ -10,10 +10,9 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
 
   images: {
-    // Poster hosts, one per ingestion source. Kitsu is the only one serving data
-    // today (AniList and Jikan are both down upstream), but rows from the other
-    // two will carry their own hosts once those recover - configured now so that
-    // doesn't surface later as silently broken images.
+    // Poster hosts, one per ingestion source. Configured before AniList and MAL
+    // were serving data, so that their rows would not arrive as silently broken
+    // images. Jikan, still down upstream, serves MAL's images.
     remotePatterns: [
       { protocol: "https", hostname: "media.kitsu.app" },
       { protocol: "https", hostname: "s4.anilist.co" },

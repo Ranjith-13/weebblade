@@ -360,10 +360,14 @@ export function joinSources(sources: string[]): string {
  * destinations - Kitsu for the artwork and streaming links this site already
  * shows, MAL for the list and forum most readers actually use.
  *
- * Kitsu leads, matching the source priority everywhere else. Measured over 480
- * live titles: 260 have a slug, 405 have a mal_id, 185 have both, and none have
- * neither - so every title gets at least one working link. Only Kitsu ever emits
- * a slug, so its presence is enough to identify the destination.
+ * Kitsu leads, matching the source priority everywhere else. Only Kitsu ever
+ * emits a slug, so its presence is enough to identify the destination.
+ *
+ * AniList is read from the title's source keys, since it contributes no column
+ * of its own that names it. It is also what keeps every title reachable: when
+ * AniList joined (2026-09-14) it brought 50 titles with neither a Kitsu slug nor
+ * a MAL id. Measured over all 6,148: 3,881 have a slug, 5,551 a mal_id, 2,119 an
+ * AniList key, and none have none of the three.
  */
 export function sourceLinks(a: Anime): { label: string; href: string }[] {
   const links: { label: string; href: string }[] = [];
@@ -372,6 +376,12 @@ export function sourceLinks(a: Anime): { label: string; href: string }[] {
     links.push({
       label: "View on MyAnimeList",
       href: `https://myanimelist.net/anime/${a.mal_id}`,
+    });
+  const anilist = a.source_keys.find((key) => key.startsWith("anilist:"));
+  if (anilist)
+    links.push({
+      label: "View on AniList",
+      href: `https://anilist.co/anime/${anilist.slice("anilist:".length)}`,
     });
   return links;
 }
