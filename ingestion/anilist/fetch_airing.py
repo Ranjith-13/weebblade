@@ -17,9 +17,10 @@ One query covers every airing show at once - the schedule is a list of
 episodes, not a property of titles - so it reaches what the season fetch
 cannot: a two-cour show filed under last season, and long-runners older than
 the catalogue (One Piece, Detective Conan), which keep a place on the schedule
-even without a title page here. Measured 2026-09-14: 280 episodes in 21 days,
-six requests. That is cheap enough to run daily, which matters: schedules
-slip, and a countdown to a delayed episode is worse than none.
+even without a title page here. Measured 2026-09-14: 540 episodes in the 42
+days ahead and one behind, eleven requests. That is cheap enough to run daily,
+which matters: schedules slip, and a countdown to a delayed episode is worse
+than none.
 
 Adult titles are dropped, as the season query leaves them out.
 """
@@ -41,7 +42,11 @@ from .transform import _FORMATS
 
 logger = logging.getLogger(__name__)
 
-WINDOW_DAYS = 21
+# Six weeks, so a show on a break still has its next date. At 21 days BLEACH's
+# Thousand-Year Blood War, five weeks from its next episode, had none, so its
+# page would fall back to MAL's weekly slot and count down to a Saturday it
+# will not air on.
+WINDOW_DAYS = 42
 # And a day back. A schedule's today runs from midnight in Tokyo, while the
 # daily run is at 15:00 there, and 47 of the first week's 105 episodes air
 # before 15:00 - 23 of them between midnight and 4am. The first live fetch

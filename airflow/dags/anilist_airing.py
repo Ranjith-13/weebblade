@@ -14,7 +14,7 @@ DATA_DIR = Path("/data")
 
 @dag(
     dag_id="anilist_airing",
-    # Daily, apart from the weekly pipeline: the schedule is six requests, and a
+    # Daily, apart from the weekly pipeline: the schedule is eleven requests, and a
     # countdown a week stale would miss every slipped broadcast. 06:00 UTC is
     # mid-afternoon in Tokyo, before the evening's broadcasts, and clear of the
     # weekly run's AniList requests at midnight Sunday, which share the same
