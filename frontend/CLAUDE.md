@@ -230,7 +230,7 @@ adding it raised some fields and diluted others. Both directions matter.
 | `score_100` | 43% | The whole certainty system exists for this. **Stored /100, displayed /10** |
 | `streaming_services` / `_urls` | 36% | Show an honest "no link listed" when absent |
 | `trailer_id` | 35% | Render the component or nothing |
-| `broadcast_day` / `_time` | 29% | Drives the slot line and `NextAiring` |
+| `broadcast_day` / `_time` | 29% | The slot line and `NextAiring`, where AniList has no airdate |
 | `cover_url` | **11%** | **Enhancement only. Never reserve space for it** |
 
 Scores are **stored out of 100 and shown out of 10** - `scoreOutOfTen()` and `SCORE_MAX` in
@@ -264,28 +264,57 @@ a trimmed season lookup and the client joins locally.
 `lib/types.ts` is client-safe; `lib/api.ts` imports `server-only`. Importing `API_BASE` from
 `api.ts` into a client component drags `cacheLife` into the browser bundle and breaks the build.
 
-## The schedule is grouped by Japan, not by the reader
+## Airdates and countdowns come from AniList
 
-`/schedule` lists the week's airing titles by `broadcast_day`, and **the columns are JST**. This
-looks wrong and is not: most of these broadcast after midnight in Tokyo, so a Monday 00:26 slot is
-Sunday evening across the Americas. Grouping by the reader's day would mean the server cannot
-render the page at all — the day a title belongs to would differ per visitor.
+AniList publishes the broadcast schedule episode by episode, and a daily DAG
+(`airflow/dags/anilist_airing.py`) lands every episode airing in the next six weeks, plus the
+day behind. MAL has only a weekly slot and Kitsu fills episode dates in after they air, so before
+AniList came back the site could say when a show *usually* airs and never when this week's episode
+does. Two places use it:
 
-So the split is the same one `NextAiring` uses: the JST slot is a fact rendered on the server, and
-each row carries the reader's own weekday and time beside it (`LocalSlot`, client-only). The intro
-copy says the columns are Japan's, because a schedule that silently showed the wrong day would be
-worse than one that explains itself.
+- **A title page** carries its next few episodes (`upcoming_episodes` on `GET /anime/{wb_id}`) and
+  shows the first one still ahead: "Episode 11 of 12 airs Monday 14 September, 20:57 JST", then a
+  live countdown and the reader's own time (`EpisodeCountdown`). Several episodes, not one,
+  because the page is cached for an hour and the first may have aired since. Where AniList has no
+  airdate, the MAL slot block below it is shown instead, caveat and all.
+- **`/schedule`** is the next seven days of `GET /schedule`, one column per day in Japan. Each row
+  is the time in Tokyo with its countdown under it, then the title, episode, format and the
+  reader's own time. Shows the catalogue does not hold (One Piece, Detective Conan, long-runners
+  older than it) are listed as AniList has them, screened back, and link to AniList.
 
-`LocalSlot` and `TodayMarker` read the clock through `useSyncExternalStore`, **not** `useState` +
-`useEffect`. Two lint rules object to the obvious version: `set-state-in-effect` (65 rows, 65
-cascading renders) and `purity` (`Date.now()` during render). The store's snapshot is frozen at
-first client read — `getSnapshot` must be stable or React loops, and it also keeps all 65 rows
-converting against one instant. "Now" is needed at all only because of DST; a fixed JST slot lands
-on a different local hour in summer than winter, so the conversion cannot be computed from the slot
-alone.
+**The columns are JST, and calendar days.** This looks wrong and is not: many of these broadcast
+late at night in Tokyo, so a Monday 00:26 episode is Sunday evening across the Americas. Grouping
+by the reader's day would mean the server cannot render the page at all. So Japan's time is
+rendered on the server, the reader's own is added in the browser, and the intro says which is
+which. A 00:26 broadcast opens its day rather than closing the previous evening's, because the data
+reports calendar days.
 
-Only titles that are **airing and have a slot** are listed. 40% of airing titles have no slot, and
-the page states that count rather than quietly showing a thinner week than the season has.
+**Japan's dates are formatted by hand, not with `Intl`** (`jstAirdate`, `dayKeyLabel` in
+`lib/types.ts`). They render on the server and hydrate in the browser, and Node's ICU and a
+browser's abbreviate September differently ("Sept" against "Sep"): a hydration mismatch waiting on
+the calendar. The reader's own time uses `toLocaleString`, but only after mount, where nothing
+has to agree with the server.
+
+**One clock for the page** (`components/Airing.tsx`): a `useSyncExternalStore` store that polls
+every 15 seconds and notifies when the minute changes, so a hundred countdowns move together
+instead of a hundred intervals re-rendering out of step. Its server snapshot is null, which is how
+every component knows to render nothing clock-dependent during SSR and hydration. Not `useState` +
+`useEffect`: two lint rules object to that (`set-state-in-effect`, `purity`), rightly.
+
+**Layout shift is designed out, and measured at 0** on `/schedule` at 390 and 1440 against a
+production build:
+
+- the countdown sits under the Tokyo time, not at the end of the meta line, because that line is
+  nowrap and clips, and the countdown is the one thing on a row that must not be clipped;
+- every row's meta line and countdown hold their height before the clock arrives;
+- "Today in Japan" is rendered in every column and hidden in all but today's, because arriving
+  from nothing it pushed the day's count aside;
+- the week streams in behind its fallback even from a prerendered page, so the fallback is a
+  screen tall: shorter, the footer painted in view at 1440 and was then pushed off it (0.09).
+
+Measured the first week: 112 episodes of 110 shows. Of the 62 Summer titles MAL still called
+airing with a weekly slot, 54 were on AniList's week; of the other eight, three had finished
+between 9 and 11 September, two were on a break, and AniList had no dates for three.
 
 ## Motion
 

@@ -31,9 +31,9 @@ PAGE_LIMIT = 20
 # silently ignored, so reaching the tail needs page[offset] = episodeCount - 20.
 # Roughly 83 extra requests per weekly run to populate a feature on one title.
 #
-# This becomes viable if AniList returns - its nextAiringEpisode carries a real
-# countdown for every airing show. AniList is currently 403 with "temporarily
-# disabled due to severe stability issues", and Jikan 504s behind MAL.
+# AniList came back in 2026-09, and its schedule carries a real airdate for every
+# airing show: see ingestion/anilist/fetch_airing.py, which is where countdowns
+# come from now.
 
 
 def fetch_season(

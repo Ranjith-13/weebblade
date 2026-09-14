@@ -38,12 +38,13 @@ Kitsu  ───┘         │
                     ▼
             DuckDB views over Parquet (dated snapshots + a "latest per title" view)
                     │         ▲
-                    │         └── franchise graph ◄── MAL related titles, followed
-                    │                                 past the catalogue until complete
+                    │         ├── franchise graph ◄── MAL related titles, followed
+                    │         │                       past the catalogue until complete
+                    │         └── airing schedule ◄── AniList, daily: six weeks of episodes
                     │
         ┌───────────┼───────────┐
         ▼           ▼           ▼
-  LLM digest   Chroma index   FastAPI (/anime, /digest, /search)
+  LLM digest   Chroma index   FastAPI (/anime, /schedule, /digest, /search)
      (Groq)   (all-MiniLM-L6-v2)      │
                                       ▼
                           Caddy (TLS, security headers, access logs)
@@ -88,6 +89,17 @@ Consolidation is a **field-level** merge over the whole catalogue, not a union o
   It caught AniList on its first live run, when its transform - written while AniList
   was down - passed "MOVIE" and "RELEASING" straight through.
 
+### Airdates
+
+MAL has a weekly broadcast slot and no airdates; Kitsu fills episode dates in after they air.
+AniList publishes the real schedule, so a second, daily DAG lands every episode airing in the
+next six weeks (and the day behind) - 540 episodes, eleven requests. It stores the episodes, not
+each title's next one: a single next date is stale the moment it airs, while a list lets whoever
+reads it pick the first still ahead. The warehouse view reads the newest day's file at query time,
+so the daily fetch never opens the warehouse. The site shows it as a countdown on each airing
+title's page and a week of dated episodes on `/schedule`, including long-runners older than the
+catalogue, like One Piece.
+
 ### Franchises
 
 A title page lists the rest of its franchise: prequels, sequels, side stories, spin-offs and
@@ -120,10 +132,13 @@ second.
 - `GET /anime` — filter by `season`, `season_year`, `genre`, `format`, `min_score`,
   `studio` (across every season); `sort` (`score_desc` | `popularity_desc` | `title`),
   `limit`, `offset`.
-- `GET /anime/{wb_id}` — a title by its stable identity, following it if it merged.
+- `GET /anime/{wb_id}` — a title by its stable identity, following it if it merged, with its
+  next few episodes from AniList's airing schedule (`upcoming_episodes`).
 - `GET /anime/{wb_id}/franchise` — the title's franchise, oldest first, each entry with its
   relation to the title; entries older than the catalogue come from MAL, with no `wb_id`.
 - `GET /anime/{source}/{source_id}` — a title by any source key it was ever made of.
+- `GET /schedule?days=7` — every episode airing from midnight today in Japan, for up to 14 days,
+  from AniList's schedule. Shows the catalogue does not hold come as AniList describes them.
 - `GET /digest`, `/digest/latest`, `/digest/{run_date}` — the weekly LLM trend digest.
 - `GET /search?q=...&n=...` — semantic similarity search over indexed titles; each result
   carries its poster, score, format and `wb_id`.
@@ -151,13 +166,14 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 
 ```
 ingestion/    anilist/ jikan/ mal/ kitsu/ — each: client, fetch_season, transform;
-              mal/ also fetch_relations (the franchise graph's edges); backfill, reprocess
+              mal/ also fetch_relations (the franchise graph's edges), anilist/ also
+              fetch_airing (episode airdates); backfill, reprocess
 processing/   spark session, schema normalization, matching, consolidation, identity
               registry, franchise graph, DuckDB catalog
 ai/           digest/ (Groq prompt + generation), search/ (embed, index, query)
 backend/      FastAPI app — routers, schemas, DuckDB access, rate limiter
 frontend/     Next.js app (see frontend/README.md and frontend/DESIGN.md)
-airflow/      the weekly DAG and its image
+airflow/      the weekly DAG, the daily airing-schedule DAG, and their image
 infra/        Terraform for the EC2 host and security group
 caddy/        Caddyfile and image
 scripts/      per-session SSH, off-instance backup pull
