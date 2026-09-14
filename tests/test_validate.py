@@ -84,6 +84,15 @@ def test_a_vocabulary_that_differs_only_in_case_is_caught():
         validate_rows(_rows(30, status="Current"), "mal")
 
 
+def test_source_material_is_held_to_mals_tokens():
+    """AniList's first live rows said "MANGA" where MAL says "manga". Nothing
+    checked the column, so the "adapted from" facet would have shown both."""
+    with pytest.raises(SchemaViolation, match="source_material='MANGA' differs only in case"):
+        validate_rows(_rows(30, source="anilist", source_material="MANGA"), "anilist")
+
+    validate_rows(_rows(30, source_material="4_koma_manga"), "mal")
+
+
 def test_one_new_upstream_value_warns_rather_than_failing():
     """Kitsu passes its own subtype and status straight through, so it can publish
     something we have never seen. Killing a whole season's ingest over one such

@@ -145,6 +145,23 @@ def test_kitsu_wins_a_genuine_conflict(spark):
     assert out["source_id"] == "49444"
 
 
+def test_anilist_fills_what_mal_lacks_and_replaces_nothing_it_has(spark):
+    """AniList joined in 2026-09, after five years of the catalogue had been built
+    from Kitsu and MAL. Ranked above MAL it would have replaced MAL's score on
+    every title Kitsu has not rated, and MAL's studio spellings with its own."""
+    df = spark.createDataFrame(
+        [
+            _row("anilist", "21", 41467, score_100=70.0, studios=["Studio DEEN"], source_material="manga"),
+            _row("mal", "41467", 41467, score_100=80.0, studios=["Studio Deen"]),
+        ],
+        SCHEMA_F,
+    )
+    out = _merge_sources(df).collect()[0]
+
+    assert (out["score_100"], out["studios"]) == (80.0, ["Studio Deen"])
+    assert out["source_material"] == "manga"  # MAL had none
+
+
 def test_rows_without_a_mal_id_are_never_merged(spark):
     """A row with no join key cannot be matched to anything. Keeping it separate
     is the safe default: a false merge silently deletes a title, while a missed

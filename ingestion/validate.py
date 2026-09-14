@@ -48,8 +48,21 @@ class SchemaViolation(ValueError):
 _FORMATS = {"TV", "movie", "OVA", "ONA", "special", "music"}
 _STATUSES = {"current", "finished", "upcoming", "unreleased", "tba"}
 _SEASONS = {"WINTER", "SPRING", "SUMMER", "FALL"}
+# MAL's tokens, because MAL was the only source of this column until AniList,
+# and the "adapted from" facet is built from them. AniList's "MANGA" would have
+# sat beside MAL's "manga" as a second chip, and nothing checked.
+_SOURCE_MATERIALS = {
+    "original", "manga", "4_koma_manga", "web_manga", "digital_manga", "novel",
+    "light_novel", "web_novel", "visual_novel", "game", "card_game", "book",
+    "picture_book", "radio", "music", "mixed_media", "other",
+}
 
-_ENUMS = {"format": _FORMATS, "status": _STATUSES, "season": _SEASONS}
+_ENUMS = {
+    "format": _FORMATS,
+    "status": _STATUSES,
+    "season": _SEASONS,
+    "source_material": _SOURCE_MATERIALS,
+}
 
 # Checked for type, not emptiness - see _check_list_columns for why [] is only
 # worth a warning here.

@@ -39,10 +39,11 @@ Flattener = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 def _flatteners() -> dict[str, Flattener]:
+    from .anilist.transform import flatten_media as anilist_flatten
     from .kitsu.transform import flatten_media as kitsu_flatten
     from .mal.transform import flatten_media as mal_flatten
 
-    return {"mal": mal_flatten, "kitsu": kitsu_flatten}
+    return {"mal": mal_flatten, "kitsu": kitsu_flatten, "anilist": anilist_flatten}
 
 
 @dataclass
@@ -83,7 +84,7 @@ def reprocess(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("source", help="mal or kitsu")
+    parser.add_argument("source", help="mal, kitsu or anilist")
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)

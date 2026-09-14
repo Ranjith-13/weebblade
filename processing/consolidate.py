@@ -29,10 +29,20 @@ SOURCE_DIR_NAMES = {
 # are null for 100% of Kitsu rows - and supplies scores for titles Kitsu has
 # never rated.
 #
+# AniList comes after MAL. It was placed above MAL when this merge was written,
+# while AniList was down, so the placement was never exercised; it first
+# delivered data after five years of the catalogue had been built from Kitsu
+# and MAL. Ranked second, its first run
+# would have replaced MAL's score on every title it holds that Kitsu has not
+# rated, and MAL's studio spellings with its own ("Studio DEEN", "J.C.STAFF").
+# A new source fills gaps - a title the others lack, a score MAL has none for -
+# and moving it up is a decision to make on evidence, not a side effect of
+# switching it on.
+#
 # This is a field-level merge, not a row-level pick: for every column the first
 # non-null value in this order wins, so a title takes its streaming links from
 # Kitsu and its studios from MAL in the same row.
-_SOURCE_PRIORITY = ["kitsu", "anilist", "mal", "jikan"]
+_SOURCE_PRIORITY = ["kitsu", "mal", "anilist", "jikan"]
 
 # Carried through every merge pass as the union of its members, never as a winner.
 _SOURCE_KEYS = "source_keys"

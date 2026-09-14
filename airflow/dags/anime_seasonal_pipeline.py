@@ -29,8 +29,8 @@ DATA_DIR = Path("/data")
 )
 def anime_seasonal_pipeline():
     # One task per source, deliberately not chained together: if one API is down (as
-    # AniList and Jikan currently are) the others should still land data rather than
-    # the whole DAG run blocking on it.
+    # Jikan has been throughout, and AniList was until 2026-09) the others should
+    # still land data rather than the whole DAG run blocking on it.
 
     @task
     def fetch_anilist(data_interval_end=None):

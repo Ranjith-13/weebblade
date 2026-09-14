@@ -4,12 +4,13 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StringType
 
-# Popularity/favourites are kept as raw, source-native numbers - NOT normalized -
-# because their semantics genuinely differ across sources: AniList's popularity is a
-# follower-style count, while Jikan's and Kitsu's are RANKS (lower = more popular).
-# Averaging or comparing them directly across sources would be meaningless. Only
-# average_score gets normalized here, into score_100, since "rating out of 100" is a
-# well-defined comparable scale once Jikan's 0-10 is rescaled.
+# Popularity/favourites are kept as raw, source-native numbers - NOT normalized.
+# `popularity` is a RANK in every source that fills it (lower = more popular);
+# AniList's own "popularity" is a follower count and its transform files it under
+# user_count instead. Ranks from different sources still rank different user bases,
+# so comparing them across sources would be meaningless. Only average_score gets
+# normalized here, into score_100, since "rating out of 100" is a well-defined
+# comparable scale once Jikan's 0-10 is rescaled.
 _DOUBLE_COLUMNS = ["popularity", "favourites"]
 _INT_COLUMNS = [
     "season_year",

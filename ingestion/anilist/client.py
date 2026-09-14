@@ -10,9 +10,10 @@ logger = logging.getLogger(__name__)
 
 ANILIST_API_URL = "https://graphql.anilist.co"
 
-# AniList's stated limit is ~90 req/min; stay comfortably under it rather than
-# relying solely on reacting to 429s.
-MIN_SECONDS_BETWEEN_REQUESTS = 1.0
+# AniList documents 90 requests a minute but answers with X-RateLimit-Limit: 30
+# (checked 2026-09-14). One a second would go over that, and each 429 costs a
+# minute asleep; stay under it instead of relying on reacting to them.
+MIN_SECONDS_BETWEEN_REQUESTS = 2.1
 MAX_RETRIES = 5
 
 

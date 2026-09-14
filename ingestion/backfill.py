@@ -85,16 +85,23 @@ def _live_sources() -> dict[str, tuple[Fetcher, Flattener]]:
     without network clients, and so a missing MAL client id fails only when MAL
     is asked for.
 
-    AniList and Jikan are deliberately absent: both have failed upstream for this
-    project's whole life, and a backfill that spends an hour retrying them to
-    land nothing is worse than one that does not try.
+    Jikan is deliberately absent: it has failed upstream for this project's
+    whole life, and a backfill that spends an hour retrying it to land nothing
+    is worse than one that does not try. AniList was absent for the same reason
+    until it came back on 2026-09-13.
     """
+    from .anilist.fetch_season import fetch_season as anilist_fetch
+    from .anilist.transform import flatten_media as anilist_flatten
     from .kitsu.fetch_season import fetch_season as kitsu_fetch
     from .kitsu.transform import flatten_media as kitsu_flatten
     from .mal.fetch_season import fetch_season as mal_fetch
     from .mal.transform import flatten_media as mal_flatten
 
-    return {"mal": (mal_fetch, mal_flatten), "kitsu": (kitsu_fetch, kitsu_flatten)}
+    return {
+        "mal": (mal_fetch, mal_flatten),
+        "kitsu": (kitsu_fetch, kitsu_flatten),
+        "anilist": (anilist_fetch, anilist_flatten),
+    }
 
 
 def parse_season(value: str) -> tuple[str, int]:
@@ -184,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("start", type=parse_season, help="first season, e.g. 2024-FALL")
     parser.add_argument("end", type=parse_season, help="last season, e.g. 2026-WINTER")
-    parser.add_argument("--sources", default="mal,kitsu")
+    parser.add_argument("--sources", default="mal,kitsu,anilist")
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument(
         "--run-date",
