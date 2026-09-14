@@ -1,22 +1,20 @@
 #!/usr/bin/env bash
-# Pulls the server's nightly backups onto this machine.
+# Pulls the server's backups onto this machine.
 #
-# Why this exists: the server already backs itself up (~/backup.sh, 02:00 daily,
-# 7-day retention), but everything it writes lives on the same EBS volume as the
-# data it is protecting. That covers a bad deploy or an accidental delete. It
-# covers nothing about losing the instance, and the instance cannot be rebuilt
-# from code - infra/terraform carries prevent_destroy precisely because the box
-# was provisioned by hand.
+# Why this exists: the server backs itself up (~/backup.sh, 02:00 UTC on Sundays
+# and Wednesdays, kept 14 days), but everything it writes lives on the same EBS
+# volume as the data it is protecting. That covers a bad deploy or an accidental
+# delete. It covers nothing about losing the instance, and the instance cannot be
+# rebuilt from code - infra/terraform carries prevent_destroy precisely because
+# the box was provisioned by hand.
 #
-# So the whole system's survival rests on one volume in one availability zone.
-# The entire dataset is ~21 MB. This is the cheapest risk reduction available in
-# the project and it stays that way whether or not S3 ever happens: a copy on a
-# different machine, in a different country, is off-instance by any definition.
+# So this is the one copy off that volume: a different machine, in a different
+# country. The author decided on 2026-09-14 against S3, so it stays the only one.
+# A data archive was 149 MB at that date.
 #
-# S3 would be better (it does not need a laptop to be awake) and is the intended
-# end state, but neither weebblade-ci-sg nor weebblade-terraform has any S3
-# permission, so it needs an IAM policy that only the account owner can add.
-# Waiting for that is not a reason to hold zero off-instance copies today.
+# Run by a systemd user timer (~/.config/systemd/user/weebblade-backup.timer) on
+# the same two days, after the server's run. Keeps the same 14 days, judged by
+# each archive's own date rather than a file count.
 #
 # Usage:
 #   ./scripts/weebblade-backup.sh            # pull, verify, prune
@@ -62,14 +60,35 @@
 set -euo pipefail
 
 DEST="${WEEBBLADE_BACKUP_DIR:-$HOME/weebblade-backups}"
-KEEP="${WEEBBLADE_BACKUP_KEEP:-14}"
+# Archives dated more than this many days ago are deleted, and not pulled.
+KEEP_DAYS="${WEEBBLADE_BACKUP_KEEP_DAYS:-14}"
 REMOTE_DIR="${WEEBBLADE_REMOTE_BACKUP_DIR:-~/backups}"
+NETWORK_PROBE="${WEEBBLADE_NETWORK_PROBE:-checkip.amazonaws.com}"
+NETWORK_WAIT="${WEEBBLADE_NETWORK_WAIT:-300}"
+CUTOFF="$(date -d "$KEEP_DAYS days ago" +%F)"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SSH="$SCRIPT_DIR/weebblade-ssh.sh"
 
 log() { echo "[$(date +%H:%M:%S)] $*" >&2; }
 fail() { echo "ERROR: $*" >&2; exit 1; }
+
+# The date in an archive's name: data-2026-09-14.tar.gz -> 2026-09-14.
+# Empty for a name with no date, which is then never pruned - and never aborts
+# the run under pipefail.
+archive_date() { basename "$1" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1 || true; }
+
+# A timer that fires at boot or on resume can beat the network up. On 2026-09-14
+# the pull ran before DNS answered, could not find its own public IP, and gave up
+# for the day. The unit's After=network-online.target cannot help: that is a
+# system target, and a user unit does not wait on it.
+wait_for_network() {
+  local deadline=$((SECONDS + NETWORK_WAIT))
+  until getent hosts "$NETWORK_PROBE" >/dev/null 2>&1; do
+    (( SECONDS < deadline )) || return 1
+    sleep 10
+  done
+}
 
 # A gzip file that does not pass this is not a backup, it is a file. Checked on
 # every pull rather than at restore time, because a corrupt archive discovered
@@ -106,8 +125,15 @@ mkdir -p "$DEST"
 # One SSH session to list, rather than one per file: each invocation of
 # weebblade-ssh.sh opens and closes a security-group rule, which takes seconds
 # and churns the group's audit trail.
+wait_for_network || fail "no network after ${NETWORK_WAIT}s ($NETWORK_PROBE does not resolve)"
+
+# The listing's own failure and an empty listing are different news. This used
+# to be `|| true`, which reported a machine that could not reach the server as
+# "no backups found on the server".
 log "listing remote backups"
-REMOTE_FILES="$("$SSH" "ls -1 $REMOTE_DIR/*.gz 2>/dev/null" || true)"
+if ! REMOTE_FILES="$("$SSH" "ls -1 $REMOTE_DIR/*.gz 2>/dev/null || true")"; then
+  fail "could not reach the server to list its backups"
+fi
 [[ -n "$REMOTE_FILES" ]] || fail "no backups found in $REMOTE_DIR on the server"
 
 pulled=0 skipped=0
@@ -115,6 +141,13 @@ while IFS= read -r remote_path; do
   [[ -n "$remote_path" ]] || continue
   name="$(basename "$remote_path")"
   local_path="$DEST/$name"
+
+  # Past the retention the server keeps too, and pruned below: pulling it would
+  # only fetch it to delete it.
+  date_of="$(archive_date "$name")"
+  if [[ -n "$date_of" && "$date_of" < "$CUTOFF" ]]; then
+    continue
+  fi
 
   # Backups are immutable once written - a given date's archive never changes -
   # so an existing verified copy is skipped rather than re-downloaded.
@@ -147,15 +180,18 @@ done <<< "$REMOTE_FILES"
 
 log "pulled $pulled, skipped $skipped already present"
 
-# Keep more history locally than the server does (7 days). The point of a second
-# location is to survive mistakes noticed late, and a week is not long for that.
+# The same 14 days the server keeps, by each archive's own date. It used to keep
+# the newest 14 files, which was a week of daily pairs, not 14 days.
 deleted=0
 shopt -s nullglob
-for f in $(ls -1t "$DEST"/*.gz 2>/dev/null | tail -n +$((KEEP + 1))); do
-  rm -f "$f"; deleted=$((deleted + 1))
+for f in "$DEST"/*.gz; do
+  date_of="$(archive_date "$f")"
+  if [[ -n "$date_of" && "$date_of" < "$CUTOFF" ]]; then
+    rm -f "$f"; deleted=$((deleted + 1))
+  fi
 done
 shopt -u nullglob
-[[ "$deleted" -eq 0 ]] || log "pruned $deleted beyond the newest $KEEP"
+[[ "$deleted" -eq 0 ]] || log "pruned $deleted dated before $CUTOFF"
 
 verify_all
 log "backup directory: $DEST ($(du -sh "$DEST" | cut -f1))"

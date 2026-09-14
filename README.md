@@ -242,8 +242,9 @@ The frontend is separate — see [frontend/README.md](frontend/README.md).
 - **SSH is closed by default.** No standing rule for a home address; both CI and
   `scripts/weebblade-ssh.sh` authorize a single `/32` for the session and revoke it after,
   using an IAM user scoped to ingress rules on one security group and nothing else.
-- **Backups** run nightly on the server, with `scripts/weebblade-backup.sh` pulling an
-  off-instance copy — server-local backups sit on the same EBS volume as the data.
+- **Backups** run twice a week on the server (Sunday and Wednesday) and are kept two weeks
+  there, on the same EBS volume as the data, by choice. `scripts/weebblade-backup.sh` pulls a
+  copy to a second machine on the same days - the one copy off that volume.
 - **The Airflow UI sits behind HTTP basic auth** as well as its own login. It runs
   arbitrary code by design, so its pre-authentication surface should not be reachable by
   anything unauthenticated.
@@ -270,8 +271,8 @@ publishing weekly.
 
 Known gaps: Jikan is down upstream (the pipeline degrades rather than fails). The
 frontend runs locally only — it builds, typechecks and lints in CI on every push, but has
-not been imported to Vercel. Off-instance backups pull to a second machine rather than
-to S3, which still needs an IAM policy.
+not been imported to Vercel. The only backup off the server's own disk is a pull to a
+second machine.
 
 ## License
 
