@@ -42,6 +42,11 @@ from .transform import _FORMATS
 logger = logging.getLogger(__name__)
 
 WINDOW_DAYS = 21
+# And a day back. A schedule's today runs from midnight in Tokyo, while the
+# daily run is at 15:00 there, and 47 of the first week's 105 episodes air
+# before 15:00 - 23 of them between midnight and 4am. The first live fetch
+# started at the run, and left them out of the day they aired in.
+LOOKBACK_DAYS = 1
 PER_PAGE = 50
 
 AIRING_QUERY = """
@@ -131,14 +136,14 @@ def flatten_airing(node: dict[str, Any], fetched_on: str) -> dict[str, Any]:
 
 
 def land_airing(
-    data_dir: Path, run_date: str, start: int, client: AniListClient | None = None
+    data_dir: Path, run_date: str, at: int, client: AniListClient | None = None
 ) -> int:
-    """Fetch the window from `start`, land it raw and processed, return the count.
+    """Fetch the window around `at`, land it raw and processed, return the count.
 
     One file per run date, so a retry rewrites the same file and a later run
     never has to merge with an earlier one: the warehouse reads the newest.
     """
-    raw = fetch_airing(start, start + WINDOW_DAYS * 86400, client)
+    raw = fetch_airing(at - LOOKBACK_DAYS * 86400, at + WINDOW_DAYS * 86400, client)
     write_raw_json(raw, data_dir / "raw" / "anilist_airing", run_date)
 
     out = data_dir / "processed" / "anilist_airing" / f"{run_date}.parquet"

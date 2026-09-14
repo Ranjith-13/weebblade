@@ -27,12 +27,15 @@ class _AniList:
                          "airingSchedules": page}}
 
 
-def test_the_window_runs_from_the_run_for_the_set_number_of_days(tmp_path):
+def test_the_window_starts_a_day_back_so_todays_early_broadcasts_are_in_it(tmp_path):
+    """The daily run is at 15:00 in Tokyo and a schedule's day starts at midnight
+    there. The first live fetch started at the run, and the 47 of the week's 105
+    episodes that air before 15:00 were missing from the day they aired."""
     client = _AniList([[]])
 
     fa.land_airing(tmp_path, "2026-09-14", 1_789_000_000, client)
 
-    assert client.asked[0]["from"] == 1_789_000_000
+    assert client.asked[0]["from"] == 1_789_000_000 - 86400
     assert client.asked[0]["to"] == 1_789_000_000 + fa.WINDOW_DAYS * 86400
 
 
