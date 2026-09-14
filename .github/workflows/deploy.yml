@@ -4,8 +4,9 @@
 #   WEEBBLADE_HOST     - the server's public IP or hostname
 #   WEEBBLADE_USER     - ubuntu
 #   CI_AWS_ACCESS_KEY_ID / CI_AWS_SECRET_ACCESS_KEY - a minimally-scoped IAM user
-#                        (weebblade-ci-sg) that can only Authorize/Revoke/Describe
-#                        ingress on the one weebblade security group - used to
+#                        (weebblade-ci-sg) that can only Authorize/Revoke
+#                        ingress on the one weebblade security group (not even
+#                        describe it - checked 2026-09-14) - used to
 #                        punch a temporary hole for this runner's own IP so SSH
 #                        can stay closed to the internet at large the rest of the
 #                        time (see infra/terraform, allowed_ssh_cidr)
@@ -125,7 +126,23 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.WEEBBLADE_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.WEEBBLADE_HOST }}" >> ~/.ssh/known_hosts
+          # The rule the step above adds takes a few seconds to apply, and a scan
+          # that starts first times out: the deploy of bf7e422 failed here on
+          # 2026-09-14 and passed on a rerun. So retry for up to two minutes
+          # rather than fail on the race - scripts/weebblade-ssh.sh waits for the
+          # same reason. Checked for output too: a scan that reaches nothing can
+          # still exit 0 with no keys.
+          for attempt in $(seq 1 12); do
+            if keys="$(ssh-keyscan -T 5 -H "${{ secrets.WEEBBLADE_HOST }}" 2>/dev/null)" && [ -n "$keys" ]; then
+              echo "$keys" >> ~/.ssh/known_hosts
+              echo "Host keys on attempt $attempt"
+              exit 0
+            fi
+            echo "SSH not reachable yet (attempt $attempt of 12), retrying in 5s"
+            sleep 5
+          done
+          echo "SSH never became reachable" >&2
+          exit 1
 
       # Same tar/scp approach used for every manual deploy this project has had so
       # far - not git-clone-on-server, since the repo is private and that would
