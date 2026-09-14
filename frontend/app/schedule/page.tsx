@@ -154,13 +154,14 @@ async function Week() {
 
 /* The week streams in behind this, even from a prerendered page: the HTML
    carries the fallback first and the week further down, swapped in by script.
-   At a screen's height the fallback keeps the footer below the fold until the
-   swap, so the swap moves nothing the reader can see. Shorter, and the footer
-   painted in view at 1440x1000 and was then pushed off it: a layout shift of
-   0.09 on every load. */
+   With the footer in view below it, the swap pushed the footer off: a layout
+   shift of 0.09 on every load at 1440x1000. data-footer-waits keeps the footer
+   out until the week arrives - see the rule in globals.css. It used to be a
+   fallback a screen tall, which worked for a full week and would have shifted
+   an empty one the other way. */
 function WeekSkeleton() {
   return (
-    <div className="mt-9 min-h-[100svh] gap-x-10 sm:columns-2 xl:columns-3" aria-hidden>
+    <div data-footer-waits className="mt-9 gap-x-10 sm:columns-2 xl:columns-3" aria-hidden>
       {Array.from({ length: 7 }, (_, i) => (
         <section key={i} className="mb-9 break-inside-avoid">
           <div className="h-[2.1rem] border-b-2 border-ink" />

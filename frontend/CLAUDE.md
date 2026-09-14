@@ -322,8 +322,9 @@ production build:
 - every row's meta line and countdown hold their height before the clock arrives;
 - "Today in Japan" is rendered in every column and hidden in all but today's, because arriving
   from nothing it pushed the day's count aside;
-- the week streams in behind its fallback even from a prerendered page, so the fallback is a
-  screen tall: shorter, the footer painted in view at 1440 and was then pushed off it (0.09).
+- the week streams in behind its fallback even from a prerendered page, and the footer waits
+  for it (`data-footer-waits`, below): in view under the fallback, it was pushed off at 1440
+  when the week arrived (0.09).
 
 Measured the first week: 112 episodes of 110 shows. Of the 62 Summer titles MAL still called
 airing with a weekly slot, 54 were on AniList's week; of the other eight, three had finished
@@ -348,6 +349,21 @@ hierarchy, sequence, feedback, state change — do not add it.
 
 Run the build, then check in a real browser at 390 and 1440. Current gate results: 0 contrast
 failures, 0 tap targets under the WCAG 2.2 24px minimum, CLS 0, visible focus on every control.
+
+**A page that streams gives the footer something to wait for.** A route that renders behind a
+`<Suspense>` - every title page, the schedule - sends the layout first, footer included, and the
+content arrives later in the same response. The footer painted in view under the fallback and was
+pushed down when the content came: 0.04 to 0.06 on every title page at 1440x1000, and 0.004 to
+0.011 more when a title's franchise section arrived after it on an uncached load. So any fallback
+that stands above the footer carries `data-footer-waits`, and `body:has([data-footer-waits]) >
+footer` keeps the footer out of the layout until the content replaces it (`globals.css`). An
+element arriving is not a layout shift; one moving is. A zero-size `<span data-footer-waits
+hidden />` is enough for a fallback that draws nothing.
+
+Not a fallback a screen tall, which fixes a long page and breaks a short one: title pages run from
+shorter than a 1000px screen (6 of the 12 sparsest measured) to twice it, and on a short one the
+footer rose into view when content shorter than the fallback replaced it. Measured 2026-09-14 on
+a production build, 14 titles and the schedule, cold and warm: 0 at 1440x1000 and at 390x844.
 
 **Use the Playwright MCP browser, not the in-app Browser pane.** The pane cannot hydrate a PPR
 page: it leaves React's postponed markers (`<!--$~-->`) unresolved, so every client component below

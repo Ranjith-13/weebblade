@@ -95,9 +95,11 @@ function DetailSkeleton() {
   );
 }
 
+/* data-footer-waits keeps the footer out of the layout until the title replaces
+   this: see the rule in globals.css. */
 function DetailBodySkeleton() {
   return (
-    <div className="mt-7 grid gap-x-12 gap-y-8 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+    <div data-footer-waits className="mt-7 grid gap-x-12 gap-y-8 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
       <div className="plate-empty aspect-[3/4] border border-rule bg-plate" />
       <div className="space-y-4">
         <div className="h-12 w-2/3 bg-plate" />
@@ -462,9 +464,11 @@ async function AnimeDetail({
     </div>
 
     {/* Streams after the title itself: the franchise is a second request, and
-        the page is complete without it. */}
+        the page is complete without it. Its fallback draws nothing but keeps
+        the footer waiting: arriving after the title on an uncached load, the
+        section pushed a footer already in view (0.004 to 0.011 at 1440). */}
     {anime.wb_id && (
-      <Suspense fallback={null}>
+      <Suspense fallback={<span data-footer-waits hidden />}>
         <FranchiseSection wbId={anime.wb_id} />
       </Suspense>
     )}

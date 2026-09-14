@@ -243,6 +243,21 @@ body:has(.season-index:popover-open) .season-index-toggle svg {
   rotate: 180deg;
 }
 
+/* The footer waits for the page. A page that streams its content in behind a
+   fallback - a title page, the schedule - still sends the layout first, footer
+   included, and the fallback is shorter than most of what replaces it, so the
+   footer painted in view and was then pushed down: a layout shift on every load
+   (0.04 to 0.06 on title pages at 1440x1000). Out of the layout while a
+   fallback carrying data-footer-waits is on screen, it arrives with the content
+   instead, at its final place, and an element arriving is not a shift.
+
+   Not a taller fallback. Title pages run from shorter than a screen to twice
+   it, and a fallback a screen tall made the short ones shift the other way,
+   the footer rising into view when their content came in shorter. */
+body:has([data-footer-waits]) > footer {
+  display: none;
+}
+
 /* Digest prose. Not @tailwindcss/typography — its defaults (rounded code
    blocks, its own grey scale) fight this palette, and the digest is plain
    Markdown: headings, paragraphs, lists, emphasis. */
