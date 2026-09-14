@@ -67,7 +67,7 @@ Consolidation is a **field-level** merge over the whole catalogue, not a union o
 
 - Rows are one title when they share a MAL id, or an exact title with the same format
   and year (ONA, OVA and special counting as one - the sources file a short release under
-  whichever they like), or an exact title and premiere date. Every row's own titles count, and matches
+  whichever they like), or an exact title - English or romaji - and premiere date. Every row's own titles count, and matches
   join transitively, so adding a source can only join titles: an AniList row carrying
   MAL's id and Kitsu's title joined 47 pairs the catalogue had listed twice. Two rows of
   one source mapped to different MAL ids are never joined by a title - MAL's two parts of
@@ -227,7 +227,7 @@ The frontend is separate — see [frontend/README.md](frontend/README.md).
 
 Ingestion → merge → warehouse → both AI features → API → frontend → CI/CD are all live
 and verified end-to-end against real data: twenty seasons (Fall 2021 to Summer 2026) and
-6,145 titles from three live sources, a franchise graph over 895 franchises, and digests
+6,136 titles from three live sources, a franchise graph over 895 franchises, and digests
 publishing weekly.
 
 Known gaps: Jikan is down upstream (the pipeline degrades rather than fails). The
