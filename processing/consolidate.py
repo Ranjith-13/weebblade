@@ -7,7 +7,7 @@ from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType
 
-from . import identity
+from . import identity, matching
 from .normalize import standardize_schema
 from .spark import get_spark_session
 
@@ -243,42 +243,10 @@ def _merge_sources(df: DataFrame) -> DataFrame:
     MAL both carry BLEACH under different ids, and a plain union keeps both, so
     every popular title appears twice in the UI.
 
-    Three passes, because one key is not enough:
-
-    1. `mal_id`, which Kitsu supplies via its mappings relationship. This is the
-       reliable key and catches the large majority.
-    2. `title_romaji` + format, for the rows pass 1 cannot match. Measured against
-       the live Summer 2026 data, 14 Kitsu rows carry no MAL mapping at all, so
-       their MAL twins survived pass 1 as visible duplicates. Most of those have
-       byte-identical romaji.
-    3. display title (`title_english`, falling back to romaji) + format, because
-       romaji is a transliteration and the two sources transliterate differently:
-       "Otome Kaiju Caramelise" against "Otome Kaijuu Caraméliser", "Magical Girl
-       Lyrical Nanoha EXCEEDS" against "Mahou Shoujo Lyrical Nanoha EXCEEDS",
-       "Koukaku Kidoutai: THE GHOST IN THE SHELL" against "Koukaku Kidoutai (TV)".
-       All five such live pairs agree on the English title. The coalesce matters:
-       two of them have no English title on the Kitsu side, and match Kitsu's
-       romaji against MAL's English.
-    4. display title + exact premiere date, for pairs the sources file under
-       different formats - `special` against `ONA` for the Re:Zero break-time
-       shorts. See `_premiere_key`; this is the one pass that does not use format,
-       because format is the very thing being disagreed about.
-
-    Passes 2 and 3 are deliberately narrow. Each requires an exact (case- and
-    whitespace-insensitive) title AND the same format AND the same start year, so
-    a false merge needs two different shows sharing all three. A false merge
-    silently deletes a title, which is worse than the duplicate it prevents, so
-    anything less certain than that - fuzzy distance, substring, title without
-    format - is left alone.
-
-    The year does the work that season scoping used to. This runs over the whole
-    catalogue now (see `consolidate_catalogue`), because sources disagree about
-    which season a title starts in and a season-scoped merge could never see both
-    halves of such a pair.
-
-    The merge is per-column, taking the first non-null value in source-priority
-    order, so one output row holds Kitsu's streaming links and MAL's studios at
-    once.
+    Which rows are one title is decided in processing/matching.py, over every
+    row's own ids and titles; Spark then merges each group. The merge is
+    per-column, taking the first non-null value in source-priority order, so one
+    output row holds Kitsu's streaming links and MAL's studios at once.
 
     Every output row also carries `source_keys`: the source:source_id of every
     input row that collapsed into it. The merge picks one winner per column, but
@@ -286,90 +254,26 @@ def _merge_sources(df: DataFrame) -> DataFrame:
     member wins next week, and the only way to know it is the same title is to
     know every key it was ever made of. See processing/identity.py.
     """
-    df = df.withColumn(
-        _SOURCE_KEYS, F.array(F.concat_ws(":", F.col("source"), F.col("source_id")))
+    own_key = F.concat_ws(":", F.col("source"), F.col("source_id"))
+    df = df.withColumn(_SOURCE_KEYS, F.array(own_key))
+
+    rows = [r.asDict() for r in df.select(*matching.FIELDS).collect()]
+    groups, report = matching.group(rows)
+    logger.info("Matched %s", report)
+
+    mapping = df.sparkSession.createDataFrame(
+        sorted(groups.items()), "_node string, _group string"
     )
-    matched_by_id = _merge_on(
-        df,
-        F.when(F.col("mal_id").isNotNull(), F.concat(F.lit("mal:"), F.col("mal_id"))).otherwise(
-            _identity_key()
-        ),
+    # The coalesce is a guard, not a path: every row's node is in the mapping.
+    # A row somehow missing from it must stay a title of its own, never share a
+    # null key with every other such row.
+    df = (
+        df.withColumn("_node", own_key)
+        .join(mapping, "_node", "left")
+        .withColumn("_group", F.coalesce(F.col("_group"), F.col("_node")))
+        .drop("_node")
     )
-    display_title = F.coalesce(F.col("title_english"), F.col("title_romaji"))
-    matched_by_romaji = _merge_on(matched_by_id, _title_key("tr:", F.col("title_romaji")))
-    matched_by_title = _merge_on(matched_by_romaji, _title_key("td:", display_title))
-    return _merge_on(matched_by_title, _premiere_key(display_title))
-
-
-def _identity_key() -> "F.Column":
-    """A key that matches only the row itself, so an unmatchable row survives a
-    pass untouched instead of grouping with every other unmatchable row."""
-    return F.concat(F.lit("src:"), F.col("source"), F.lit(":"), F.col("source_id"))
-
-
-def _title_key(prefix: str, title: "F.Column") -> "F.Column":
-    """Case- and whitespace-insensitive title + format + start year, or the row's
-    own identity when any part is missing.
-
-    The year is what lets this run over the whole catalogue instead of one season.
-    Sources disagree about which season a title starts in - Kitsu calls nine live
-    titles Summer 2026 that MAL calls Spring 2026 - so a season-scoped merge can
-    never see both halves. They do agree on the year, and requiring it keeps the
-    pass from collapsing two unrelated shows that share a name across years, which
-    is a real hazard for the generic titles common to music videos and specials.
-    """
-    return F.when(
-        title.isNotNull() & F.col("format").isNotNull() & F.col("season_year").isNotNull(),
-        F.concat(
-            F.lit(prefix),
-            F.lower(F.trim(title)),
-            F.lit("|"),
-            F.lower(F.col("format")),
-            F.lit("|"),
-            F.col("season_year").cast("string"),
-        ),
-    ).otherwise(_identity_key())
-
-
-def _premiere_key(title: "F.Column") -> "F.Column":
-    """Exact title + exact premiere date, with no format at all.
-
-    The other title passes require the format to match, which is what stops a
-    series and its compilation film from collapsing into one row. But the sources
-    disagree about format for shows that sit between categories: MAL calls the
-    Re:Zero break-time shorts `special` where Kitsu calls them `ONA`, and there
-    are eight such live pairs, mostly ONA against TV, special or music.
-
-    A same-day premiere under an identical title is strong enough evidence to
-    stand without the format, and stronger than format would be: two different
-    works sharing a title in one year almost never share a release date, while
-    two catalogues describing one work almost always do. Measured over 480 live
-    titles this key produces exactly five groups, every one a Kitsu row paired
-    with its MAL twin, and no two rows from the same source ever collide.
-
-    All three date parts are required. A partial date would match far too much.
-    The three pairs where the sources disagree on the date as well as the format
-    are left alone - by one to four days, which a window could bridge, but not
-    without weakening the key for every other title.
-    """
-    complete_date = (
-        F.col("start_year").isNotNull()
-        & F.col("start_month").isNotNull()
-        & F.col("start_day").isNotNull()
-    )
-    return F.when(
-        title.isNotNull() & complete_date,
-        F.concat(
-            F.lit("tp:"),
-            F.lower(F.trim(title)),
-            F.lit("|"),
-            F.col("start_year").cast("string"),
-            F.lit("-"),
-            F.col("start_month").cast("string"),
-            F.lit("-"),
-            F.col("start_day").cast("string"),
-        ),
-    ).otherwise(_identity_key())
+    return _merge_on(df, F.col("_group")).drop("_group")
 
 
 def _merge_on(df: DataFrame, key: "F.Column") -> DataFrame:

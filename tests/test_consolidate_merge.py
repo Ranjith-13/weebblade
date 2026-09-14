@@ -162,6 +162,27 @@ def test_anilist_fills_what_mal_lacks_and_replaces_nothing_it_has(spark):
     assert out["source_material"] == "manga"  # MAL had none
 
 
+def test_a_new_source_cannot_split_a_title_the_others_agreed_on(spark):
+    """AniList's first backfill split this title in two. Kitsu and MAL had matched
+    on the premiere date under MAL's romaji; the merge then keyed on whichever
+    title had won, AniList's English one filled MAL's empty one, and the Kitsu
+    row matched nothing. See processing/matching.py."""
+    romaji = "Aldnoah.Zero: Ame no Danshou - The Penultimate Truth"
+    date = dict(start_year=2025, start_month=3, start_day=26, season_year=2025)
+    df = spark.createDataFrame(
+        [
+            _row("kitsu", "49209", None, title_romaji=romaji, fmt="OVA", **date),
+            _row("mal", "59843", 59843, title_romaji=romaji, fmt="special", **date),
+            _row("anilist", "181440", 59843, title_romaji=romaji,
+                 title_english="ALDNOAH.ZERO: The Penultimate Truth", fmt="OVA", **date),
+        ],
+        SCHEMA_F,
+    )
+    out = _merge_sources(df).collect()
+
+    assert [r["source_keys"] for r in out] == [["anilist:181440", "kitsu:49209", "mal:59843"]]
+
+
 def test_rows_without_a_mal_id_are_never_merged(spark):
     """A row with no join key cannot be matched to anything. Keeping it separate
     is the safe default: a false merge silently deletes a title, while a missed
