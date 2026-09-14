@@ -57,7 +57,24 @@ def anilist_airing():
         count = land_status(DATA_DIR, data_interval_end.strftime("%Y-%m-%d"))
         logger.info("AniList status: %s titles answered", count)
 
-    fetch_airing() >> fetch_status()
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def check_run(data_interval_end=None, dag_run=None):
+        """Whether the day's fetches landed and are what the views serve. See
+        processing/run_checks.py."""
+        from airflow.exceptions import AirflowFailException
+
+        from processing.run_checks import check_daily, notify
+
+        run_date = data_interval_end.strftime("%Y-%m-%d")
+        failed = [ti.task_id for ti in dag_run.get_task_instances()
+                  if ti.task_id != "check_run" and ti.state in ("failed", "upstream_failed")]
+        record = check_daily(DATA_DIR, run_date, failed)
+        logger.info("Run checks:\n%s", record.summary())
+        if not record.passed:
+            notify(record)
+            raise AirflowFailException(record.summary())
+
+    fetch_airing() >> fetch_status() >> check_run()
 
 
 anilist_airing()

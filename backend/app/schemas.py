@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, field_validator
 
 
@@ -52,6 +54,25 @@ class ChangeFeed(BaseModel):
     since: str | None = None
     until: str | None = None
     changes: list[ChangedTitle] = []
+
+
+class RunFinding(BaseModel):
+    # "fail", which failed the run, or "note".
+    level: str
+    message: str
+
+
+class RunCheck(BaseModel):
+    """What a pipeline run checked about its own output. See
+    processing/run_checks.py; the numbers differ by DAG."""
+
+    dag: str
+    run_date: str
+    passed: bool
+    checked_at: str | None = None
+    numbers: dict[str, Any] = {}
+    findings: list[RunFinding] = []
+    failed_tasks: list[str] = []
 
 
 class Anime(BaseModel):

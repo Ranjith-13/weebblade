@@ -211,12 +211,33 @@ def anime_seasonal_pipeline():
         logger.info("Franchises: %s", _build(DATA_DIR))
         _refresh_catalog(DATA_DIR, DATA_DIR / "warehouse.duckdb")
 
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def check_run(data_interval_end=None, dag_run=None):
+        """Read what the run produced, write its numbers down, and fail the run
+        if something is wrong. See processing/run_checks.py.
+
+        Last, and ALL_DONE like everything after the fetches: every other task
+        runs whatever happened upstream, so without this a task in the middle
+        can fail under a run that still ends green."""
+        from airflow.exceptions import AirflowFailException
+
+        from processing.run_checks import check_weekly, notify
+
+        _, _, run_date, _ = capture_for(data_interval_end)
+        failed = [ti.task_id for ti in dag_run.get_task_instances()
+                  if ti.task_id != "check_run" and ti.state in ("failed", "upstream_failed")]
+        record = check_weekly(DATA_DIR, run_date, failed)
+        logger.info("Run checks:\n%s", record.summary())
+        if not record.passed:
+            notify(record)
+            raise AirflowFailException(record.summary())
+
     fetches = [fetch_anilist(), fetch_jikan(), fetch_mal(), fetch_kitsu()]
     # In a line, not in parallel: each of these opens the warehouse file, and
     # DuckDB allows one writer. The digest and the index read it after.
     catalog = (fetches >> consolidate() >> record_changes() >> refresh_catalog()
                >> fetch_mal_relations() >> build_franchises())
-    catalog >> [generate_digest(), build_search_index()]
+    catalog >> [generate_digest(), build_search_index()] >> check_run()
 
 
 anime_seasonal_pipeline()

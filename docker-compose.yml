@@ -25,6 +25,10 @@ x-airflow-common: &airflow-common
     # Official MyAnimeList API v2. Free, from https://myanimelist.net/apiconfig
     # Unset is a supported state: fetch_mal skips rather than failing.
     MAL_CLIENT_ID: ${MAL_CLIENT_ID:-}
+    # An ntfy topic that a run failing its own checks is pushed to
+    # (processing/run_checks.py). Unset, the run still fails in Airflow, but
+    # nobody is told.
+    NTFY_TOPIC: ${NTFY_TOPIC:-}
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./ingestion:/opt/airflow/ingestion

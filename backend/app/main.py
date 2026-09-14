@@ -10,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from .limiter import limiter
-from .routers import anime, catalogue, changes, digest, schedule, search
+from .routers import anime, catalogue, changes, digest, runs, schedule, search
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,7 @@ app.include_router(anime.router)
 app.include_router(catalogue.router)
 app.include_router(changes.router)
 app.include_router(digest.router)
+app.include_router(runs.router)
 app.include_router(schedule.router)
 app.include_router(search.router)
 
@@ -78,6 +79,7 @@ def root():
             "/changes",
             "/digest",
             "/digest/latest",
+            "/runs",
             "/schedule",
             "/search",
         ],
