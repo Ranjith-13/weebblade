@@ -6,7 +6,7 @@ from typing import Any
 
 import duckdb
 
-from .queries import STATS_QUERIES
+from .queries import CHANGES_THIS_WEEK, STATS_QUERIES
 
 logger = logging.getLogger(__name__)
 
@@ -36,5 +36,20 @@ def collect_stats(db_path: Path) -> dict[str, list[dict[str, Any]]]:
     except duckdb.CatalogException:
         logger.warning("anime_media_latest view doesn't exist yet in %s", db_path)
         return _EMPTY_STATS
+    finally:
+        con.close()
+
+
+def collect_changes(db_path: Path) -> list[dict[str, Any]]:
+    """This week's changes, or none before any have been recorded - a digest
+    goes out either way."""
+    if not db_path.exists():
+        return []
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        return con.execute(CHANGES_THIS_WEEK).fetch_arrow_table().to_pylist()
+    except duckdb.CatalogException:
+        logger.warning("No changes recorded yet in %s", db_path)
+        return []
     finally:
         con.close()

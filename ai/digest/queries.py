@@ -91,3 +91,20 @@ STATS_QUERIES = {
     "format_counts": FORMAT_COUNTS,
     "season_summary": SEASON_SUMMARY,
 }
+
+# What the sources changed in the week up to the newest fetch compared - this
+# run's, since the digest runs after record_changes. Any season: a delay or a
+# finale is news whichever season it belongs to. One row per title and change,
+# however many sources told it. Kept out of STATS_QUERIES, which fail together:
+# a warehouse with no changes recorded yet must still get its digest.
+CHANGES_THIS_WEEK = """
+    WITH newest AS (SELECT MAX(run_date) AS d FROM anime_change)
+    SELECT c.field, c.old, c.new, ANY_VALUE(c.label) AS label, LIST(DISTINCT c.source) AS sources,
+           COALESCE(m.title_english, m.title_romaji) AS title, m.format
+    FROM anime_change c
+    JOIN anime_media_latest m ON m.wb_id = c.wb_id
+    CROSS JOIN newest
+    WHERE c.run_date > strftime(CAST(newest.d AS DATE) - INTERVAL 7 DAY, '%Y-%m-%d')
+    GROUP BY c.wb_id, c.field, c.old, c.new, m.title_english, m.title_romaji, m.format
+    ORDER BY c.field, title, c.new
+"""

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..db import get_db, run_query
 from ..schemas import Anime, AnimeListResponse, Franchise, FranchiseEntry
+from .changes import title_changes
 from .schedule import upcoming_episodes
 
 router = APIRouter(prefix="/anime", tags=["anime"])
@@ -143,10 +144,12 @@ def get_anime_by_identity(
 
 
 def _with_airing(con: duckdb.DuckDBPyConnection, row: dict) -> Anime:
-    """One title, with its next episodes from AniList's schedule."""
+    """One title, with its next episodes from AniList's schedule and what its
+    sources have changed about it."""
     title = Anime(**row)
     if title.wb_id:
         title.upcoming_episodes = upcoming_episodes(con, title.wb_id)
+        title.changes = title_changes(con, title.wb_id)
     return title
 
 

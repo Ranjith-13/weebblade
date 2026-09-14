@@ -4,7 +4,7 @@ import logging
 import os
 from pathlib import Path
 
-from .collect import collect_stats
+from .collect import collect_changes, collect_stats
 from .prompt import build_prompt
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def generate_digest(
         logger.warning("No data available yet in the warehouse - skipping digest generation")
         return None
 
-    prompt = build_prompt(stats)
+    prompt = build_prompt(stats, collect_changes(db_path))
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{run_date}.md"
 

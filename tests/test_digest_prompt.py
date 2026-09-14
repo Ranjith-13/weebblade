@@ -102,3 +102,44 @@ def test_the_prompt_still_builds_when_the_season_is_unknown():
 
     assert "## Top rated titles this season" in prompt
     assert "None" not in prompt
+
+
+_STATS = {"top_rated": [], "genre_counts": [], "format_counts": [], "season_summary": []}
+
+
+def _change(field, title, old=None, new=None, **kw):
+    return {"field": field, "title": title, "old": old, "new": new, "label": None, "format": "TV", **kw}
+
+
+def test_this_weeks_changes_are_lines_the_model_can_name_and_is_told_what_they_are():
+    prompt = build_prompt(_STATS, [
+        _change("status", "Frieren", "current", "finished"),
+        _change("listed", "Poke Oki Season 2", format="ONA"),
+        _change("score", "Dandadan", "7.2", "7.9"),
+        _change("streaming", "Frieren", None, "https://netflix.com/x", label="Netflix"),
+        _change("season", "Delayed Show", "SUMMER 2026", "FALL 2026"),
+    ])
+
+    assert "## What changed since last week (any season)" in prompt
+    assert "- Frieren: now finished (was airing)" in prompt
+    assert "- Poke Oki Season 2 (ONA): newly listed" in prompt
+    assert "- Dandadan: score 7.2 to 7.9 out of 10" in prompt
+    assert "- Frieren: now streaming on Netflix" in prompt
+    assert "- Delayed Show: season SUMMER 2026 to FALL 2026" in prompt
+    assert "Do not present these as this season's statistics" in prompt
+
+
+def test_a_week_with_no_changes_has_no_section_and_no_instruction_about_one():
+    prompt = build_prompt(_STATS, [])
+
+    assert "What changed" not in prompt and "since last week" not in prompt
+
+
+def test_a_busy_week_names_the_biggest_score_moves_and_counts_the_rest():
+    moves = [_change("score", f"Show {i}", "7.0", f"{7 + i / 10:.1f}") for i in range(1, 16)]
+
+    prompt = build_prompt(_STATS, moves)
+
+    assert prompt.index("Show 15:") < prompt.index("Show 14:")
+    assert "Show 1:" not in prompt and "Show 3:" not in prompt
+    assert "- and 3 more score changes" in prompt

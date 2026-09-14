@@ -13,6 +13,47 @@ class AiringEpisode(BaseModel):
     fetched_on: str | None = None
 
 
+class Change(BaseModel):
+    """Something a title's sources now say differently from their last fetch.
+    See processing/changes.py.
+
+    `field` is one of status, episodes, score, premiere, season, broadcast,
+    trailer, streaming, or listed: an entry a source created since its last
+    fetch, with no old or new value. Values are as the source had them: a score
+    out of 10 to one decimal, a premiere as precise as known ("2026", "2026-10",
+    "2026-10-04"), a season as "FALL 2026", a streaming link as its URL with the
+    service in `label`.
+    """
+
+    field: str
+    old: str | None = None
+    new: str | None = None
+    label: str | None = None
+    # The fetch the change was seen in, and the earlier one it was compared with.
+    run_date: str
+    since: str | None = None
+    # Every source that reported this same change in that fetch, in the order the
+    # merge ranks them.
+    sources: list[str] = []
+
+
+class ChangedTitle(Change):
+    wb_id: str
+    title: str | None = None
+    format: str | None = None
+    poster_url: str | None = None
+    season: str | None = None
+    season_year: int | None = None
+
+
+class ChangeFeed(BaseModel):
+    """Every change recorded in a run of days up to the newest fetch compared."""
+
+    since: str | None = None
+    until: str | None = None
+    changes: list[ChangedTitle] = []
+
+
 class Anime(BaseModel):
     source: str
     source_id: str
@@ -70,6 +111,9 @@ class Anime(BaseModel):
     # on a single title only (GET /anime/{wb_id}); empty in lists. Several, not
     # one, so a client holding a cached copy can skip the ones that have aired.
     upcoming_episodes: list[AiringEpisode] = []
+    # What its sources have said differently from one fetch to the next, newest
+    # first. Filled on a single title only; empty in lists.
+    changes: list[Change] = []
     # `status` above is checked against AniList: where the sources call a title
     # airing and AniList's daily check says it has finished or not yet aired,
     # status says so. merged_status is what the sources said. The rest is

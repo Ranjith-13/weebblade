@@ -179,3 +179,54 @@ def test_titles_with_no_season_are_left_out_of_the_summary(tmp_path):
     summary = collect_stats(_warehouse(tmp_path, rows + [orphan]))["season_summary"]
 
     assert [(r["season"], r["season_year"]) for r in summary] == [("SUMMER", 2026)]
+
+
+# --- This week's changes -------------------------------------------------------------------
+
+def _changes_world(tmp_path):
+    """Two weekly fetches from Kitsu and MAL: title 1 finishes, told by both."""
+    from processing import identity
+    from processing.changes import record_history
+
+    data = tmp_path / "data"
+    ids, registry, _ = identity.assign([["kitsu:1", "mal:1"], ["kitsu:2"]], identity.Registry(), "2026-09-06")
+    identity.save(data, registry)
+    _write_parquet(
+        data / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-09-13" / "p.parquet",
+        [{"source": "kitsu", "source_id": str(n), "wb_id": ids[n - 1], "title_english": f"Title {n}",
+          "title_romaji": None, "format": "TV", "score_100": 70.0, "genres": [], "season": "SUMMER",
+          "season_year": 2026, "run_date": "2026-09-13"} for n in (1, 2)],
+    )
+    row = lambda sid, **kw: {"source_id": sid, "status": "current", "episodes": 12, **kw}
+    for source in ("kitsu", "mal"):
+        _write_parquet(data / "processed" / f"{source}_media" / "2026-SUMMER" / "2026-09-06.parquet", [row("1"), row("2")])
+        _write_parquet(data / "processed" / f"{source}_media" / "2026-SUMMER" / "2026-09-13.parquet",
+                       [row("1", status="finished"), row("2")])
+    record_history(data)
+    db = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data, db)
+    return db
+
+
+def test_the_digest_gets_this_weeks_changes_once_each_however_many_sources_told_them(tmp_path):
+    from ai.digest.collect import collect_changes
+
+    changes = collect_changes(_changes_world(tmp_path))
+
+    assert [(c["title"], c["field"], c["old"], c["new"], sorted(c["sources"])) for c in changes] == [
+        ("Title 1", "status", "current", "finished", ["kitsu", "mal"])]
+
+
+def test_a_warehouse_with_no_changes_recorded_still_gets_its_digest(tmp_path):
+    from ai.digest.collect import collect_changes
+
+    data = tmp_path / "data"
+    _write_parquet(data / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-09-13" / "p.parquet",
+                   [{"source": "kitsu", "source_id": "1", "title_english": "X", "title_romaji": None, "score_100": 70.0,
+                     "genres": ["Drama"], "format": "TV", "season": "SUMMER", "season_year": 2026,
+                     "run_date": "2026-09-13"}])
+    db = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data, db)
+
+    assert collect_changes(db) == []
+    assert collect_stats(db)["top_rated"]
