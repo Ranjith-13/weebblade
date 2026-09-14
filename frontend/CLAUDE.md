@@ -6,11 +6,14 @@ Read `DESIGN.md` before changing anything visual. Most choices here are measured
 
 ## Direction
 
-**Halftone Almanac — colour as certainty.** Only 39 of 142 titles have a score, so the design
-spends its one colour on that fact: scored titles print in full colour with a flag-pink tab,
-unscored ones drain to greyscale and screen back to visible halftone. A third state, diagonal rule
-fill, covers the 37 titles with no artwork — that is a *separate* gap from a missing score and
-must stay separate.
+**Halftone Almanac — colour as certainty.** The design spends its one colour on whether a title
+has a score: scored titles print in full colour with a flag-pink tab, unscored ones drain to
+greyscale and screen back to visible halftone. It was drawn when 39 of 142 titles had one. With
+MAL and AniList beside Kitsu, 88% of a season's TV is scored now, but not the rest: in Summer 2026,
+17 of 62 ONAs and 8 of 59 music videos (measured 2026-09-14). So the screened-back state is the
+exception on the TV default and the rule one format chip away. A third state, diagonal rule fill,
+is for a title with no artwork - a *separate* gap from a missing score, and it must stay
+separate, though posters now cover 99.9% of the catalogue.
 
 The certainty treatment is driven by `isKnown(anime)` over real data. **Never apply
 `.plate-unknown` decoratively** — the moment it stops meaning "no score upstream", the whole idea
@@ -59,7 +62,8 @@ If a change would fit three other products, it is wrong.
 back into per-view API calls; it is *fewer* upstream requests, and it is the only place these are
 fixable:
 
-1. **Pagination is unstable under `score_desc`** (103 NULL scores, no deterministic tie order).
+1. **Pagination is unstable under `score_desc`** (103 NULL scores in the one-season catalogue, no
+   deterministic tie order; over half of a season's non-TV is still unscored).
    Three identical fetches returned 126 / 116 / 122 distinct titles. **`sort=title` is pinned in
    `getSeason()` and is load-bearing** — do not remove it.
 2. **`popularity` is a rank, lower = more popular.** The API's only popularity sort returns the
@@ -67,7 +71,8 @@ fixable:
 3. **Genre facets are derived from the data.** A hardcoded list drifted and shipped a `Sci-Fi` chip
    that matched nothing.
 
-Never render `favourites` (0-25, noise). `studios`, `source_material` and `mal_id` were on this
+Never render `favourites`: each source's own count on its own site, a median of 0 and up to
+7,740 on AniList (2026-09-14), so it says which site a row came from as much as anything. `studios`, `source_material` and `mal_id` were on this
 list when Kitsu was the only source and all three were 100% null; MAL supplies all three, so the
 first two lead the facts list and `mal_id` is what `sourceLinks()` uses to reach MyAnimeList.
 
@@ -216,22 +221,24 @@ they can never be.
 Measured across the full season, not a sample. An earlier 40-title sample overstated cover art at
 ~50% and trailers at ~80%; Kitsu's listing puts well-documented titles first, so the head lies.
 
-Re-measured 2026-09-09 over the newest season (228 titles) after MAL joined. MAL supplies
-studios, source material and scores but carries **no** slug, cover, trailer or streaming links, so
-adding it raised some fields and diluted others. Both directions matter.
+Re-measured over the newest season: on 2026-09-09 (228 titles) after MAL joined, and on
+2026-09-14 (237 titles) after AniList joined. MAL supplies studios, source material and scores but
+carries **no** slug, cover, trailer or streaming links; AniList, ranked below both, fills banners,
+trailers, streaming links and scores where they have none. Each source raised some fields and
+diluted others. The TV column is what `/browse` shows by default.
 
-| Field | Coverage | Rule |
-|---|---|---|
-| `user_count` | 100% | Safe to rely on |
-| `source_material` | 83% | MAL's contribution; was 0% before it |
-| `studios` | 68% | Same |
-| `rating_rank` | 64% | |
-| `slug` | **61%** | **MAL rows have none.** `sourceUrl()` returns null; render no link, never a broken one |
-| `score_100` | 43% | The whole certainty system exists for this. **Stored /100, displayed /10** |
-| `streaming_services` / `_urls` | 36% | Show an honest "no link listed" when absent |
-| `trailer_id` | 35% | Render the component or nothing |
-| `broadcast_day` / `_time` | 29% | The slot line and `NextAiring`, where AniList has no airdate |
-| `cover_url` | **11%** | **Enhancement only. Never reserve space for it** |
+| Field | 09-09 | 09-14 | 09-14, TV | Rule |
+|---|---|---|---|---|
+| `user_count` | 100% | 100% | 100% | Safe to rely on |
+| `source_material` | 83% | 90% | 96% | MAL's contribution; was 0% before it |
+| `studios` | 68% | 72% | 96% | Same |
+| `rating_rank` | 64% | 64% | 91% | |
+| `slug` | **61%** | 62% | 91% | **MAL rows have none.** `sourceUrl()` returns null; render no link, never a broken one |
+| `score_100` | 43% | 44% | 88% | The whole certainty system exists for this. **Stored /100, displayed /10** |
+| `streaming_services` / `_urls` | 36% | 51% | 93% | Show an honest "no link listed" when absent |
+| `trailer_id` | 35% | 56% | 93% | Render the component or nothing |
+| `broadcast_day` / `_time` | 29% | 28% | 85% | The slot line and `NextAiring`, where AniList has no airdate |
+| `cover_url` | **11%** | **32%** | 69% | **Enhancement only. Never reserve space for it** |
 
 Scores are **stored out of 100 and shown out of 10** - `scoreOutOfTen()` and `SCORE_MAX` in
 `lib/types.ts` own that, and the browse plate, the detail page and the search plate all go through

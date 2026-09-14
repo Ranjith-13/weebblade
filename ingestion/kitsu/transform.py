@@ -58,7 +58,8 @@ def flatten_media(media: dict[str, Any]) -> dict[str, Any]:
         "popularity": attrs.get("popularityRank"),
         "rating_rank": attrs.get("ratingRank"),
         # userCount is a magnitude, not a rank, and is populated for 100% of the
-        # season - unlike favourites, which tops out around 25 and carries no signal,
+        # season - unlike favourites, which is 0 for most titles (a median of 0 across
+        # twenty seasons, 2026-09-14) and carries no signal,
         # and unlike score, which only 29% of titles have. This is the densest
         # interest signal Kitsu gives us.
         "user_count": attrs.get("userCount"),

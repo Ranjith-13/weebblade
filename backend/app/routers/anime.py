@@ -15,8 +15,8 @@ router = APIRouter(prefix="/anime", tags=["anime"])
 # order, so LIMIT/OFFSET slices a differently shuffled result on each call and
 # paging silently serves some rows twice while never serving others.
 #
-# This was not theoretical. 103 of 142 rows have a NULL score, so under the
-# default score_desc sort nearly the whole catalogue was one undifferentiated
+# This was not theoretical. In the one-season catalogue, 103 of 142 rows had a
+# NULL score, so under the default score_desc sort nearly all of it was one undifferentiated
 # tie block: three identical two-page fetches returned 126, 116 and 122 distinct
 # titles, differing by 30-40 ids. (source, source_id) is unique per row, so
 # appending it makes every ordering total and paging reproducible.

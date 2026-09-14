@@ -99,11 +99,13 @@ class Anime(BaseModel):
     popularity: float | None = None
     rating_rank: int | None = None
     # The densest interest signal available: present for 100% of the season, where
-    # score is present for 29% and favourites tops out around 25.
+    # score covers 44% of a season and 88% of its TV (2026-09-14). favourites is
+    # each source's own count on its own site, mostly 0.
     user_count: int | None = None
     favourites: float | None = None
     age_rating: str | None = None
-    # Sparse enhancements. cover_url is on ~17% of titles and trailer_id ~57%, so
+    # Sparse enhancements. cover_url is on 32% of a season and trailer_id 56%
+    # (69% and 93% of its TV; 2026-09-14), so
     # neither may be treated as a layout assumption by any client.
     cover_url: str | None = None
     trailer_id: str | None = None
@@ -112,8 +114,8 @@ class Anime(BaseModel):
     # date - MAL has none - so the next airing is derived by the client.
     broadcast_day: str | None = None
     broadcast_time: str | None = None
-    # Parallel arrays: streaming_services[i] labels streaming_urls[i]. ~59% of the
-    # season carries at least one link.
+    # Parallel arrays: streaming_services[i] labels streaming_urls[i]. About half of
+    # a season carries at least one link (51%; 93% of its TV, 2026-09-14).
     streaming_services: list[str] = []
     streaming_urls: list[str] = []
     start_year: int | None = None

@@ -1,8 +1,9 @@
 """Backfill past seasons into the lake.
 
 The weekly pipeline only ever fetches the season it is running in, so the lake
-holds exactly as much history as the pipeline has lived through: two seasons, all
-of 2026. That is enough to browse a season and nothing more. Every direction this
+holds exactly as much history as the pipeline has lived through - two seasons, all
+of 2026, before this first ran on 2026-09-11. That is enough to browse a season and
+nothing more. Every direction this
 project is heading needs depth - a franchise page needs the prequels, a "watch
 tonight" filter needs finished shows, a creator page needs earlier work - and a
 live check found the direct prequel of two airing shows (Re:Zero S3, BLEACH TYBW

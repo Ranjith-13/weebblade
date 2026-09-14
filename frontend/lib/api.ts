@@ -27,14 +27,15 @@ import {
  * problems that could not be fixed downstream:
  *
  *   1. PAGINATION IS UNSTABLE under the default sort. `score_desc` orders by
- *      `score_100 DESC NULLS LAST`, and 103 of 142 rows are NULL — so the tie
+ *      `score_100 DESC NULLS LAST`, and in the one-season catalogue this was
+ *      measured on, 103 of 142 rows were NULL — so the tie
  *      block has no deterministic order and LIMIT/OFFSET slices a differently
  *      shuffled result each time. Measured: three identical two-page fetches
  *      returned 126, 116 and 122 distinct titles, differing by 30-40 ids. Rows
  *      were served twice while others were never served at all. Every page of
  *      the old /browse was a different random subset of the catalogue.
  *      `sort=title` orders by COALESCE(title_english, title_romaji) and is
- *      stable: 142 rows, 142 distinct ids, identical across runs. That is why
+ *      stable: 142 rows, 142 distinct ids then, identical across runs. That is why
  *      the fetch below pins the sort and reorders locally afterwards.
  *   2. `popularity` is a rank — lower is more popular — and the only sort the
  *      API offers is `popularity_desc`, i.e. least-popular-first.
@@ -302,8 +303,8 @@ export async function getSeason(key?: string): Promise<Season> {
 /** Genre and format facets derived from the data, with real counts. Replaces a
  *  hardcoded list that had drifted out of sync — a chip that returns nothing is
  *  worse than no chip. Only genres with enough titles to be worth a click are
- *  offered; the long tail (98 distinct genres across 142 titles) is not a
- *  usable filter row. */
+ *  offered; the long tail (131 distinct genres in Summer 2026, 218 across the
+ *  catalogue, as of 2026-09-14) is not a usable filter row. */
 export type Facets = {
   genres: { value: string; count: number }[];
   formats: { value: string; count: number }[];

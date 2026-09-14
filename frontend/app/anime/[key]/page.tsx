@@ -41,16 +41,16 @@ import {
  * A key that is not shaped like an identity is a 404 without asking the API:
  * nothing else lives at this depth, and a request per stray URL would spend the
  * shared rate limit on junk. */
-/* Enough for a season of weekly changes; a long-running title's older history
-   is counted rather than listed. */
-const CHANGES_SHOWN = 12;
-
 async function load(key: string): Promise<Anime> {
   if (!WB_ID.test(key)) notFound();
   const anime = await getTitle(key);
   if (!anime) notFound();
   return anime;
 }
+
+/* Enough for a season of weekly changes; a long-running title's older history
+   is counted rather than listed. */
+const CHANGES_SHOWN = 12;
 
 export async function generateMetadata(props: PageProps<"/anime/[key]">) {
   const { key } = await props.params;
@@ -168,7 +168,8 @@ async function AnimeDetail({
      it was. Studios and Source material were removed when they were null for
      100% of rows, because Kitsu provides neither; MAL does, so they are back and
      lead, being the most concretely useful things here. Favourites stays out:
-     it ranges 0-25 and is noise dressed as a metric. */
+     it is each source's own count on its own site, mostly 0, and says which
+     site a row came from as much as how liked a title is. */
   const facts: [string, React.ReactNode][] = [
     /* The studios are links, and this is the only way into a studio filter.
        /browse has no studio chip row on purpose: 135 distinct studios across 227
@@ -269,7 +270,7 @@ async function AnimeDetail({
         {filed ? `Back to ${filed.label}` : "Back to the season"}
       </Link>
 
-      {/* Cover art exists for only ~17% of the season, so this is an enhancement
+      {/* Cover art is on only a third of a season (32%, 2026-09-14), so this is an enhancement
           and never a layout assumption: when it is absent the page simply starts
           at the poster, with nothing reserved and nothing to shift. It carries
           the same certainty treatment as the plates so a screened-back banner
@@ -360,7 +361,7 @@ async function AnimeDetail({
         )}
 
         {/* The most actionable thing on the page, so it sits above the synopsis.
-            About 59% of the season carries at least one link; the rest say so
+            About half of a season carries at least one link; the rest say so
             plainly rather than leaving a silent gap where a control should be. */}
         <div className="mt-7 border-t border-rule pt-5">
           <h2 className="stamp mb-3">Where to watch</h2>

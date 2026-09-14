@@ -29,13 +29,14 @@ each visitor spends their own rate-limit budget on their own unique queries. Ser
 would buy nothing for queries nobody repeats, and search results have no SEO value worth
 prerendering.
 
-**The whole season is fetched at once, and that is deliberate.** `getSeason()` pulls all 142
-titles in two requests, caches them, and derives every filter, sort, facet and page locally. It is
+**The whole season is fetched at once, and that is deliberate.** `getSeason()` pulls the whole
+season - 233 to 370 titles, three or four requests of 100 - caches it, and derives every filter,
+sort, facet and page locally. It is
 *fewer* upstream requests than passing filters through, and it is the only place three upstream
 behaviours can be corrected:
 
 1. **Pagination is unstable under the default sort.** `score_desc` orders by
-   `score_100 DESC NULLS LAST` over 103 NULLs, so ties have no deterministic order and
+   `score_100 DESC NULLS LAST` over 103 NULLs in the one-season catalogue, so ties have no deterministic order and
    `LIMIT/OFFSET` slices a differently shuffled result each call — three identical two-page
    fetches returned 126, 116 and 122 distinct titles. `sort=title` is stable and is pinned in
    `getSeason()`. **Do not remove it.**

@@ -37,8 +37,8 @@ _STRING_COLUMNS = [
     "source_material",
     "poster_url",
     # Added 2026-09: fields Kitsu already returned and the transform was discarding.
-    "cover_url",      # wide banner art; 17% of the season - a rare enhancement, never a layout assumption
-    "trailer_id",     # YouTube id; 57% of the season
+    "cover_url",      # wide banner art; 30% of the catalogue (2026-09-14) - an enhancement, never a layout assumption
+    "trailer_id",     # YouTube id; 48% of the catalogue (2026-09-14)
     "slug",           # lets the UI link back to the source record
     "age_rating",
     # MAL's weekly broadcast slot, e.g. ("saturday", "23:30") in JST. Stored as

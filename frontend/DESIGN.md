@@ -25,7 +25,9 @@ Measured against the live API, not assumed. Everything below drove a design deci
 
 This table is from when the warehouse held one season. It now holds twenty (Fall 2021 to Summer
 2026, 6,136 titles from Kitsu, MAL and AniList), reached from the season index in the header; see
-frontend/CLAUDE.md, "Getting to a season".
+frontend/CLAUDE.md, "Getting to a season". Measured again on 2026-09-14 over all 6,136: score
+58% (88% of a season's TV), poster 99.9%, popularity 98.6%, studios 57%, trailer 48%, a streaming
+link 46%, cover art 30%. A season runs 233 to 370 titles, 57 to 88 of them TV.
 
 ### Three upstream behaviours the UI must work around
 
@@ -52,8 +54,10 @@ frontend/CLAUDE.md, "Getting to a season".
   state, because a missing poster is a different gap from a missing score. A title can be scored
   and have no artwork, and the design says both things at once.
 
-73% of the season is in the screened-back state. That is not an edge case being styled; it is the
-majority condition, and the page has to look composed when most of it is unknown.
+When this was drawn, 73% of the season was in the screened-back state: not an edge case being
+styled but the majority condition, so the page had to look composed when most of it was unknown.
+With MAL and AniList it is 12% of a season's TV (2026-09-14), and still over half of the ONAs,
+films and music videos a format chip away. The page has to look composed either way.
 
 This lives in two utilities in `globals.css` (`.plate-known` / `.plate-unknown`) and is applied
 from `isKnown(anime)` — a real predicate over real data. **It must never be applied
@@ -141,14 +145,14 @@ almost no JS, and it is the reason each effect below has to justify itself.
 |---|---|---|
 | Line-mask entrance | Masthead | The one moment the page announces itself. Above the fold, so a scroll trigger would never fire. |
 | Parallax + scrub fade | Masthead | 12% speed difference makes the catalogue slide *over* the cover rather than with it. Scrub-linked, so dragging backwards plays it back. |
-| Stagger reveal | Plate grids, stat rail, digest archive | 142 near-identical 3:4 plates landing at once give the eye no order. A stagger turns a wall into a sequence. |
+| Stagger reveal | Plate grids, stat rail, digest archive | A season's 233 to 370 near-identical 3:4 plates landing at once give the eye no order. A stagger turns a wall into a sequence. |
 | **Pin** | "How to read this" key | Functional, not decorative: the key decodes the plates, so it stays put while plates scroll past it. Desktop only. |
 | Parallax | Detail page key art | Stops one image plus one text column reading as a flat slab. Applied to the image *inside* a fixed frame, so nothing reflows. |
 | Halftone lift | Unscored plate hover | CSS, not JS. The plate is screened because there is no score; leaning in reveals what *is* there. |
 
 **Deliberately not built:**
 
-- **Horizontal scroll hijack.** `/browse` has filters, pagination and 142 titles behind real URLs.
+- **Horizontal scroll hijack.** `/browse` has filters, pagination and a season of 233 to 370 titles behind real URLs.
   Converting it to a horizontal pan breaks keyboard navigation, scroll restoration on back-nav, and
   the shareable-URL model that the whole filter design rests on.
 - **Three.js.** There is no 3D content. It would be several hundred KB rendering nothing.
@@ -179,8 +183,9 @@ JS never runs, the page is complete and unstyled-back, not invisible.
   the site, not decoration.
 - **Counts are stated honestly.** The old rail claimed "Sources 3" when two of the three are down
   upstream, and a title count that changed between refreshes.
-- **The digest's own figures are flagged as point-in-time**, because this week it says 140 where
-  the season holds 142. Two numbers disagreeing on one page needs a sentence, not silence.
+- **The digest's own figures are flagged as point-in-time**, because the week this was written it
+  said 140 where the season held 142. Two numbers disagreeing on one page needs a sentence, not
+  silence.
 - **Filters stay links, not client state** — no JS for filtering, and every view has a real
   shareable, back-button-able URL.
 

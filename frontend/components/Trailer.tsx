@@ -12,7 +12,7 @@ import { useState } from "react";
  * difference between the trailer costing nothing and costing more than the rest
  * of the site combined.
  *
- * ~57% of the season has a trailer, so every caller has to handle its absence;
+ * About half of a season has a trailer (56%, 2026-09-14), so every caller has to handle its absence;
  * this component simply is not rendered in that case.
  */
 export function Trailer({ videoId, title }: { videoId: string; title: string }) {

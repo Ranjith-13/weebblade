@@ -11,7 +11,8 @@ import { EASE, FULL, gsap, useGSAP } from "./gsap-init";
  * moves to the browser, only the animation does.
  *
  * WHY THIS IS MOTIVATED (and not just "it looked cool"):
- * The catalogue is 142 near-identical 3:4 plates. Landing all of them at once
+ * A season is 233 to 370 near-identical 3:4 plates (57 to 88 on the TV
+ * default; measured 2026-09-14). Landing all of them at once
  * gives the eye no order to follow, which is exactly the "uniform grid where
  * everything has equal weight" problem the audit flagged. A short stagger
  * along the reading direction gives the grid a first, a second, a third, and

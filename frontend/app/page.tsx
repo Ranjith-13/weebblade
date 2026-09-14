@@ -120,9 +120,10 @@ async function Home() {
           "Sources 3" when two of the three are down upstream, and reported a
           title count that changed between refreshes. */}
       {/* Leads with TV because that is what the site shows by default, and states
-          the rest of the ingest beside it rather than folding 27 music videos
-          into a single headline number. The previous rail said "142 titles, 39
-          rated" - true, but it described the ingest, not the anime. */}
+          the rest of the ingest beside it rather than folding a season's music
+          videos into a single headline number - 27 of 142 titles then, 59 of 237
+          in Summer 2026. The rail used to say "142 titles, 39 rated" - true, but
+          it described the ingest, not the anime. */}
       <ScrollReveal selector=":scope > dl > div" y={12} stagger={0.07} start="top 92%">
         <dl className="grid grid-cols-2 border-b border-rule sm:grid-cols-4">
           <Stat term="TV series" value={season.tvTotal} />
@@ -152,8 +153,8 @@ async function Home() {
                 </Link>
               )}
               {/* The digest quotes the figures from its own run, which will not
-                  always match today's rail. This week it says 140 where the
-                  season now holds 142. Saying so is cheaper and more honest
+                  always match today's rail - when this was written, 140 where
+                  the season held 142. Saying so is cheaper and more honest
                   than quietly letting two numbers disagree on one page. */}
               <p className="meta mt-3 max-w-[54ch] !leading-[1.6]">
                 Figures inside the digest are as written at that run and may differ from

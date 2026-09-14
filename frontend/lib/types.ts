@@ -8,8 +8,9 @@ export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://weebblade.duckdns.org";
 
 /** Mirrors backend/app/schemas.py:Anime. Almost everything is nullable because
- *  the three upstream sources genuinely disagree on what they provide - Kitsu
- *  (currently the only one up) has no studios, mal_id or source_material at all. */
+ *  the sources genuinely disagree on what they provide - Kitsu carries no studios
+ *  or source material, MAL no slug, cover art, trailer or streaming link. Coverage
+ *  per field is in frontend/CLAUDE.md, "Sparse fields". */
 export type Anime = {
   source: string;
   source_id: string;
@@ -31,15 +32,17 @@ export type Anime = {
   score_100: number | null;
   /** A RANK, not a count: lower is more popular. Never sort this descending. */
   popularity: number | null;
-  /** Also a rank. No denser than score_100 (both ~29% of the season). */
+  /** Also a rank, lower is better: 64% of a season, 91% of its TV (2026-09-14). */
   rating_rank: number | null;
-  /** The only dense interest signal: present for ~100% of the season, where
-   *  score_100 covers 29% and favourites tops out around 25. */
+  /** The one interest signal on every title (100%), where score_100 covers 44%
+   *  of a season and 88% of its TV (2026-09-14). favourites is each source's own
+   *  count on its own site, mostly 0, and is never rendered. */
   user_count: number | null;
   favourites: number | null;
   age_rating: string | null;
-  /** Sparse enhancements. cover_url is on ~17% of titles and trailer_id ~57%,
-   *  so neither may be treated as a layout assumption. */
+  /** Sparse enhancements. cover_url is on 32% of a season and trailer_id 56%
+   *  (69% and 93% of its TV; 2026-09-14), so neither may be treated as a layout
+   *  assumption. */
   cover_url: string | null;
   trailer_id: string | null;
   slug: string | null;
@@ -48,8 +51,9 @@ export type Anime = {
    *  and present the result as a slot rather than a confirmed airdate. */
   broadcast_day: string | null;
   broadcast_time: string | null;
-  /** Parallel arrays: streaming_services[i] labels streaming_urls[i]. ~59% of
-   *  the season carries at least one. Junk URLs are filtered at ingest, so
+  /** Parallel arrays: streaming_services[i] labels streaming_urls[i]. About half
+   *  of a season carries at least one (51%; 93% of its TV, 2026-09-14). Junk URLs
+   *  are filtered at ingest, so
    *  anything arriving here is a usable absolute http(s) link. */
   streaming_services: string[];
   streaming_urls: string[];
@@ -278,8 +282,9 @@ export function formatAirDate(a: Anime): string | null {
 
 /** Kept as a cheap guard, not because the warehouse is wrong. Apparent
  *  duplicates in a paged fetch turned out to be an unstable ORDER BY, not bad
- *  data — see the note in lib/api.ts. With a stable sort the API returns 142
- *  rows and 142 distinct ids. This stays so that a future change of sort, or a
+ *  data — see the note in lib/api.ts. With a stable sort the one-season
+ *  catalogue came back as 142 rows and 142 distinct ids. This stays so that a
+ *  future change of sort, or a
  *  second ingestion source coming back online with an overlapping id, cannot
  *  produce duplicate React keys. */
 export function dedupeAnime(items: Anime[]): Anime[] {
@@ -305,9 +310,10 @@ export function byPopularity(a: Anime, b: Anime): number {
   return x - y;
 }
 
-/** Scores exist for only 39 of 142 titles, so score-first ordering ranks on
- *  data three quarters of the catalogue lacks. Scored titles come first, ordered by
- *  score; everything else falls back to popularity rank rather than to nothing. */
+/** Not every title has a score - 88% of a season's TV, under half of its other
+ *  formats (2026-09-14), 39 of 142 titles when this was written - so ordering
+ *  on score alone would leave the rest in no order at all. Scored titles come
+ *  first, ordered by score; everything else falls back to popularity rank. */
 export function byScoreThenPopularity(a: Anime, b: Anime): number {
   const as = a.score_100;
   const bs = b.score_100;
@@ -456,10 +462,12 @@ export function sourceLinks(a: Anime): { label: string; href: string }[] {
 /* ---------------------------------------------------------------------------
  * Format defaulting.
  *
- * 27 of 142 entries in a season are music videos, and 0% of them are ever
- * scored. Another 29 are ONAs (13% scored) and 11 are films (9%). TV series are
- * 66 titles at 48% scored. So the headline "73% of the season has no score" was
- * mostly measuring music videos rather than saying anything about anime.
+ * In the one-season catalogue this was written against, 27 of 142 entries were
+ * music videos and none was scored; another 29 were ONAs (13% scored) and 11
+ * films (9%), against 66 TV series at 48%. So the headline "73% of the season
+ * has no score" was mostly measuring music videos rather than saying anything
+ * about anime. It still would: in Summer 2026, 65 of 74 TV series are scored,
+ * against 17 of 62 ONAs and 8 of 59 music videos (measured 2026-09-14).
  *
  * Defaulting to TV is what LiveChart and AniChart both do, for the same reason.
  * Nothing is hidden: FORMAT_ALL is one click away and every format keeps its own
