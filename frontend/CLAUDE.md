@@ -330,6 +330,21 @@ Measured the first week: 112 episodes of 110 shows. Of the 62 Summer titles MAL 
 airing with a weekly slot, 54 were on AniList's week; of the other eight, three had finished
 between 9 and 11 September, two were on a break, and AniList had no dates for three.
 
+## What changed, per source
+
+A title page lists what its sources have reported differently from one fetch to the next
+(`anime.changes`, from `processing/changes.py`), newest first, each change a sentence from
+`changeSentence()` in `lib/types.ts` with the sources that reported it.
+
+- **Render it only when there is a history.** The weekly run refetches the current season
+  alone, so most older titles have none; an empty section would say "nothing changed" about a
+  title that was simply not being watched.
+- **Keep every change attributed.** Two sources' scores for one title differ and move
+  separately - on 13 September one title went 7.5 to 7.4 on Kitsu and 7.1 to 7.0 on MAL - so a
+  score change without its source reads as a contradiction of the score beside it.
+- It renders with the title body, inside the same Suspense boundary, so it cannot shift the
+  layout: 0 on four titles at 1440x1000 and 390x844 on a production build.
+
 ## Motion
 
 GSAP + ScrollTrigger via `@gsap/react`'s `useGSAP`, in `components/motion/`. **Do not add a second

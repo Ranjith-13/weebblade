@@ -40,6 +40,7 @@ Kitsu  ───┘         │
                     │         ▲
                     │         ├── franchise graph ◄── MAL related titles, followed
                     │         │                       past the catalogue until complete
+                    │         ├── changes ◄── each source's fetch against its last one
                     │         └── airing schedule ◄── AniList, daily: six weeks of episodes
                     │
         ┌───────────┼───────────┐
@@ -137,6 +138,27 @@ Detective Conan (129), Doraemon (108), Pokémon (95), One Piece (72). Laid-Back 
 its 2018 first season to a 2027 fourth; stopping at the catalogue's edge had it begin at the
 second.
 
+### What changed
+
+Each title records what its sources report differently from one fetch to the next: a finale,
+an episode count, a premiere date or a delay to another season, a new trailer or streaming
+link, a score as the page prints it, or an entry a source has just created. It shows on the
+title's page and feeds the digest's "since last week" paragraph.
+
+- **Each source against itself.** Changes come from each source's own snapshots, never the
+  merged catalogue, which changes whenever the pipeline does: between two September snapshots
+  AniList joined and 59 titles merged, and a catalogue diff would have "added" banner art to
+  529 titles. Every change keeps the name of the source that reported it.
+- **News, not noise.** Member counts and ranks moved for most titles in every pair of
+  snapshots, and poster URLs churn with the CDN, so neither counts. A field an older snapshot
+  lacks is not compared, and most of a listing gaining a value at once is taken as the pipeline
+  filling a field.
+- **New means created.** An entry counts as new only if its id is above every one its source
+  had listed before. When Kitsu's paging fix served 112 entries for the first time, two were
+  new; "not seen before" would have called all 112 new.
+
+Seeded from every snapshot on file: 98 changes back to 30 August 2026, each on its title.
+
 ## API
 
 - `GET /catalogue` — the seasons on file with their title counts, the sources that
@@ -146,7 +168,10 @@ second.
   `studio` (across every season); `sort` (`score_desc` | `popularity_desc` | `title`),
   `limit`, `offset`.
 - `GET /anime/{wb_id}` — a title by its stable identity, following it if it merged, with its
-  next few episodes from AniList's airing schedule (`upcoming_episodes`).
+  next few episodes from AniList's airing schedule (`upcoming_episodes`) and what its sources
+  have changed about it (`changes`).
+- `GET /changes?days=7` — every change recorded in the days up to the newest fetch, with its
+  title; one change told by several sources is one entry naming them all.
 - `GET /anime/{wb_id}/franchise` — the title's franchise, oldest first, each entry with its
   relation to the title; entries older than the catalogue come from MAL, with no `wb_id`.
 - `GET /anime/{source}/{source_id}` — a title by any source key it was ever made of.
@@ -182,7 +207,7 @@ ingestion/    anilist/ jikan/ mal/ kitsu/ — each: client, fetch_season, transf
               mal/ also fetch_relations (the franchise graph's edges), anilist/ also
               fetch_airing (episode airdates); backfill, reprocess
 processing/   spark session, schema normalization, matching, consolidation, identity
-              registry, franchise graph, DuckDB catalog
+              registry, franchise graph, changes between fetches, DuckDB catalog
 ai/           digest/ (Groq prompt + generation), search/ (embed, index, query)
 backend/      FastAPI app — routers, schemas, DuckDB access, rate limiter
 frontend/     Next.js app (see frontend/README.md and frontend/DESIGN.md)
