@@ -19,7 +19,7 @@ class AniListStatus(BaseModel):
     Asked only about titles the catalogue calls airing, because it exists to
     catch the ones that have stopped: the catalogue's status is the merge
     winner's as of the snapshot the title was filed in, and on 2026-09-14 it
-    called 51 titles airing that AniList had as finished.
+    called 79 titles airing that AniList had as finished.
     """
 
     # finished, current, upcoming - or cancelled or hiatus, which the catalogue

@@ -4,14 +4,17 @@ A title page with no AniList airdate falls back to MAL's weekly broadcast
 slot, and a slot is only true while a show is airing. The catalogue's status
 cannot say when that stops. It is the merge winner's - Kitsu's, mostly - as of
 the snapshot the title was filed in, and only the current season is refetched:
-on 2026-09-14 the catalogue called 51 titles airing that AniList had as
+on 2026-09-14 the catalogue called 79 titles airing that AniList had as
 finished, some of them for a year or more, and the page counted those with a
 MAL slot down to one that would not come again.
 
 So each day this asks AniList about exactly the titles the catalogue calls
 airing, and the page believes AniList when it says a show has stopped. The
 rest need no asking: a title the catalogue already calls finished shows no
-slot on its own account.
+slot on its own account. The first check asked about 288 titles in seven
+requests; AniList answered for 241 and had 79 of them finished, 34 with a MAL
+slot the page was counting down to - Yu-Gi-Oh! Go Rush!!, finished in March
+2025, among them.
 
 Titles are asked about by AniList id where the catalogue has one, and by MAL
 id where it has only that.

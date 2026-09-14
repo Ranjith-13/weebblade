@@ -276,7 +276,17 @@ does. Two places use it:
   shows the first one still ahead: "Episode 11 of 12 airs Monday 14 September, 20:57 JST", then a
   live countdown and the reader's own time (`EpisodeCountdown`). Several episodes, not one,
   because the page is cached for an hour and the first may have aired since. Where AniList has no
-  airdate, the MAL slot block below it is shown instead, caveat and all.
+  airdate, the MAL slot block below it is shown instead, caveat and all - **but only while the
+  show is airing** (`isAiring`). MAL keeps the slot on a finished show, and 986 finished titles
+  counted down to a "next slot" for a series that was over.
+- **AniList settles whether a show is still airing.** The catalogue's status is the merge
+  winner's as of the title's snapshot, so it calls shows airing long after their finale. The daily
+  DAG asks AniList about exactly the titles the catalogue calls airing (`anilist_status` on a
+  title); where AniList says finished, cancelled or on hiatus, the slot goes and the Status fact
+  says "Finished, per AniList" - naming the source, because every other field still comes from
+  the ones that disagree. The first check hid 34 slots, Yu-Gi-Oh! Go Rush!! (finished March 2025)
+  among them; 80 of the 1,100 remain. Lists do not carry the check, so browse plates and the
+  front page's "Airing now" count still use the catalogue's status.
 - **`/schedule`** is the next seven days of `GET /schedule`, one column per day in Japan. Each row
   is the time in Tokyo with its countdown under it, then the title, episode, format and the
   reader's own time. Shows the catalogue does not hold (One Piece, Detective Conan, long-runners

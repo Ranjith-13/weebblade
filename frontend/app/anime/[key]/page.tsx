@@ -14,6 +14,7 @@ import {
   FORMAT_ALL,
   formatAirDate,
   formatLabel,
+  isAiring,
   isKnown,
   isTv,
   broadcastSlotLabel,
@@ -21,6 +22,7 @@ import {
   jstAirdate,
   secondaryTitle,
   sourceMaterialLabel,
+  statusLabel,
   SCORE_MAX,
   scoreOutOfTen,
   sourceLinks,
@@ -218,7 +220,7 @@ async function AnimeDetail({
         formatLabel(anime.format)
       ),
     ],
-    ["Status", anime.status === "current" ? "Airing now" : "Finished"],
+    ["Status", statusLabel(anime)],
     anime.episodes ? ["Episodes", String(anime.episodes)] : null,
     anime.duration_minutes ? ["Episode length", `${anime.duration_minutes} min`] : null,
     formatAirDate(anime) ? ["First aired", formatAirDate(anime)!] : null,
@@ -239,7 +241,12 @@ async function AnimeDetail({
 
   const watch = streamingLinks(anime);
   const links = sourceLinks(anime);
-  const slot = broadcastSlotLabel(anime.broadcast_day, anime.broadcast_time);
+  // MAL's weekly slot, only while the show is airing. MAL keeps the slot on a
+  // finished show, and 986 finished titles carried one: each counted down to a
+  // "next slot" for a series that was over. The catalogue's own status catches
+  // those; AniList's daily check catches the ones the catalogue still thinks
+  // are airing.
+  const slot = isAiring(anime) ? broadcastSlotLabel(anime.broadcast_day, anime.broadcast_time) : null;
   // AniList's dated episodes, with Japan's time rendered here so the server's
   // markup and the browser's first render agree on it.
   const airdates = (anime.upcoming_episodes ?? []).map((e) => ({ ...e, label: jstAirdate(e.airing_at) }));

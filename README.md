@@ -96,9 +96,14 @@ AniList publishes the real schedule, so a second, daily DAG lands every episode 
 next six weeks (and the day behind) - 540 episodes, eleven requests. It stores the episodes, not
 each title's next one: a single next date is stale the moment it airs, while a list lets whoever
 reads it pick the first still ahead. The warehouse view reads the newest day's file at query time,
-so the daily fetch never opens the warehouse. The site shows it as a countdown on each airing
-title's page and a week of dated episodes on `/schedule`, including long-runners older than the
-catalogue, like One Piece.
+so the daily fetch never opens the warehouse to write. The site shows it as a countdown on each
+airing title's page and a week of dated episodes on `/schedule`, including long-runners older than
+the catalogue, like One Piece.
+
+The same DAG asks AniList whether the titles the catalogue calls airing still are. The catalogue's
+status is the merge winner's as of the title's snapshot, and it called 79 shows airing that AniList
+had as finished, Yu-Gi-Oh! Go Rush!! a year and a half after its finale. A title page trusts
+AniList here, and shows MAL's weekly slot only while a show is actually airing.
 
 ### Franchises
 

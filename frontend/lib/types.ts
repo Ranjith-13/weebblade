@@ -68,6 +68,17 @@ export type Anime = {
    *  a single title carries them (GET /anime/{wb_id}); lists leave it empty.
    *  Several rather than one so a cached copy can skip those that have aired. */
   upcoming_episodes: AiringEpisode[];
+  /** AniList's own status from its daily check, for a title the catalogue calls
+   *  airing; null otherwise and in lists. */
+  anilist_status: AniListStatus | null;
+};
+
+/** Mirrors backend/app/schemas.py:AniListStatus. `status` is finished, current,
+ *  upcoming, or one the catalogue has no word for: cancelled, hiatus. */
+export type AniListStatus = {
+  status: string | null;
+  ended_on: string | null;
+  checked_on: string;
 };
 
 /** Mirrors backend/app/schemas.py:AiringEpisode. `airing_at` is ISO 8601 UTC. */
@@ -584,6 +595,40 @@ export function countdown(ms: number, short = false): string {
   if (days >= 1) return hours % 24 ? `${unit(days, "day")} ${unit(hours % 24, "hour")}` : unit(days, "day");
   if (hours >= 1) return minutes % 60 ? `${unit(hours, "hour")} ${unit(minutes % 60, "minute")}` : unit(hours, "hour");
   return minutes >= 1 ? unit(minutes, "minute") : "under a minute";
+}
+
+/* Whether a title is airing, and how to say so.
+ *
+ * The catalogue's status is the merge winner's - usually Kitsu's - as of the
+ * snapshot the title was filed in, and only the current season is refetched,
+ * so it goes on calling a show airing long after its finale: 79 titles on
+ * 2026-09-14, some for a year or more. AniList is asked daily about exactly
+ * the titles the catalogue calls airing, and where it says a show has stopped,
+ * that is believed. */
+const STOPPED: Record<string, string> = {
+  finished: "Finished",
+  cancelled: "Cancelled",
+  hiatus: "On hiatus",
+  upcoming: "Not yet aired",
+};
+
+export function isAiring(a: Anime): boolean {
+  if (a.status !== "current") return false;
+  const checked = a.anilist_status?.status;
+  return !checked || checked === "current";
+}
+
+/** The Status fact. Where AniList overrules the catalogue it says so, because
+ *  every other field on the page still comes from the sources that disagree. */
+export function statusLabel(a: Anime): string {
+  const checked = a.anilist_status?.status;
+  if (a.status === "current" && checked && checked !== "current" && STOPPED[checked]) {
+    return `${STOPPED[checked]}, per AniList`;
+  }
+  if (a.status === "current") return "Airing now";
+  if (a.status === "finished") return "Finished";
+  // upcoming, unreleased, tba: not aired yet, whatever each source calls it.
+  return a.status ? "Not yet aired" : "Unknown";
 }
 
 /** "Saturdays 23:00 JST" - the slot itself, which is what we actually know. */
