@@ -13,6 +13,23 @@ class AiringEpisode(BaseModel):
     fetched_on: str | None = None
 
 
+class AniListStatus(BaseModel):
+    """AniList's own account of whether a title is airing, from its daily check.
+
+    Asked only about titles the catalogue calls airing, because it exists to
+    catch the ones that have stopped: the catalogue's status is the merge
+    winner's as of the snapshot the title was filed in, and on 2026-09-14 it
+    called 51 titles airing that AniList had as finished.
+    """
+
+    # finished, current, upcoming - or cancelled or hiatus, which the catalogue
+    # has no word for and which also mean "not airing".
+    status: str | None = None
+    # ISO, as much as AniList knows: "2026-09-10", "2026-09" or "2026".
+    ended_on: str | None = None
+    checked_on: str
+
+
 class Anime(BaseModel):
     source: str
     source_id: str
@@ -70,6 +87,9 @@ class Anime(BaseModel):
     # on a single title only (GET /anime/{wb_id}); empty in lists. Several, not
     # one, so a client holding a cached copy can skip the ones that have aired.
     upcoming_episodes: list[AiringEpisode] = []
+    # AniList's own status, for a title the catalogue calls airing; null
+    # otherwise, and in lists. See AniListStatus.
+    anilist_status: AniListStatus | None = None
 
     @field_validator(
         "genres", "studios", "streaming_services", "streaming_urls", "source_keys", mode="before"

@@ -175,3 +175,40 @@ def test_before_any_schedule_is_fetched_nothing_breaks(tmp_path, monkeypatch):
         app.dependency_overrides.clear()
 
     assert (body["episodes"], body["fetched_on"]) == ([], None)
+
+
+# --- AniList's status check --------------------------------------------------------------
+
+from ingestion.anilist.fetch_status import SCHEMA as STATUS_SCHEMA  # noqa: E402
+
+
+def _write_status(data, fetched_on, rows):
+    path = data / "processed" / "anilist_status" / f"{fetched_on}.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist(rows, schema=STATUS_SCHEMA), path)
+
+
+def _check(anilist_id, status, mal=None, ended_on=None, fetched_on="2026-09-14"):
+    return {"anilist_id": anilist_id, "mal_id": mal, "status": status, "ended_on": ended_on,
+            "fetched_on": fetched_on}
+
+
+def test_a_title_carries_anilists_newest_status_check(world):
+    client, ids, data = world
+    _write_status(data, "2026-09-13", [_check(1, "current", fetched_on="2026-09-13")])
+    _write_status(data, "2026-09-14", [_check(1, "finished", ended_on="2026-09-10")])
+    refresh_catalog(data, data.parent / "warehouse.duckdb")
+
+    status = client.get(f"/anime/{ids[0]}").json()["anilist_status"]
+
+    assert status == {"status": "finished", "ended_on": "2026-09-10", "checked_on": "2026-09-14"}
+
+
+def test_a_status_check_is_placed_by_mal_id_too_and_absent_where_never_asked(world):
+    client, ids, data = world
+    _write_status(data, "2026-09-14", [_check(99, "hiatus", mal=20)])
+    refresh_catalog(data, data.parent / "warehouse.duckdb")
+
+    assert client.get(f"/anime/{ids[1]}").json()["anilist_status"]["status"] == "hiatus"
+    assert client.get(f"/anime/{ids[0]}").json()["anilist_status"] is None
+    assert all(t["anilist_status"] is None for t in client.get("/anime?limit=10").json()["items"])

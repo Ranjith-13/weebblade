@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pendulum
 from airflow.decorators import dag, task
+from airflow.utils.trigger_rule import TriggerRule
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +15,9 @@ DATA_DIR = Path("/data")
 
 @dag(
     dag_id="anilist_airing",
-    # Daily, apart from the weekly pipeline: the schedule is eleven requests, and a
-    # countdown a week stale would miss every slipped broadcast. 06:00 UTC is
+    # Daily, apart from the weekly pipeline: the schedule is eleven requests and
+    # the status check about seven, and a countdown a week stale would miss every
+    # slipped broadcast and every finale. 06:00 UTC is
     # mid-afternoon in Tokyo, before the evening's broadcasts, and clear of the
     # weekly run's AniList requests at midnight Sunday, which share the same
     # 30-a-minute budget.
@@ -40,7 +42,22 @@ def anilist_airing():
         )
         logger.info("Airing schedule: %s episodes", count)
 
-    fetch_airing()
+    # After the schedule, not beside it: both spend AniList's 30 requests a
+    # minute. ALL_DONE, because a failed schedule fetch is no reason to leave a
+    # finished show counting down to its old slot.
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def fetch_status(data_interval_end=None):
+        """AniList's own status for the titles the catalogue calls airing. See
+        ingestion/anilist/fetch_status.py.
+
+        Reads the warehouse to know which titles to ask about - read-only, at
+        06:00 UTC, well clear of the weekly run that writes it."""
+        from ingestion.anilist.fetch_status import land_status
+
+        count = land_status(DATA_DIR, data_interval_end.strftime("%Y-%m-%d"))
+        logger.info("AniList status: %s titles answered", count)
+
+    fetch_airing() >> fetch_status()
 
 
 anilist_airing()
