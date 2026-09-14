@@ -253,7 +253,8 @@ The frontend is separate — see [frontend/README.md](frontend/README.md).
   still serving last week's catalogue, or a task that failed in the middle - which, with every
   step running whatever happened upstream, would otherwise leave the run green. It reads output,
   not the tasks' reports of themselves: run against the 2026-09-14 re-merge, it found two titles
-  split that consolidation had counted as new. The numbers are kept and served at `/runs`.
+  split that consolidation had counted as new. The numbers are kept and served at `/runs`, and
+  a failed run is pushed to the same ntfy topic as the server's other alerts.
 - **Schema validation runs at ingest** — see "Merging, not stacking". A failure isolates
   one source rather than the run: the others land, and consolidation carries the failed
   source's previous snapshot forward.
