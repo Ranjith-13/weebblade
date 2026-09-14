@@ -178,6 +178,8 @@ Seeded from every snapshot on file: 98 changes back to 30 August 2026, each on i
 - `GET /schedule?days=7` — every episode airing from midnight today in Japan, for up to 14 days,
   from AniList's schedule. Shows the catalogue does not hold come as AniList describes them.
 - `GET /digest`, `/digest/latest`, `/digest/{run_date}` — the weekly LLM trend digest.
+- `GET /runs?dag=&limit=10` — what recent pipeline runs checked about their own output: their
+  numbers, and what failed them, if anything did.
 - `GET /search?q=...&n=...` — semantic similarity search over indexed titles; each result
   carries its poster, score, format and `wb_id`.
 - `GET /health` — liveness.
@@ -245,6 +247,13 @@ The frontend is separate — see [frontend/README.md](frontend/README.md).
 - **The Airflow UI sits behind HTTP basic auth** as well as its own login. It runs
   arbitrary code by design, so its pre-authentication surface should not be reachable by
   anything unauthenticated.
+- **Every run checks its own output before calling itself done.** Each DAG ends in a task that
+  reads what the run produced, compares it with the run before and fails the run on a source
+  that landed nothing or half as much, a title lost or split, a burst of merges, a warehouse
+  still serving last week's catalogue, or a task that failed in the middle - which, with every
+  step running whatever happened upstream, would otherwise leave the run green. It reads output,
+  not the tasks' reports of themselves: run against the 2026-09-14 re-merge, it found two titles
+  split that consolidation had counted as new. The numbers are kept and served at `/runs`.
 - **Schema validation runs at ingest** — see "Merging, not stacking". A failure isolates
   one source rather than the run: the others land, and consolidation carries the failed
   source's previous snapshot forward.
