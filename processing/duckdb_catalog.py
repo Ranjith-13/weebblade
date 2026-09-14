@@ -66,6 +66,7 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
             )
 
         created += _franchise_views(con, data_dir)
+        created += _change_view(con, data_dir, has_registry)
         created += _airing_view(con, data_dir, has_registry, bool(mapped))
     finally:
         con.close()
@@ -100,6 +101,32 @@ def _franchise_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> list[str
     else:
         logger.warning("No franchises built yet (%s), skipping franchise_member", members)
     return created
+
+
+def _change_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool) -> list[str]:
+    """Every change a source has reported about a title. See processing/changes.py.
+
+    Each change is on the title it belongs to now, not when it was recorded: by
+    its source key in the registry, which follows merges, then by the identity
+    it was stamped with, through any alias. A title merged since keeps its
+    history. The files are read per query, one a weekly run, tens of rows each.
+    """
+    changes = data_dir / "processed" / "changes"
+    if not list(changes.glob("*.parquet")):
+        logger.warning("No changes recorded yet (%s), skipping anime_change", changes)
+        return []
+
+    rows = f"read_parquet('{changes}/*.parquet', union_by_name=true)"
+    if has_registry:
+        sql = (
+            f"SELECT c.* EXCLUDE (wb_id), COALESCE(k.wb_id, al.wb_id, c.wb_id) AS wb_id FROM {rows} c "
+            "LEFT JOIN anime_identity k ON k.source_key = c.source || ':' || c.source_id "
+            "LEFT JOIN anime_alias al ON al.alias = c.wb_id"
+        )
+    else:
+        sql = f"SELECT * FROM {rows}"
+    con.execute(f"CREATE OR REPLACE VIEW anime_change AS {sql}")
+    return ["anime_change"]
 
 
 def _current_placed(

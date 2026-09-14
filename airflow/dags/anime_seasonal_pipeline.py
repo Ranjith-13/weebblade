@@ -141,6 +141,20 @@ def anime_seasonal_pipeline():
         logger.info("Consolidated output: %s", result)
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
+    def record_changes(data_interval_end=None):
+        """What each source now says differently about a title from its last
+        fetch. See processing/changes.py.
+
+        After consolidating, so the registry already holds any title first seen
+        this run and its changes land on it; before the refresh, so the first
+        run's file is there when the view is made. It reads only the sources'
+        snapshots and the registry, and writes one file - never the warehouse."""
+        from processing.changes import record_changes as _record_changes
+
+        _, _, run_date, _ = capture_for(data_interval_end)
+        logger.info("Changes: %s", _record_changes(DATA_DIR, run_date))
+
+    @task(trigger_rule=TriggerRule.ALL_DONE)
     def refresh_catalog():
         from processing.duckdb_catalog import refresh_catalog as _refresh_catalog
 
@@ -200,7 +214,8 @@ def anime_seasonal_pipeline():
     fetches = [fetch_anilist(), fetch_jikan(), fetch_mal(), fetch_kitsu()]
     # In a line, not in parallel: each of these opens the warehouse file, and
     # DuckDB allows one writer. The digest and the index read it after.
-    catalog = fetches >> consolidate() >> refresh_catalog() >> fetch_mal_relations() >> build_franchises()
+    catalog = (fetches >> consolidate() >> record_changes() >> refresh_catalog()
+               >> fetch_mal_relations() >> build_franchises())
     catalog >> [generate_digest(), build_search_index()]
 
 
