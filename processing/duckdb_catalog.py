@@ -49,7 +49,7 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
         created += status_view
 
         if "anime_media" in created:
-            latest = _status_corrected(con, _latest_view_sql(con, has_registry), bool(status_view))
+            latest = _status_corrected(con, _latest_view_sql(con, has_registry, data_dir), bool(status_view))
             con.execute(f"CREATE OR REPLACE VIEW anime_media_latest AS {latest}")
             created.append("anime_media_latest")
             logger.info(
@@ -166,7 +166,7 @@ def _status_corrected(con: duckdb.DuckDBPyConnection, latest: str, has_status: b
     by it, not by the corrected status - see fetch_status.candidates - and it is
     what the sources still say where AniList overrules them.
     """
-    columns = {row[0] for row in con.execute("DESCRIBE anime_media").fetchall()}
+    columns = {row[0] for row in con.execute(f"DESCRIBE {latest}").fetchall()}
     if "status" not in columns:
         return latest
     if has_status:
@@ -214,8 +214,30 @@ def _identity_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> bool:
     return True
 
 
-def _latest_view_sql(con: duckdb.DuckDBPyConnection, has_registry: bool) -> str:
+def _newest_catalogue(data_dir: Path) -> Path | None:
+    """The newest catalogue snapshot that finished being written, or None.
+
+    Finished means Spark's _SUCCESS marker, written when the job commits: a run
+    that died mid-write leaves a directory without one, and serving it would
+    serve a partial catalogue. Chosen when the views are made, which the weekly
+    DAG does straight after consolidating.
+    """
+    snapshots = data_dir / "processed" / "anime_media_consolidated" / "_catalogue"
+    complete = [d for d in snapshots.glob("*") if (d / "_SUCCESS").exists() and any(d.glob("*.parquet"))]
+    return max(complete, key=lambda d: d.name) if complete else None
+
+
+def _latest_view_sql(con: duckdb.DuckDBPyConnection, has_registry: bool, data_dir: Path) -> str:
     """The query for the newest row per TITLE, where title means its stable identity.
+
+    Read from the newest complete catalogue snapshot alone, where there is one.
+    Consolidation reads every source snapshot up to its run, so the newest
+    catalogue already holds every title; the older ones are history, and stay in
+    anime_media for anything that wants it. Deduplicating across all of them on
+    every request cost a query ten times as much and grew by a snapshot a week:
+    a season took 156ms over five snapshots, 15ms from the newest alone, with
+    the same 238 titles. Without a complete catalogue snapshot - a lake from
+    before consolidation ran catalogue-wide - it falls back to all of anime_media.
 
     anime_media keeps one row per title per run, which is right for history, but
     everything that renders the catalogue wants one row per title. It used to
@@ -240,7 +262,9 @@ def _latest_view_sql(con: duckdb.DuckDBPyConnection, has_registry: bool) -> str:
     a file as INTEGER, and 1.1.3 (the version CI pins) refuses to COALESCE it with
     VARCHAR; that has turned a sort into a 500 in this project once already.
     """
-    columns = {row[0] for row in con.execute("DESCRIBE anime_media").fetchall()}
+    newest = _newest_catalogue(data_dir)
+    rows = f"read_parquet('{newest}/*.parquet', union_by_name=true)" if newest else "anime_media"
+    columns = {row[0] for row in con.execute(f"DESCRIBE SELECT * FROM {rows}").fetchall()}
     stamped = "wb_id" in columns
     own_key = "CAST(m.source AS VARCHAR) || ':' || CAST(m.source_id AS VARCHAR)"
 
@@ -260,14 +284,14 @@ def _latest_view_sql(con: duckdb.DuckDBPyConnection, has_registry: bool) -> str:
             "SELECT * EXCLUDE (_rn) FROM ("
             "  SELECT *, ROW_NUMBER() OVER ("
             "    PARTITION BY source, source_id ORDER BY run_date DESC"
-            "  ) AS _rn FROM anime_media"
+            f"  ) AS _rn FROM {rows}"
             ") WHERE _rn = 1"
         )
 
     base = "m.* EXCLUDE (wb_id)" if stamped else "m.*"
     resolved = (
         f"SELECT {base}, COALESCE({', '.join(candidates)}) AS wb_id "
-        f"FROM anime_media m {' '.join(joins)}"
+        f"FROM {rows} m {' '.join(joins)}"
     )
     return (
         "SELECT * EXCLUDE (_rn) FROM ("

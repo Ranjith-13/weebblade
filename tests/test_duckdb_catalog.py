@@ -206,3 +206,50 @@ def test_every_row_in_the_latest_view_carries_an_identity(tmp_path):
     rows = _latest(tmp_path, data)
 
     assert sorted(r["wb_id"] for r in rows) == sorted(ids)
+
+
+# --- the newest catalogue snapshot -------------------------------------------------------
+
+import duckdb  # noqa: E402
+
+
+def _snapshot(data_dir, run_date, rows, complete=True):
+    """A catalogue snapshot as Spark writes one: a directory of parts, with a
+    _SUCCESS marker once the job has committed."""
+    out = data_dir / "processed" / "anime_media_consolidated" / "_catalogue" / run_date
+    _write_parquet(out / "part-0.parquet", [{**r, "run_date": run_date} for r in rows])
+    if complete:
+        (out / "_SUCCESS").write_text("")
+
+
+def _served_and_history(tmp_path):
+    con = duckdb.connect(str(tmp_path / "warehouse.duckdb"), read_only=True)
+    try:
+        return con.execute("SELECT source_id, score_100, run_date FROM anime_media_latest ORDER BY 1").fetchall(), \
+            con.execute("SELECT count(*) FROM anime_media").fetchone()[0]
+    finally:
+        con.close()
+
+
+def test_the_latest_view_reads_the_newest_complete_snapshot_and_history_keeps_the_rest(tmp_path):
+    """Consolidation reads every source snapshot, so the newest catalogue holds
+    every title; reading only it made a season query ten times cheaper."""
+    data = tmp_path / "data"
+    _snapshot(data, "2026-09-13", [{"source": "kitsu", "source_id": "1", "score_100": 70.0}])
+    _snapshot(data, "2026-09-14", [{"source": "kitsu", "source_id": "1", "score_100": 75.0},
+                                   {"source": "kitsu", "source_id": "2", "score_100": 60.0}])
+    refresh_catalog(data, tmp_path / "warehouse.duckdb")
+
+    latest, history = _served_and_history(tmp_path)
+
+    assert latest == [("1", 75.0, "2026-09-14"), ("2", 60.0, "2026-09-14")]
+    assert history == 3
+
+
+def test_a_snapshot_whose_run_died_mid_write_is_not_served(tmp_path):
+    data = tmp_path / "data"
+    _snapshot(data, "2026-09-13", [{"source": "kitsu", "source_id": "1", "score_100": 70.0}])
+    _snapshot(data, "2026-09-14", [{"source": "kitsu", "source_id": "1", "score_100": 75.0}], complete=False)
+    refresh_catalog(data, tmp_path / "warehouse.duckdb")
+
+    assert _served_and_history(tmp_path)[0] == [("1", 70.0, "2026-09-13")]
