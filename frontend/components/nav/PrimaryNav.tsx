@@ -4,15 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SEASON_INDEX_ID } from "@/lib/types";
 
-/* The site's four sections. "Seasons" is a button, not a link: it opens the
+/* The site's five sections. "Seasons" is a button, not a link: it opens the
  * season index (components/SeasonIndex.tsx), because the answer to "which
  * season?" has to come before the catalogue can mean anything. The warehouse
  * holds years of them, and the old "The season" link pointed at one without ever
  * saying there were others. */
-type Section = "seasons" | "schedule" | "search" | "digest";
+type Section = "seasons" | "schedule" | "changes" | "search" | "digest";
 
 const LINKS = [
   { key: "schedule", href: "/schedule", label: "Schedule" },
+  { key: "changes", href: "/changes", label: "Changes" },
   { key: "search", href: "/search", label: "Search" },
   { key: "digest", href: "/digest", label: "Digest" },
 ] as const;
@@ -20,6 +21,7 @@ const LINKS = [
 function sectionOf(pathname: string): Section | null {
   if (pathname === "/browse") return "seasons";
   if (pathname.startsWith("/schedule")) return "schedule";
+  if (pathname.startsWith("/changes")) return "changes";
   if (pathname.startsWith("/search")) return "search";
   if (pathname.startsWith("/digest")) return "digest";
   return null;

@@ -352,6 +352,13 @@ A title page lists what its sources have reported differently from one fetch to 
 - It renders with the title body, inside the same Suspense boundary, so it cannot shift the
   layout: 0 on four titles at 1440x1000 and 390x844 on a production build.
 
+`/changes` is the same history read the other way round: the week's changes across every title,
+grouped by what kind of news each is (`CHANGE_SECTIONS` in `lib/types.ts`), listed like `/schedule`
+rather than gridded like `/browse` - the subject is an event, and one show can appear under two
+headings. Its window ends at the newest fetch compared, not today, so it is a fixed week between
+runs rather than a shrinking one. The nav carries it as the fifth section; at 390px the five items
+still sit on one line (measured, 352px of 390).
+
 ## Motion
 
 GSAP + ScrollTrigger via `@gsap/react`'s `useGSAP`, in `components/motion/`. **Do not add a second

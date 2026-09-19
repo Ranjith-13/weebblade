@@ -8,6 +8,7 @@ import {
   isAiring,
   isTv,
   jstDayKey,
+  type ChangeFeed,
   type Anime,
   type AnimeListResponse,
   type Digest,
@@ -186,6 +187,18 @@ export async function getStudio(name: string): Promise<Anime[]> {
   "use cache";
   cacheLife("hours");
   return dedupeAnime(await fetchAll({ studio: name }));
+}
+
+/** The week's changes, as the pipeline recorded them (GET /changes).
+ *
+ *  One request, already grouped and titled by the API: a change several sources
+ *  reported is one entry naming them all. The window ends at the newest fetch
+ *  compared rather than today, so between weekly runs this is a fixed week
+ *  rather than a shrinking one. */
+export async function getChanges(): Promise<ChangeFeed> {
+  "use cache";
+  cacheLife("hours");
+  return getJson<ChangeFeed>(buildUrl("/changes"));
 }
 
 export type ScheduleDay = { key: string; items: ScheduledEpisode[] };

@@ -104,6 +104,25 @@ export type Change = {
   sources: string[];
 };
 
+/** Mirrors backend/app/schemas.py:ChangedTitle - a change with the title it
+ *  belongs to, as GET /changes returns it. */
+export type ChangedTitle = Change & {
+  wb_id: string;
+  title: string | null;
+  format: string | null;
+  poster_url: string | null;
+  season: string | null;
+  season_year: number | null;
+};
+
+/** Mirrors backend/app/schemas.py:ChangeFeed. The window is the days up to the
+ *  newest fetch compared, not up to today: between weekly runs it stays put. */
+export type ChangeFeed = {
+  since: string | null;
+  until: string | null;
+  changes: ChangedTitle[];
+};
+
 /** Mirrors backend/app/schemas.py:AiringEpisode. `airing_at` is ISO 8601 UTC. */
 export type AiringEpisode = {
   episode: number | null;
@@ -707,6 +726,18 @@ export function changeSentence(c: Change): string {
       return `${c.field} changed`;
   }
 }
+
+/* The kinds of change, in sections a reader would ask for rather than the
+   field names the pipeline uses. Order is the page's order: what happened to a
+   show first, what it is going to do next, then the numbers. */
+export const CHANGE_SECTIONS = [
+  { key: "status", title: "Finished and started", fields: ["status"] },
+  { key: "dates", title: "Dates and seasons", fields: ["premiere", "season", "broadcast"] },
+  { key: "episodes", title: "Episode counts", fields: ["episodes"] },
+  { key: "score", title: "Score moves", fields: ["score"] },
+  { key: "watch", title: "Trailers and streaming", fields: ["trailer", "streaming"] },
+  { key: "listed", title: "Newly listed", fields: ["listed"] },
+] as const;
 
 /** "13 September", with the year only where it is not the newest change's. */
 export function changeDate(runDate: string, newest: string): string {
