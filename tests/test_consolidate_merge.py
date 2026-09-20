@@ -577,6 +577,47 @@ def test_sources_that_disagree_about_the_season_still_merge(spark, tmp_path):
     assert rows[0]["season"] == "SUMMER"  # and it keeps its own season
 
 
+def test_a_source_that_refiles_a_title_into_another_season_is_read_once(spark, tmp_path):
+    """The pipeline fetches the next season alongside the running one, so a
+    source that moves a title between them leaves a stale row behind: its old
+    partition keeps the title's last-seen row by design. Both rows carry the same
+    source and id, which is exactly the tie the merge's (priority, source,
+    source_id) order cannot break, so the season the title ends up filed under
+    would be whichever row Spark happened to read first. The newer fetch wins."""
+    _write_source(
+        spark, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-14",
+        [("kitsu", "49971", "Hibike! Euphonium", "movie", "SUMMER", 2026)],
+    )
+    _write_source(
+        spark, tmp_path, "kitsu_media", "2026-FALL", "2026-09-21",
+        [("kitsu", "49971", "Hibike! Euphonium", "movie", "FALL", 2026)],
+    )
+
+    rows = _reread(str(consolidate_catalogue(tmp_path, "2026-09-21")))
+
+    assert len(rows) == 1
+    assert rows[0]["season"] == "FALL"
+
+
+def test_one_fetch_listing_a_title_under_two_seasons_still_gives_one_row(spark, tmp_path):
+    """Same tie, with nothing to date the rows apart: a single fetch can list a
+    split-cour under both seasons. One title either way, the same one on every
+    run, and filed under the season it premiered in - which is what the site
+    tells a reader a season means."""
+    for partition in ("2026-SUMMER", "2026-FALL"):
+        _write_source(
+            spark, tmp_path, "kitsu_media", partition, "2026-09-21",
+            [("kitsu", "1", "Split Cour", "TV", partition.split("-")[1], 2026)],
+        )
+
+    runs = set()
+    for _ in range(2):
+        rows = _reread(str(consolidate_catalogue(tmp_path, "2026-09-21")))
+        runs.add((len(rows), rows[0]["season"]))
+
+    assert runs == {(1, "SUMMER")}
+
+
 def test_the_catalogue_keeps_titles_that_are_genuinely_distinct(spark, tmp_path):
     """The merge must not be so eager that consolidating everything at once
     starts deleting separate shows."""

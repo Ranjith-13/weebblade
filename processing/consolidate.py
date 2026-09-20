@@ -59,7 +59,9 @@ def _snapshots_upto(source_dir: Path, run_date: str) -> list[Path]:
     return sorted(p for p in source_dir.glob("*.parquet") if p.stem <= run_date)
 
 
-def _current_state(spark, source_dir: Path, run_date: str) -> DataFrame | None:
+def _current_state(
+    spark, source_dir: Path, run_date: str, keep_snapshot: bool = False
+) -> DataFrame | None:
     """One source's current view of a season: the latest row per id across all of
     its snapshots, not just the file dated today.
 
@@ -90,11 +92,11 @@ def _current_state(spark, source_dir: Path, run_date: str) -> DataFrame | None:
         df = frame if df is None else df.unionByName(frame)
 
     newest = Window.partitionBy("source", "source_id").orderBy(F.col("_snapshot").desc())
-    return (
-        df.withColumn("_rn", F.row_number().over(newest))
-        .filter(F.col("_rn") == 1)
-        .drop("_rn", "_snapshot")
-    )
+    df = df.withColumn("_rn", F.row_number().over(newest)).filter(F.col("_rn") == 1).drop("_rn")
+    # Which snapshot a row came from is private to this function, except to a
+    # caller that unions several partitions and has to apply the same rule again
+    # across them - see consolidate_catalogue.
+    return df if keep_snapshot else df.drop("_snapshot")
 
 
 def consolidate_partition(data_dir: Path, partition: str, run_date: str) -> Path | None:
@@ -179,9 +181,10 @@ def consolidate_catalogue(data_dir: Path, run_date: str) -> Path | None:
             logger.warning("No data at all for %s, skipping", source)
             continue
         for partition_dir in sorted(p for p in base.iterdir() if p.is_dir()):
-            df = _current_state(spark, partition_dir, run_date)
+            df = _current_state(spark, partition_dir, run_date, keep_snapshot=True)
             if df is None:
                 continue
+            df = df.withColumn("_partition", F.lit(partition_dir.name))
             logger.info("Loaded %s rows from %s/%s", df.count(), source, partition_dir.name)
             frames.append(df)
 
@@ -193,6 +196,42 @@ def consolidate_catalogue(data_dir: Path, run_date: str) -> Path | None:
     consolidated = frames[0]
     for df in frames[1:]:
         consolidated = consolidated.unionByName(df)
+
+    # _current_state keeps one row per id WITHIN a partition. One source can hold
+    # a row for the same id under two of them: the pipeline fetches the next
+    # season alongside the running one, and a source that re-files a title
+    # between the two leaves its old row behind in the old partition, where it
+    # stays by design - a source's last word about a title is kept until it says
+    # something newer. Both rows reach the merge, and its tiebreak (priority,
+    # source, source_id) is identical for the pair, so without this the winner,
+    # and the season the title is filed under, would be whichever Spark read
+    # first. Newest snapshot wins: a source's latest word about a title is the
+    # one that counts.
+    #
+    # The earlier season breaks the remaining tie, where ONE fetch listed the
+    # title under both - a split-cour, listed in the season it starts in and
+    # again in the season it runs into. A title is filed under the season it
+    # premiered in (the season index says so in as many words), so the earlier
+    # listing is the right one. Partition name cannot decide this: sorted as
+    # text, 2026-SUMMER comes after 2026-FALL. It is the last resort only for
+    # rows whose season is unknown, where any fixed answer will do.
+    quarter = F.create_map(
+        *[
+            x
+            for s, q in (("WINTER", 1), ("SPRING", 2), ("SUMMER", 3), ("FALL", 4))
+            for x in (F.lit(s), F.lit(q))
+        ]
+    )
+    across = Window.partitionBy("source", "source_id").orderBy(
+        F.col("_snapshot").desc(),
+        (F.col("season_year") * 10 + quarter[F.col("season")]).asc_nulls_last(),
+        F.col("_partition").asc(),
+    )
+    consolidated = (
+        consolidated.withColumn("_rn", F.row_number().over(across))
+        .filter(F.col("_rn") == 1)
+        .drop("_rn", "_snapshot", "_partition")
+    )
 
     before = consolidated.count()
     consolidated = _merge_sources(consolidated).withColumn("run_date", F.lit(run_date))
