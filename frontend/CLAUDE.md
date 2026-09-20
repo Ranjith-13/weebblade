@@ -357,7 +357,8 @@ grouped by what kind of news each is (`CHANGE_SECTIONS` in `lib/types.ts`), list
 rather than gridded like `/browse` - the subject is an event, and one show can appear under two
 headings. Its window ends at the newest fetch compared, not today, so it is a fixed week between
 runs rather than a shrinking one. The nav carries it as the fifth section; at 390px the five items
-still sit on one line (measured, 352px of 390).
+still sit on one line (measured, 352px of 390). Layout shift 0 at 1440x1000 and 390x844, cold and
+warm, on a production build (2026-09-21), with /schedule measured alongside as a control.
 
 ## Motion
 
