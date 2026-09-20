@@ -112,6 +112,10 @@ export type SeasonRef = {
   year: number;
   label: string;
   count: number;
+  /** A season the sources already list that has not started yet. The pipeline
+   *  fetches the next season months ahead, so the newest season on file is not
+   *  the season a reader means by "this season". */
+  upcoming: boolean;
 };
 
 export type Season = {
@@ -157,7 +161,7 @@ async function fetchAll(filter: Record<string, unknown>): Promise<Anime[]> {
 export type CatalogueSummary = {
   total: number;
   sources: string[];
-  seasons: { season: string; season_year: number; count: number }[];
+  seasons: { season: string; season_year: number; count: number; upcoming?: boolean }[];
 };
 
 /** The catalogue's shape - its seasons, sources and size - without its titles.
@@ -278,6 +282,7 @@ export async function getSeasons(): Promise<SeasonRef[]> {
       year: s.season_year,
       label: seasonLabel(s.season, s.season_year),
       count: s.count,
+      upcoming: s.upcoming ?? false,
     }))
     .filter((s) => s.count >= MIN_SEASON_TITLES)
     .sort(
@@ -285,14 +290,22 @@ export async function getSeasons(): Promise<SeasonRef[]> {
     );
 }
 
-/** One season, deduped, with its counts. Defaults to the newest season present.
- *  Everything the season pages render derives from this. */
+/** One season, deduped, with its counts. Everything the season pages render
+ *  derives from this.
+ *
+ *  Defaults to the newest season that has STARTED, not the newest on file. The
+ *  pipeline fetches the next season as soon as the sources list it, months
+ *  ahead, and defaulting to that would put a season with nothing aired and
+ *  almost nothing scored on the front page and in every bare /browse. An asked
+ *  for season is served whether it has started or not - that is the point of
+ *  having it. */
 export async function getSeason(key?: string): Promise<Season> {
   "use cache";
   cacheLife("hours");
 
   const seasons = await getSeasons();
-  const target = seasons.find((s) => s.key === key) ?? seasons[0];
+  const started = seasons.find((s) => !s.upcoming) ?? seasons[0];
+  const target = seasons.find((s) => s.key === key) ?? started;
   const rows = target ? await getSeasonRows(target.season, target.year) : [];
   const items = dedupeAnime(rows);
   const tv = items.filter(isTv);

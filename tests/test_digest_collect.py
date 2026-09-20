@@ -133,21 +133,23 @@ def test_the_newest_season_uses_the_quarterly_order_not_the_alphabet(tmp_path):
     backwards. It happened to give the right answer while Spring and Summer were
     the only seasons on record, and would have broken silently on the first Fall
     or Winter partition."""
+    # Seasons that have all started, so this measures the ordering and not the
+    # not-started guard below it.
     db_path = _warehouse(
         tmp_path,
-        _season_rows("WINTER", 2026, [("1", "Winter", 50.0, "TV")])
-        + _season_rows("SUMMER", 2026, [("2", "Summer", 60.0, "TV")])
-        + _season_rows("FALL", 2026, [("3", "Fall", 70.0, "TV")]),
+        _season_rows("WINTER", 2025, [("1", "Winter", 50.0, "TV")])
+        + _season_rows("SUMMER", 2025, [("2", "Summer", 60.0, "TV")])
+        + _season_rows("FALL", 2025, [("3", "Fall", 70.0, "TV")]),
     )
 
     stats = collect_stats(db_path)
 
-    assert stats["current_season"] == [{"season": "FALL", "season_year": 2026}]
+    assert stats["current_season"] == [{"season": "FALL", "season_year": 2025}]
     assert [r["title_english"] for r in stats["top_rated"]] == ["Fall"]
     assert [(r["season"], r["season_year"]) for r in stats["season_summary"]] == [
-        ("FALL", 2026),
-        ("SUMMER", 2026),
-        ("WINTER", 2026),
+        ("FALL", 2025),
+        ("SUMMER", 2025),
+        ("WINTER", 2025),
     ]
 
 
@@ -230,3 +232,22 @@ def test_a_warehouse_with_no_changes_recorded_still_gets_its_digest(tmp_path):
 
     assert collect_changes(db) == []
     assert collect_stats(db)["top_rated"]
+
+
+def test_a_season_the_sources_list_but_that_has_not_started_is_not_this_season(tmp_path):
+    """The pipeline fetches the next season months ahead. Without a guard the
+    digest would describe Fall the day Fall was announced: nothing aired, almost
+    nothing scored, and every figure called "this season"."""
+    data_dir = tmp_path / "data"
+    rows = [{"source": "kitsu", "source_id": str(n), "title_english": t, "title_romaji": None,
+             "score_100": s, "genres": ["Action"], "format": "TV", "season": season,
+             "season_year": 2099 if season == "WINTER" else 2026, "run_date": "2026-09-21"}
+            for n, (t, s, season) in enumerate([("Airing Now", 80.0, "SUMMER"), ("Announced", None, "WINTER")])]
+    _write_parquet(data_dir / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-09-21" / "p.parquet", rows)
+    db_path = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data_dir, db_path)
+
+    stats = collect_stats(db_path)
+
+    assert stats["current_season"] == [{"season": "SUMMER", "season_year": 2026}]
+    assert [r["title_english"] for r in stats["top_rated"]] == ["Airing Now"]

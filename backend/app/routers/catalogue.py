@@ -12,6 +12,16 @@ router = APIRouter(prefix="/catalogue", tags=["catalogue"])
 # Fall would come first in a year and Summer after Spring only by luck.
 _QUARTER = "CASE season WHEN 'WINTER' THEN 0 WHEN 'SPRING' THEN 1 WHEN 'SUMMER' THEN 2 WHEN 'FALL' THEN 3 END"
 
+# When a season begins, so a season the pipeline has fetched but that has not
+# started yet can say so. The pipeline fetches the next season as soon as the
+# sources list it (ingestion/seasons.capture_both), months before it airs, and a
+# client that simply took the newest season on file would default every page to
+# a season with no scores and nothing aired.
+_SEASON_START = (
+    "make_date(season_year, CASE season WHEN 'WINTER' THEN 1 WHEN 'SPRING' THEN 4 "
+    "WHEN 'SUMMER' THEN 7 ELSE 10 END, 1)"
+)
+
 
 def _sources(con: duckdb.DuckDBPyConnection) -> list[str]:
     """Every source with a row in the catalogue, read from source_keys.
@@ -43,7 +53,9 @@ def catalogue(con: duckdb.DuckDBPyConnection = Depends(get_db)) -> CatalogueSumm
     total = run_query(con, "SELECT COUNT(*) AS n FROM anime_media_latest")[0]["n"]
     seasons = run_query(
         con,
-        "SELECT season, season_year, COUNT(*) AS count FROM anime_media_latest "
+        "SELECT season, season_year, COUNT(*) AS count, "
+        f"  {_SEASON_START} > current_date AS upcoming "
+        "FROM anime_media_latest "
         "WHERE season IS NOT NULL AND season_year IS NOT NULL "
         f"GROUP BY season, season_year ORDER BY season_year DESC, {_QUARTER} DESC NULLS LAST, season",
     )

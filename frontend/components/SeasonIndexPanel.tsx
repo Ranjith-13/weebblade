@@ -13,6 +13,7 @@ export type SeasonEntry = {
   year: number;
   label: string;
   count: number;
+  upcoming: boolean;
 };
 
 function byYear(seasons: SeasonEntry[]) {
@@ -41,6 +42,7 @@ export function SeasonIndexPanel({
   panelRef?: React.Ref<HTMLDivElement>;
 }) {
   const total = seasons.reduce((n, s) => n + s.count, 0);
+  const announced = seasons.filter((s) => s.upcoming);
   const newest = seasons[0];
   const oldest = seasons.at(-1);
 
@@ -124,6 +126,17 @@ export function SeasonIndexPanel({
             A season is a quarter of the broadcast year. Each title is filed under the season
             it premiered in, so a show that began in Spring and is still airing stays in Spring.
           </p>
+          {/* The newest season on the list is often one the sources have only
+              announced. Said once here rather than marked on every row: it is
+              true of at most one season, and the rest of the site keeps
+              defaulting to the season actually airing. */}
+          {announced.length > 0 && (
+            <p className="mt-2">
+              {announced.map((s) => s.label).join(" and ")}{" "}
+              {announced.length === 1 ? "is" : "are"} announced but not yet airing, so the counts
+              there will grow.
+            </p>
+          )}
         </div>
       </div>
     </div>

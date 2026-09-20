@@ -75,7 +75,8 @@ def test_a_title_with_no_season_counts_in_the_total_and_in_no_season(catalogue_f
     body = client.get("/catalogue").json()
 
     assert body["total"] == 2
-    assert body["seasons"] == [{"season": "SUMMER", "season_year": 2026, "count": 1}]
+    assert body["seasons"] == [
+        {"season": "SUMMER", "season_year": 2026, "count": 1, "upcoming": False}]
 
 
 def test_sources_include_one_that_never_won_a_merge(catalogue_for):
@@ -105,3 +106,14 @@ def test_catalogue_is_a_503_before_the_pipeline_has_run(tmp_path, monkeypatch):
 
     with TestClient(app) as client:
         assert client.get("/catalogue").status_code == 503
+
+
+def test_a_season_the_sources_list_but_that_has_not_started_says_so(catalogue_for):
+    """The pipeline fetches the next season months before it airs, so "the newest
+    season on file" is not what a reader means by "this season". A client that
+    took it would default every page to a season with nothing aired in it."""
+    client = catalogue_for([_title("1", "SUMMER", 2026), _title("2", "WINTER", 2099)])
+
+    seasons = {(s["season"], s["season_year"]): s["upcoming"] for s in client.get("/catalogue").json()["seasons"]}
+
+    assert seasons == {("WINTER", 2099): True, ("SUMMER", 2026): False}

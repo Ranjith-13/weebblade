@@ -7,7 +7,7 @@ import pendulum
 from airflow.decorators import dag, task
 from airflow.utils.trigger_rule import TriggerRule
 
-from ingestion.seasons import capture_for
+from ingestion.seasons import capture_both, capture_for
 from ingestion.validate import validate_rows
 from ingestion.storage import write_parquet, write_raw_json
 
@@ -37,34 +37,38 @@ def anime_seasonal_pipeline():
         from ingestion.anilist.fetch_season import fetch_season
         from ingestion.anilist.transform import flatten_media
 
-        season, season_year, run_date, partition = capture_for(data_interval_end)
-
-        raw = fetch_season(season, season_year)
-        logger.info("AniList: fetched %s titles", len(raw))
-        write_raw_json(raw, DATA_DIR / "raw" / "anilist" / partition, run_date)
-        rows = [flatten_media(m) for m in raw]
-        # Between flattening and writing: the boundary where this source's own
-        # vocabulary and units are supposed to have become this project's, and the
-        # only place a scale or vocabulary error is still cheap to catch.
-        validate_rows(rows, "anilist")
-        write_parquet(rows, DATA_DIR / "processed" / "anilist_media" / partition, run_date)
+        # This season and the next one: the sources list a season months before it
+        # airs, and fetching only the running season left the catalogue with no
+        # Fall 2026 title nine days before Fall 2026 began.
+        for season, season_year, run_date, partition in capture_both(data_interval_end):
+            raw = fetch_season(season, season_year)
+            logger.info("AniList: fetched %s titles for %s %s", len(raw), season, season_year)
+            write_raw_json(raw, DATA_DIR / "raw" / "anilist" / partition, run_date)
+            rows = [flatten_media(m) for m in raw]
+            # Between flattening and writing: the boundary where this source's own
+            # vocabulary and units are supposed to have become this project's, and the
+            # only place a scale or vocabulary error is still cheap to catch.
+            validate_rows(rows, "anilist")
+            write_parquet(rows, DATA_DIR / "processed" / "anilist_media" / partition, run_date)
 
     @task
     def fetch_jikan(data_interval_end=None):
         from ingestion.jikan.fetch_season import fetch_season
         from ingestion.jikan.transform import flatten_media
 
-        season, season_year, run_date, partition = capture_for(data_interval_end)
-
-        raw = fetch_season(season, season_year)
-        logger.info("Jikan: fetched %s titles", len(raw))
-        write_raw_json(raw, DATA_DIR / "raw" / "jikan" / partition, run_date)
-        rows = [flatten_media(m) for m in raw]
-        # Between flattening and writing: the boundary where this source's own
-        # vocabulary and units are supposed to have become this project's, and the
-        # only place a scale or vocabulary error is still cheap to catch.
-        validate_rows(rows, "jikan")
-        write_parquet(rows, DATA_DIR / "processed" / "jikan_media" / partition, run_date)
+        # This season and the next one: the sources list a season months before it
+        # airs, and fetching only the running season left the catalogue with no
+        # Fall 2026 title nine days before Fall 2026 began.
+        for season, season_year, run_date, partition in capture_both(data_interval_end):
+            raw = fetch_season(season, season_year)
+            logger.info("Jikan: fetched %s titles for %s %s", len(raw), season, season_year)
+            write_raw_json(raw, DATA_DIR / "raw" / "jikan" / partition, run_date)
+            rows = [flatten_media(m) for m in raw]
+            # Between flattening and writing: the boundary where this source's own
+            # vocabulary and units are supposed to have become this project's, and the
+            # only place a scale or vocabulary error is still cheap to catch.
+            validate_rows(rows, "jikan")
+            write_parquet(rows, DATA_DIR / "processed" / "jikan_media" / partition, run_date)
 
     @task
     def fetch_mal(data_interval_end=None):
@@ -85,39 +89,45 @@ def anime_seasonal_pipeline():
         from ingestion.mal.fetch_season import fetch_season
         from ingestion.mal.transform import flatten_media
 
-        season, season_year, run_date, partition = capture_for(data_interval_end)
+        # This season and the next one: the sources list a season months before it
+        # airs, and fetching only the running season left the catalogue with no
+        # Fall 2026 title nine days before Fall 2026 began.
+        for season, season_year, run_date, partition in capture_both(data_interval_end):
+            try:
+                raw = fetch_season(season, season_year)
+            except MissingClientId as exc:
+                # A configuration choice, not a failure, and it is the same for
+                # both seasons: say so once and leave.
+                logger.warning("Skipping MAL: %s", exc)
+                return
 
-        try:
-            raw = fetch_season(season, season_year)
-        except MissingClientId as exc:
-            logger.warning("Skipping MAL: %s", exc)
-            return
-
-        logger.info("MAL: fetched %s titles", len(raw))
-        write_raw_json(raw, DATA_DIR / "raw" / "mal" / partition, run_date)
-        rows = [flatten_media(m) for m in raw]
-        # Between flattening and writing: the boundary where this source's own
-        # vocabulary and units are supposed to have become this project's, and the
-        # only place a scale or vocabulary error is still cheap to catch.
-        validate_rows(rows, "mal")
-        write_parquet(rows, DATA_DIR / "processed" / "mal_media" / partition, run_date)
+            logger.info("MAL: fetched %s titles for %s %s", len(raw), season, season_year)
+            write_raw_json(raw, DATA_DIR / "raw" / "mal" / partition, run_date)
+            rows = [flatten_media(m) for m in raw]
+            # Between flattening and writing: the boundary where this source's own
+            # vocabulary and units are supposed to have become this project's, and the
+            # only place a scale or vocabulary error is still cheap to catch.
+            validate_rows(rows, "mal")
+            write_parquet(rows, DATA_DIR / "processed" / "mal_media" / partition, run_date)
 
     @task
     def fetch_kitsu(data_interval_end=None):
         from ingestion.kitsu.fetch_season import fetch_season
         from ingestion.kitsu.transform import flatten_media
 
-        season, season_year, run_date, partition = capture_for(data_interval_end)
-
-        raw = fetch_season(season, season_year)
-        logger.info("Kitsu: fetched %s titles", len(raw))
-        write_raw_json(raw, DATA_DIR / "raw" / "kitsu" / partition, run_date)
-        rows = [flatten_media(m) for m in raw]
-        # Between flattening and writing: the boundary where this source's own
-        # vocabulary and units are supposed to have become this project's, and the
-        # only place a scale or vocabulary error is still cheap to catch.
-        validate_rows(rows, "kitsu")
-        write_parquet(rows, DATA_DIR / "processed" / "kitsu_media" / partition, run_date)
+        # This season and the next one: the sources list a season months before it
+        # airs, and fetching only the running season left the catalogue with no
+        # Fall 2026 title nine days before Fall 2026 began.
+        for season, season_year, run_date, partition in capture_both(data_interval_end):
+            raw = fetch_season(season, season_year)
+            logger.info("Kitsu: fetched %s titles for %s %s", len(raw), season, season_year)
+            write_raw_json(raw, DATA_DIR / "raw" / "kitsu" / partition, run_date)
+            rows = [flatten_media(m) for m in raw]
+            # Between flattening and writing: the boundary where this source's own
+            # vocabulary and units are supposed to have become this project's, and the
+            # only place a scale or vocabulary error is still cheap to catch.
+            validate_rows(rows, "kitsu")
+            write_parquet(rows, DATA_DIR / "processed" / "kitsu_media" / partition, run_date)
 
     # trigger_rule=ALL_DONE: run even if some (or all but one) of the fetch tasks
     # above failed - consolidate whatever snapshots actually landed rather than

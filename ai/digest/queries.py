@@ -25,11 +25,22 @@ _QUARTER = """
 # Unscoped, the model was handed the whole catalogue and told it was one season,
 # so its title counts and genre trends described a mixture of Spring and Summer
 # and called it Summer.
+# When a season begins, so one the sources already list but that has not started
+# is not mistaken for the season being written about. The pipeline fetches the
+# next season months ahead (ingestion/seasons.capture_both), and without this the
+# digest would describe Fall the moment Fall was announced - a season with
+# nothing aired and almost nothing scored - and call it this season.
+_SEASON_START = (
+    "make_date(season_year, CASE season WHEN 'WINTER' THEN 1 WHEN 'SPRING' THEN 4 "
+    "WHEN 'SUMMER' THEN 7 ELSE 10 END, 1)"
+)
+
 _NEWEST_SEASON = f"""
     WITH newest AS (
         SELECT season, season_year
         FROM anime_media_latest
         WHERE season IS NOT NULL AND season_year IS NOT NULL
+          AND {_SEASON_START} <= current_date
         GROUP BY season, season_year
         ORDER BY season_year DESC, {_QUARTER} DESC
         LIMIT 1

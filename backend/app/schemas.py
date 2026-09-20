@@ -212,6 +212,11 @@ class SeasonCount(BaseModel):
     season: str
     season_year: int
     count: int
+    # True for a season the sources already list that has not started yet. The
+    # pipeline fetches the next season months ahead (ingestion/seasons.
+    # capture_both), so "the newest season on file" is not the season a reader
+    # means by "this season".
+    upcoming: bool = False
 
 
 class CatalogueSummary(BaseModel):

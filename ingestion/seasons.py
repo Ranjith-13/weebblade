@@ -18,6 +18,13 @@ def partition_for(season: str, season_year: int) -> str:
     return f"{season_year}-{season}"
 
 
+def next_season(season: str, season_year: int) -> tuple[str, int]:
+    """The season after this one, rolling the year over after FALL."""
+    order = ["WINTER", "SPRING", "SUMMER", "FALL"]
+    i = order.index(season)
+    return (order[0], season_year + 1) if i == len(order) - 1 else (order[i + 1], season_year)
+
+
 def capture_for(at) -> tuple[str, int, str, str]:
     """The season, year, run_date and partition for a run capturing data at `at`.
 
@@ -48,3 +55,23 @@ def capture_for(at) -> tuple[str, int, str, str]:
     season = season_for_month(at.month)
     season_year = at.year
     return season, season_year, at.strftime("%Y-%m-%d"), partition_for(season, season_year)
+
+
+def capture_both(at) -> list[tuple[str, int, str, str]]:
+    """This run's season and the one after it, each as capture_for returns it.
+
+    The sources list a season months before it airs, and until 2026-09-21 the
+    pipeline fetched only the season it was running in: nine days before Fall
+    2026 began the catalogue held no Fall title at all, and the site could not
+    answer "what is coming next", which is the front page of every comparable
+    site. Both seasons are fetched every run, so the next one fills in as it is
+    announced rather than appearing the day it starts.
+
+    Same run_date for both - one run, one date - and separate partitions, so a
+    title that moves between them is a season change like any other (see
+    processing/changes.py) rather than two rows at one address.
+    """
+    season, season_year, run_date, partition = capture_for(at)
+    after, after_year = next_season(season, season_year)
+    return [(season, season_year, run_date, partition),
+            (after, after_year, run_date, partition_for(after, after_year))]
