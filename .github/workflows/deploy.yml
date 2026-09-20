@@ -97,6 +97,22 @@ jobs:
       # a red check here means the deploy would not have worked either.
       - run: npm run build
 
+      # Smoke tests against that build (frontend/e2e). Until 2026-09-21 this job
+      # proved the frontend compiled and nothing proved a page rendered anything:
+      # fe28245 deleted a component the schedule still imported and only the build
+      # caught that, while a page rendering an empty shell would have shipped.
+      # Chromium only - both projects, desktop and phone, are Chromium devices.
+      # They assert no title, count or season: the catalogue changes weekly and a
+      # test that goes red when Summer becomes Fall is a test that gets deleted.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
   deploy:
     needs: test
     runs-on: ubuntu-latest

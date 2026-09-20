@@ -52,3 +52,8 @@ caddy-logs/
 .playwright-mcp/
 output/
 schedule-*.png
+
+# Playwright smoke-test output (frontend/e2e)
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/

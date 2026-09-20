@@ -377,7 +377,16 @@ hierarchy, sequence, feedback, state change — do not add it.
 
 ## Verify before claiming
 
-Run the build, then check in a real browser at 390 and 1440. Current gate results: 0 contrast
+`npm run test:e2e` (frontend/e2e, Playwright) runs a smoke suite against a production build at
+1440 and 390 and runs in CI on every push: each route answers, has an `h1` and real content in
+`main`, the console is clean, a catalogue link leads to a title page that states a status, and the
+two streamed pages measure no layout shift. It asserts no title, count or season - the catalogue
+changes weekly, and a test that goes red when Summer becomes Fall is a test that gets deleted.
+Removing `data-footer-waits` from `/changes` was tried against it and fails the shift assertion,
+which is the point of having it.
+
+It is a smoke suite, not a substitute for looking: it would not notice a page that renders
+correct content ungracefully. Run the build, then check in a real browser at 390 and 1440. Current gate results: 0 contrast
 failures, 0 tap targets under the WCAG 2.2 24px minimum, CLS 0, visible focus on every control.
 
 **A page that streams gives the footer something to wait for.** A route that renders behind a
