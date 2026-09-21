@@ -19,10 +19,20 @@ _BUILDING = f"{COLLECTION_NAME}__building"
 # build). Used only if the client cannot say.
 _FALLBACK_BATCH = 1000
 
-_SELECT_FOR_INDEX = """
-    SELECT source, source_id, title_english, title_romaji, genres, synopsis
-    FROM anime_media_latest
-"""
+# Everything text_for_embedding can say about a title. The columns beyond title
+# and synopsis are what an entry with no synopsis has instead of nothing.
+# Whichever of them the view actually has: a warehouse built from a snapshot
+# older than a column does not have it, and an index of names is better than no
+# index at all.
+_WANTED = (
+    "source", "source_id", "title_english", "title_romaji", "genres", "synopsis",
+    "format", "season", "season_year", "studios", "source_material",
+)
+
+
+def _select_for_index(con: duckdb.DuckDBPyConnection) -> str:
+    columns = {row[0] for row in con.execute("DESCRIBE anime_media_latest").fetchall()}
+    return f"SELECT {', '.join(c for c in _WANTED if c in columns)} FROM anime_media_latest"
 
 
 def build_index(db_path: Path, chroma_dir: Path) -> int:
@@ -42,7 +52,9 @@ def build_index(db_path: Path, chroma_dir: Path) -> int:
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        rows: list[dict[str, Any]] = con.execute(_SELECT_FOR_INDEX).fetch_arrow_table().to_pylist()
+        rows: list[dict[str, Any]] = (
+            con.execute(_select_for_index(con)).fetch_arrow_table().to_pylist()
+        )
     except duckdb.CatalogException:
         logger.warning("anime_media_latest view doesn't exist yet - nothing to index")
         return 0
