@@ -1,7 +1,10 @@
 from ai.search.embed import text_for_embedding
 
 
-def test_text_for_embedding_combines_names_shape_genres_and_synopsis():
+def test_a_title_with_a_synopsis_is_its_names_genres_and_synopsis():
+    """Nothing else, because the model mean-pools and every word added dilutes
+    the rest: describing the titles that already describe themselves cost five
+    of 120 on-genre results when it was measured."""
     row = {
         "title_english": "Demon Slayer",
         "title_romaji": "Kimetsu no Yaiba",
@@ -17,8 +20,8 @@ def test_text_for_embedding_combines_names_shape_genres_and_synopsis():
     text = text_for_embedding(row)
 
     assert text == (
-        "Demon Slayer, Kimetsu no Yaiba. TV series, Spring 2019, by ufotable. "
-        "Adapted from manga. Genres: Action, Fantasy. A boy fights demons to save his sister."
+        "Demon Slayer, Kimetsu no Yaiba. Genres: Action, Fantasy. "
+        "A boy fights demons to save his sister."
     )
 
 
@@ -69,6 +72,13 @@ def test_an_underscored_source_reads_as_words():
     row = {"title_romaji": "A", "source_material": "light_novel"}
 
     assert text_for_embedding(row) == "A. Adapted from light novel"
+
+
+def test_a_described_title_is_not_described_twice():
+    """The same fields are ignored where the synopsis already speaks."""
+    row = {"title_romaji": "A", "source_material": "light_novel", "synopsis": "A story."}
+
+    assert text_for_embedding(row) == "A. A story."
 
 
 def test_text_for_embedding_handles_all_missing():
