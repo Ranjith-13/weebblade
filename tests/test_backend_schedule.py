@@ -326,3 +326,60 @@ def test_a_title_anilist_or_mal_knows_by_another_id_is_not_placed_by_kitsus(mapp
     titles = [client.get(f"/anime/{wb_id}").json() for wb_id in ids[3:5]]
 
     assert [(t["status"], t["anilist_status"]) for t in titles] == [("current", None), ("current", None)]
+
+
+# --- Answers for an id found by title search ---------------------------------------------
+
+def _resolved(data, rows, searched_on="2026-09-21"):
+    """What resolve_ids found: (wb_id, anilist_id). See ingestion/anilist/resolve_ids.py."""
+    from ingestion.anilist.resolve_ids import SCHEMA as RESOLVED_SCHEMA
+
+    out = data / "processed" / "anilist_resolved"
+    out.mkdir(parents=True, exist_ok=True)
+    pq.write_table(
+        pa.Table.from_pylist(
+            [{"wb_id": wb_id, "anilist_id": anilist_id, "matched_by": "romaji",
+              "title": wb_id, "searched_on": searched_on} for wb_id, anilist_id in rows],
+            schema=RESOLVED_SCHEMA,
+        ),
+        out / f"{searched_on}.parquet",
+    )
+
+
+def test_an_answer_for_an_id_found_by_search_lands_on_its_title(mapped):
+    """Nothing about this title names AniList id 900 - no source gave it, and
+    Kitsu maps the title to MAL id 40, which names two titles and places
+    neither. The search found it, so the answer has somewhere to go."""
+    client, ids, data = mapped
+    _resolved(data, [(ids[1], 900)])
+    _check(data, "2026-09-21", [_said(900, "finished", ended_on="2023-07-01")])
+
+    title = client.get(f"/anime/{ids[1]}").json()
+
+    assert (title["status"], title["merged_status"]) == ("finished", "current")
+    assert (title["anilist_status"], title["anilist_ended_on"]) == ("finished", "2023-07-01")
+
+
+def test_a_title_the_search_found_an_answer_for_is_no_longer_unconfirmed(mapped):
+    """The point of the search: a title nothing could confirm, confirmed."""
+    client, ids, data = mapped
+    _resolved(data, [(ids[1], 900)])
+    _check(data, "2026-09-21", [_said(900, "current")])
+
+    title = client.get(f"/anime/{ids[1]}").json()
+
+    assert (title["status"], title["airing_unconfirmed"]) == ("current", False)
+
+
+def test_two_titles_cannot_be_given_one_searched_id(mapped):
+    """A title keeps the id most recently found for it, and an id belongs to one
+    title: the alternative is handing one show another's status."""
+    client, ids, data = mapped
+    _resolved(data, [(ids[1], 900)], searched_on="2026-09-20")
+    _resolved(data, [(ids[2], 900)], searched_on="2026-09-21")
+    _check(data, "2026-09-21", [_said(900, "finished")])
+
+    statuses = [client.get(f"/anime/{wb_id}").json()["anilist_status"] for wb_id in ids[1:3]]
+
+    assert statuses == [None, "finished"]
+

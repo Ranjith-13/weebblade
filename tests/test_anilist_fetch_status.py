@@ -8,17 +8,46 @@ from ingestion.anilist import fetch_status as fs
 
 
 def _warehouse(tmp_path, titles, corrected=None):
-    """A warehouse with just the view the check reads. `corrected` gives the
-    status the warehouse serves where the check has overruled the sources."""
+    """A data directory holding a warehouse with just the view the check reads.
+    `corrected` gives the status the warehouse serves where the check has
+    overruled the sources. A title is (source_keys, mal_id, merged_status) or
+    that with a wb_id first."""
     path = tmp_path / "data" / "warehouse.duckdb"
     path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(path))
-    con.execute("CREATE TABLE t (source_keys VARCHAR[], mal_id BIGINT, merged_status VARCHAR, status VARCHAR)")
-    for keys, mal_id, merged in titles:
-        con.execute("INSERT INTO t VALUES (?, ?, ?, ?)", [keys, mal_id, merged, (corrected or {}).get(mal_id, merged)])
+    con.execute(
+        "CREATE TABLE t (wb_id VARCHAR, source_keys VARCHAR[], mal_id BIGINT, "
+        "merged_status VARCHAR, status VARCHAR)"
+    )
+    for title in titles:
+        wb_id, keys, mal_id, merged = title if len(title) == 4 else (None, *title)
+        con.execute(
+            "INSERT INTO t VALUES (?, ?, ?, ?, ?)",
+            [wb_id, keys, mal_id, merged, (corrected or {}).get(mal_id, merged)],
+        )
     con.execute("CREATE VIEW anime_media_latest AS SELECT * FROM t")
     con.close()
-    return path
+    return path.parent
+
+
+def _resolved(data_dir, rows, searched_on="2026-09-21"):
+    """What resolve_ids has written: (wb_id, anilist_id), the id null for a miss."""
+    from ingestion.anilist.resolve_ids import SCHEMA
+
+    out = data_dir / "processed" / "anilist_resolved"
+    out.mkdir(parents=True, exist_ok=True)
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {"wb_id": wb_id, "anilist_id": anilist_id,
+                 "matched_by": "romaji" if anilist_id else "no match",
+                 "title": wb_id, "searched_on": searched_on}
+                for wb_id, anilist_id in rows
+            ],
+            schema=SCHEMA,
+        ),
+        out / f"{searched_on}.parquet",
+    )
 
 
 class _AniList:
@@ -38,22 +67,41 @@ def _media(anilist_id, mal_id, status, end=None):
 
 
 def test_only_titles_the_catalogue_calls_airing_are_asked_about(tmp_path):
-    db = _warehouse(tmp_path, [
+    data_dir = _warehouse(tmp_path, [
         (["anilist:1", "kitsu:1"], 10, "current"),
         (["kitsu:2", "mal:20"], 20, "current"),      # no AniList id: asked by MAL id
         (["anilist:3", "mal:30"], 30, "finished"),   # already finished: no need to ask
         (["kitsu:4"], None, "current"),              # nothing to ask by
     ])
 
-    assert fs.candidates(db) == ([1], [20])
+    assert fs.candidates(data_dir) == ([1], [20])
 
 
 def test_a_title_the_check_has_overruled_is_still_asked_about(tmp_path):
     """Asked by the corrected status, a title AniList called finished yesterday
     would not be asked today, read as airing again tomorrow, and flip daily."""
-    db = _warehouse(tmp_path, [(["anilist:1"], 10, "current")], corrected={10: "finished"})
+    data_dir = _warehouse(tmp_path, [(["anilist:1"], 10, "current")], corrected={10: "finished"})
 
-    assert fs.candidates(db) == ([1], [])
+    assert fs.candidates(data_dir) == ([1], [])
+
+
+def test_an_id_found_by_search_is_asked_about_the_day_it_is_found(tmp_path):
+    """The 19 titles with no usable id at all had no way into this check. An id
+    resolve_ids found is read from its files, not from the warehouse view the
+    weekly refresh makes, so it is used the same day."""
+    data_dir = _warehouse(tmp_path, [("wb_a", ["kitsu:4"], None, "current")])
+    _resolved(data_dir, [("wb_a", 44), ("wb_b", 55)])  # wb_b is not airing
+
+    assert fs.candidates(data_dir) == ([44], [])
+
+
+def test_a_title_searched_for_and_not_found_is_still_asked_by_its_mal_id(tmp_path):
+    """A recorded miss says AniList has no entry under that title. It must not
+    take away the MAL id the check would otherwise have asked by."""
+    data_dir = _warehouse(tmp_path, [("wb_a", ["kitsu:4"], 40, "current")])
+    _resolved(data_dir, [("wb_a", None)])
+
+    assert fs.candidates(data_dir) == ([], [40])
 
 
 def test_ids_are_asked_in_chunks_and_a_title_answered_twice_is_kept_once():

@@ -16,8 +16,10 @@ requests; AniList answered for 241 and had 79 of them finished, 34 with a MAL
 slot the page was counting down to - Yu-Gi-Oh! Go Rush!!, finished in March
 2025, among them.
 
-Titles are asked about by AniList id where the catalogue has one, and by MAL
-id where it has only that.
+Titles are asked about by AniList id where the catalogue has one, by MAL id
+where it has only that, and by an id found for it by search where it has
+neither that works - see ingestion/anilist/resolve_ids.py, which is what asks
+about the 67 titles this had no way to reach.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ import pyarrow as pa
 
 from ..storage import write_daily, write_raw_json
 from .client import AniListClient
+from .resolve_ids import resolved_ids
 
 logger = logging.getLogger(__name__)
 
@@ -68,29 +71,38 @@ SCHEMA = pa.schema(
 )
 
 
-def candidates(db_path: Path) -> tuple[list[int], list[int]]:
+def candidates(data_dir: Path) -> tuple[list[int], list[int]]:
     """AniList ids, and MAL ids for titles with no AniList id, of every title the
     sources call airing. Read-only: the warehouse is only looked at.
+
+    A title with neither - or with a MAL id no AniList entry claims - may still
+    have been found by title search, and its id is used here the day it is
+    found, rather than waiting for the weekly refresh that puts it in a view.
 
     The sources' status, merged_status, and not the status the warehouse serves,
     which this check itself corrects. Asked by the corrected one, a title AniList
     called finished yesterday would not be asked about today, would read as
     airing again tomorrow, and would be asked again the day after - flipping
     every day for as long as the sources lag."""
-    con = duckdb.connect(str(db_path), read_only=True)
+    con = duckdb.connect(str(data_dir / "warehouse.duckdb"), read_only=True)
     try:
         columns = {row[0] for row in con.execute("DESCRIBE anime_media_latest").fetchall()}
         status = "merged_status" if "merged_status" in columns else "status"
+        wb_id = "wb_id" if "wb_id" in columns else "NULL"
         rows = con.execute(
-            f"SELECT source_keys, mal_id FROM anime_media_latest WHERE {status} = 'current'"
+            f"SELECT {wb_id}, source_keys, mal_id FROM anime_media_latest WHERE {status} = 'current'"
         ).fetchall()
     finally:
         con.close()
 
+    found = resolved_ids(data_dir)
     anilist: set[int] = set()
     mal_only: set[int] = set()
-    for keys, mal_id in rows:
+    for wb_id, keys, mal_id in rows:
         ids = {int(k.split(":", 1)[1]) for k in keys or [] if k.startswith("anilist:")}
+        searched = found.get(wb_id)
+        if searched is not None:
+            ids.add(int(searched))
         if ids:
             anilist |= ids
         elif mal_id is not None:
@@ -133,7 +145,7 @@ def flatten_status(media: dict[str, Any], fetched_on: str) -> dict[str, Any]:
 
 def land_status(data_dir: Path, run_date: str, client: AniListClient | None = None) -> int:
     """Ask about today's airing titles, land the answers raw and processed."""
-    anilist_ids, mal_ids = candidates(data_dir / "warehouse.duckdb")
+    anilist_ids, mal_ids = candidates(data_dir)
     raw = fetch_status(anilist_ids, mal_ids, client)
     write_raw_json(raw, data_dir / "raw" / "anilist_status", run_date)
 

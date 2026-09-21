@@ -146,6 +146,11 @@ class Anime(BaseModel):
     # means no weekly slot; see processing/duckdb_catalog._status_corrected.
     merged_status: str | None = None
     anilist_status: str | None = None
+    # True where the sources call a title airing, AniList has never answered for
+    # it, and it premiered over a year ago: nothing can confirm it is still
+    # running. 67 of the 296 the sources call airing have no answer, 48 of them
+    # premiered over a year ago. A client should not call these airing.
+    airing_unconfirmed: bool = False
     # ISO, as much as AniList knows: "2026-09-10", "2026-09" or "2026".
     anilist_ended_on: str | None = None
     anilist_checked_on: str | None = None

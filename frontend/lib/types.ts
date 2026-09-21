@@ -82,6 +82,12 @@ export type Anime = {
   anilist_status: string | null;
   anilist_ended_on: string | null;
   anilist_checked_on: string | null;
+  /** True where the sources call a title airing, AniList has never answered for
+   *  it, and it premiered over a year ago: nothing can confirm it is still
+   *  running. 67 of the 296 titles the sources call airing have no answer, 48
+   *  of them premiered over a year ago. Not airing, as far as this site can
+   *  say - see isAiring. */
+  airing_unconfirmed: boolean;
   /** What its sources have said differently from one fetch to the next, newest
    *  first. Only a single title carries them; lists leave it empty. */
   changes: Change[];
@@ -658,16 +664,23 @@ const STOPPED: Record<string, string> = {
 };
 
 export function isAiring(a: Anime): boolean {
+  if (a.airing_unconfirmed) return false;
   return a.status === "current" && (!a.anilist_status || a.anilist_status === "current");
 }
 
 /** The Status fact. Where AniList overrules the sources it says so, because
  *  every other field on the page still comes from the sources that disagree.
  *  AniList is only asked about titles the sources call airing, so any other
- *  answer from it is an overruling. */
+ *  answer from it is an overruling.
+ *
+ *  Where it never answered at all and the premiere is over a year old, the
+ *  sources' word is years stale and nothing can check it: the page says that
+ *  rather than announcing a show is on the air this week on the strength of a
+ *  2022 snapshot. */
 export function statusLabel(a: Anime): string {
   const said = a.anilist_status;
   if (said && said !== "current" && STOPPED[said]) return `${STOPPED[said]}, per AniList`;
+  if (a.airing_unconfirmed) return "Listed as airing, unconfirmed";
   if (a.status === "current") return "Airing now";
   if (a.status === "finished") return "Finished";
   // upcoming, unreleased, tba: not aired yet, whatever each source calls it.

@@ -245,6 +245,16 @@ def check_daily(data_dir: Path, run_date: str, failed_tasks: list[str] | None = 
         if rows and served != run_date:
             record.fail(f"The served {name} is from {served}, not {run_date}")
 
+    # What the day's title searches turned up, where it ran (see
+    # ingestion/anilist/resolve_ids.py). Numbers only: a day that matched
+    # nothing is an ordinary day once the backlog is through.
+    searched = processed / "anilist_resolved" / f"{run_date}.parquet"
+    if searched.exists():
+        ids = pq.read_table(searched, columns=["anilist_id"]).column(0)
+        record.numbers["anilist_resolved"] = {
+            "searched": len(ids), "matched": len(ids) - ids.null_count
+        }
+
     unplaced = _unplaced_answers(db_path or data_dir / "warehouse.duckdb")
     if unplaced:
         record.numbers["unplaced_answers"] = len(unplaced)

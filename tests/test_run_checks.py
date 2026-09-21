@@ -217,6 +217,31 @@ def test_a_served_file_older_than_the_run_fails(tmp_path):
     assert _fails(check_daily(tmp_path, "2026-09-16")) == ["The served anilist_status is from 2026-09-15, not 2026-09-16"]
 
 
+def test_the_days_title_searches_are_written_down(tmp_path):
+    """Numbers, not a verdict: once the backlog is through, most days search a
+    handful and match none, and that is an ordinary day."""
+    from ingestion.anilist.resolve_ids import SCHEMA as RESOLVED_SCHEMA
+
+    _day(tmp_path, "2026-09-15")
+    out = tmp_path / "processed" / "anilist_resolved" / "2026-09-15.parquet"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(
+        pa.Table.from_pylist(
+            [{"wb_id": "a", "anilist_id": 700, "matched_by": "romaji", "title": "A",
+              "searched_on": "2026-09-15"},
+             {"wb_id": "b", "anilist_id": None, "matched_by": "no match", "title": "B",
+              "searched_on": "2026-09-15"}],
+            schema=RESOLVED_SCHEMA,
+        ),
+        out,
+    )
+
+    record = check_daily(tmp_path, "2026-09-15")
+
+    assert record.passed, record.summary()
+    assert record.numbers["anilist_resolved"] == {"searched": 2, "matched": 1}
+
+
 def test_a_failed_daily_task_fails_the_run(tmp_path):
     _day(tmp_path, "2026-09-15")
 

@@ -253,3 +253,45 @@ def test_a_snapshot_whose_run_died_mid_write_is_not_served(tmp_path):
     refresh_catalog(data, tmp_path / "warehouse.duckdb")
 
     assert _served_and_history(tmp_path)[0] == [("1", 70.0, "2026-09-13")]
+
+
+# --- airing the check could not confirm -------------------------------------------
+
+def _airing(source_id, status, start_year=None):
+    return {"source": "kitsu", "source_id": source_id, "title_english": f"T{source_id}",
+            "status": status, "start_year": start_year, "start_month": 4, "start_day": 1}
+
+
+def test_a_title_airing_since_years_ago_that_nothing_confirms_is_flagged(tmp_path):
+    """The 48 of them in live data. AniList has never answered for this title,
+    so the only evidence it is airing is a source snapshot from 2022."""
+    data = tmp_path / "data"
+    _catalogue(data, "2026-09-21", [_airing("1", "current", 2022)])
+
+    assert _latest(tmp_path, data)[0]["airing_unconfirmed"] is True
+
+
+def test_a_title_that_premiered_recently_is_not_flagged(tmp_path):
+    """The sources' word is fresh, and for a show that started this season it is
+    all anyone has."""
+    data = tmp_path / "data"
+    _catalogue(data, "2026-09-21", [_airing("1", "current", 2026)])
+
+    assert _latest(tmp_path, data)[0]["airing_unconfirmed"] is False
+
+
+def test_a_title_with_no_premiere_at_all_is_not_flagged(tmp_path):
+    """Unconfirmed means known to be old, not impossible to date."""
+    data = tmp_path / "data"
+    _catalogue(data, "2026-09-21", [_airing("1", "current", None)])
+
+    assert _latest(tmp_path, data)[0]["airing_unconfirmed"] is False
+
+
+def test_a_finished_title_is_never_flagged(tmp_path):
+    """Nothing is being claimed about it that wants confirming."""
+    data = tmp_path / "data"
+    _catalogue(data, "2026-09-21", [_airing("1", "finished", 2022)])
+
+    assert _latest(tmp_path, data)[0]["airing_unconfirmed"] is False
+

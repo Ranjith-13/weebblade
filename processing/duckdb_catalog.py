@@ -51,8 +51,13 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
         mapped = _mapped_mal_ids(con, titles, has_registry)
         created += mapped
 
+        # Before the placements: an answer AniList gave for an id found by
+        # search is placed by this and nothing else.
+        resolved = _resolved_view(con, data_dir, has_registry)
+        created += resolved
+
         # Before anime_media_latest, which corrects its status from this.
-        status_view = _anilist_status_view(con, data_dir, has_registry, bool(mapped))
+        status_view = _anilist_status_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
         created += status_view
 
         if titles:
@@ -67,7 +72,7 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
 
         created += _franchise_views(con, data_dir)
         created += _change_view(con, data_dir, has_registry)
-        created += _airing_view(con, data_dir, has_registry, bool(mapped))
+        created += _airing_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
     finally:
         con.close()
     return created
@@ -130,11 +135,18 @@ def _change_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: b
 
 
 def _current_placed(
-    con: duckdb.DuckDBPyConnection, view: str, name: str, data_dir: Path, has_registry: bool, mapped: bool
+    con: duckdb.DuckDBPyConnection,
+    view: str,
+    name: str,
+    data_dir: Path,
+    has_registry: bool,
+    mapped: bool,
+    resolved: bool = False,
 ) -> list[str]:
     """A view over a daily fetch's current file, each row placed on the title it
     belongs to: by AniList id, then MAL id, then the MAL id a title only Kitsu
-    lists is mapped to. See ingestion.storage.write_daily.
+    lists is mapped to, then the AniList id found for it by search. See
+    ingestion.storage.write_daily.
 
     The file is read per query, not when the view is made. These are fetched
     daily and the views are made weekly, and neither waits for the other: a new
@@ -163,6 +175,13 @@ def _current_placed(
         if mapped:
             placed.append("k.wb_id")
             joins.append("LEFT JOIN anime_mapped_mal_id k ON k.mal_id = CAST(l.mal_id AS BIGINT)")
+        if resolved:
+            # Last: the id is this title's by search, not by anything a source
+            # said, so it only answers where nothing else could.
+            placed.append("r.wb_id")
+            joins.append(
+                "LEFT JOIN anime_anilist_resolved r ON r.anilist_id = CAST(l.anilist_id AS BIGINT)"
+            )
         sql = f"SELECT l.*, COALESCE({', '.join(placed)}) AS wb_id FROM {rows} l {' '.join(joins)}"
     else:
         sql = f"SELECT *, CAST(NULL AS VARCHAR) AS wb_id FROM {rows}"
@@ -208,20 +227,53 @@ def _mapped_mal_ids(con: duckdb.DuckDBPyConnection, titles: str | None, has_regi
     return ["anime_mapped_mal_id"]
 
 
-def _airing_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool, mapped: bool) -> list[str]:
+def _resolved_view(con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool) -> list[str]:
+    """The AniList id found by title search for a title that had none the daily
+    check could ask by. See ingestion/anilist/resolve_ids.py.
+
+    Newest answer per title, matches only: a recorded miss says AniList has no
+    such entry, which stops the search being repeated but places nothing. One
+    title per id as well - two titles claiming one AniList id would each be
+    given the other's status - keeping the one searched for most recently.
+    """
+    files = data_dir / "processed" / "anilist_resolved"
+    if not (has_registry and list(files.glob("*.parquet"))):
+        return []
+    con.execute(
+        "CREATE OR REPLACE VIEW anime_anilist_resolved AS "
+        "SELECT wb_id, anilist_id, matched_by, searched_on FROM ("
+        f"  SELECT * FROM read_parquet('{files}/*.parquet', union_by_name=true)"
+        "  WHERE anilist_id IS NOT NULL"
+        "  QUALIFY ROW_NUMBER() OVER (PARTITION BY wb_id ORDER BY searched_on DESC) = 1"
+        ") QUALIFY ROW_NUMBER() OVER (PARTITION BY anilist_id ORDER BY searched_on DESC) = 1"
+    )
+    return ["anime_anilist_resolved"]
+
+
+def _airing_view(
+    con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool, mapped: bool, resolved: bool
+) -> list[str]:
     """AniList's airing schedule. See ingestion/anilist/fetch_airing.py."""
-    return _current_placed(con, "anime_airing", "anilist_airing", data_dir, has_registry, mapped)
+    return _current_placed(
+        con, "anime_airing", "anilist_airing", data_dir, has_registry, mapped, resolved
+    )
 
 
 def _anilist_status_view(
-    con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool, mapped: bool
+    con: duckdb.DuckDBPyConnection,
+    data_dir: Path,
+    has_registry: bool,
+    mapped: bool,
+    resolved: bool = False,
 ) -> list[str]:
     """AniList's own status for the titles the sources call airing. See
     ingestion/anilist/fetch_status.py. Without identities there is nothing to
     place a check on, so no view."""
     if not has_registry:
         return []
-    return _current_placed(con, "anime_anilist_status", "anilist_status", data_dir, has_registry, mapped)
+    return _current_placed(
+        con, "anime_anilist_status", "anilist_status", data_dir, has_registry, mapped, resolved
+    )
 
 
 def _status_corrected(con: duckdb.DuckDBPyConnection, latest: str, has_status: bool) -> str:
@@ -244,10 +296,35 @@ def _status_corrected(con: duckdb.DuckDBPyConnection, latest: str, has_status: b
     The sources' own answer is kept as merged_status. The check asks about titles
     by it, not by the corrected status - see fetch_status.candidates - and it is
     what the sources still say where AniList overrules them.
+
+    What is left is the titles AniList never answered for: 67 of the 296 the
+    sources call airing, 48 of them with a premiere over a year old. Nothing can
+    confirm those, and a title whose only evidence of airing is a source snapshot
+    from years ago should not be read the same as one AniList confirmed this
+    morning. airing_unconfirmed says which is which, and the site stops short of
+    calling them airing: no countdown to a weekly slot, no place in an airing
+    count, and a status that says plainly it could not be checked. A recent
+    premiere is not flagged - the sources' word is fresh, and it is all anyone
+    has for a show that started last week. See ingestion/anilist/resolve_ids.py,
+    which is what shrinks this set.
     """
     columns = {row[0] for row in con.execute(f"DESCRIBE {latest}").fetchall()}
     if "status" not in columns:
         return latest
+
+    # Explicit casts: make_date takes INTEGER, and these columns are BIGINT from
+    # Parquet. The year alone where the rest is missing - a premiere known only
+    # as "2022" is over a year old either way - and nothing flagged at all where
+    # the premiere is unknown, or the snapshot predates the column: an
+    # unconfirmed title is one known to be old, not one that cannot be dated.
+    def _part(name: str) -> str:
+        return f"CAST(COALESCE(b.{name}, 1) AS INTEGER)" if name in columns else "1"
+
+    if "start_year" in columns:
+        premiered = f"make_date(CAST(b.start_year AS INTEGER), {_part('start_month')}, {_part('start_day')})"
+        old_enough = f"b.start_year IS NOT NULL AND {premiered} < current_date - INTERVAL 1 YEAR"
+    else:
+        old_enough = "FALSE"
     if has_status:
         return (
             "SELECT b.* EXCLUDE (status), "
@@ -255,15 +332,19 @@ def _status_corrected(con: duckdb.DuckDBPyConnection, latest: str, has_status: b
             "     WHEN b.status = 'current' AND s.status = 'upcoming' THEN 'upcoming' "
             "     ELSE b.status END AS status, "
             "b.status AS merged_status, s.status AS anilist_status, "
-            "s.ended_on AS anilist_ended_on, s.fetched_on AS anilist_checked_on "
+            "s.ended_on AS anilist_ended_on, s.fetched_on AS anilist_checked_on, "
+            f"(b.status = 'current' AND s.status IS NULL AND {old_enough}) AS airing_unconfirmed "
             f"FROM ({latest}) b "
             "LEFT JOIN (SELECT * FROM anime_anilist_status WHERE wb_id IS NOT NULL "
             "           QUALIFY ROW_NUMBER() OVER (PARTITION BY wb_id ORDER BY anilist_id) = 1) s "
             "  ON s.wb_id = b.wb_id"
         )
+    # No check has ever run, so nothing airing is confirmed: the same rule, with
+    # every answer missing. The column means one thing however it was built.
     return (
         "SELECT b.*, b.status AS merged_status, CAST(NULL AS VARCHAR) AS anilist_status, "
-        "CAST(NULL AS VARCHAR) AS anilist_ended_on, CAST(NULL AS VARCHAR) AS anilist_checked_on "
+        "CAST(NULL AS VARCHAR) AS anilist_ended_on, CAST(NULL AS VARCHAR) AS anilist_checked_on, "
+        f"(b.status = 'current' AND {old_enough}) AS airing_unconfirmed "
         f"FROM ({latest}) b"
     )
 

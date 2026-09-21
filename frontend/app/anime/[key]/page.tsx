@@ -230,7 +230,25 @@ async function AnimeDetail({
         formatLabel(anime.format)
       ),
     ],
-    ["Status", statusLabel(anime)],
+    [
+      "Status",
+      /* Why it is unconfirmed, where it is: "unconfirmed" on its own reads as a
+         hedge rather than a fact about this title. The sources say airing, the
+         premiere is years old, and AniList - the only thing that could settle
+         it - has no record of the title at all. */
+      anime.airing_unconfirmed ? (
+        <>
+          {statusLabel(anime)}
+          <span className="meta mt-1 block max-w-[42ch] text-right">
+            Its sources still list it as airing
+            {anime.start_year ? `, but it premiered in ${anime.start_year}` : ""}, and AniList
+            has no record of it to check against.
+          </span>
+        </>
+      ) : (
+        statusLabel(anime)
+      ),
+    ],
     anime.episodes ? ["Episodes", String(anime.episodes)] : null,
     anime.duration_minutes ? ["Episode length", `${anime.duration_minutes} min`] : null,
     formatAirDate(anime) ? ["First aired", formatAirDate(anime)!] : null,
