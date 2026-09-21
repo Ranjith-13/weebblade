@@ -383,3 +383,31 @@ def test_two_titles_cannot_be_given_one_searched_id(mapped):
 
     assert statuses == [None, "finished"]
 
+
+def test_a_searched_id_outranks_the_answers_own_mal_id(mapped):
+    """AniList files Throne of Seal 3 under the MAL id of Throne of Seal 2nd
+    Season. Placed by that id, 2025's answer lands on a series that finished in
+    2022; placed by the id the search verified, it lands on the title it was
+    asked about."""
+    client, ids, data = mapped
+    _resolved(data, [(ids[0], 900)])
+    _check(data, "2026-09-21", [_said(900, "finished", mal=61)])  # 61 is another title's MAL key
+
+    statuses = {wb_id: client.get(f"/anime/{wb_id}").json()["anilist_status"] for wb_id in ids}
+
+    assert statuses[ids[0]] == "finished"
+    assert statuses[ids[3]] is None  # the title MAL id 61 names keeps its own
+
+
+def test_an_id_a_source_gave_still_beats_a_searched_one(mapped):
+    """A search is evidence; a source naming the title by that id is its
+    address."""
+    client, ids, data = mapped
+    _resolved(data, [(ids[0], 7)])  # 7 is the last title's own AniList key
+    _check(data, "2026-09-21", [_said(7, "finished")])
+
+    statuses = {wb_id: client.get(f"/anime/{wb_id}").json()["anilist_status"] for wb_id in ids}
+
+    assert statuses[ids[4]] == "finished"
+    assert statuses[ids[0]] is None
+

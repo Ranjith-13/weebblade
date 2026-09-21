@@ -144,8 +144,8 @@ def _current_placed(
     resolved: bool = False,
 ) -> list[str]:
     """A view over a daily fetch's current file, each row placed on the title it
-    belongs to: by AniList id, then MAL id, then the MAL id a title only Kitsu
-    lists is mapped to, then the AniList id found for it by search. See
+    belongs to: by AniList id, then the AniList id found for a title by search,
+    then MAL id, then the MAL id a title only Kitsu lists is mapped to. See
     ingestion.storage.write_daily.
 
     The file is read per query, not when the view is made. These are fetched
@@ -157,9 +157,18 @@ def _current_placed(
 
     AniList id first, then MAL id: 13 of the 102 catalogue titles airing in the
     week first measured were missing from AniList's season listing, so only
-    the MAL id placed them. A row none of the three places has a null wb_id and
-    is still served - One Piece is on the schedule whether or not the catalogue
+    the MAL id placed them. A row none of them places has a null wb_id and is
+    still served - One Piece is on the schedule whether or not the catalogue
     holds it.
+
+    A searched id outranks the answer's own MAL id because the answer was got by
+    asking about this title, and an entry's idMal is a cross-reference AniList
+    keeps, not a fact about the entry. Live, on the first day this ran, all four
+    disagreements went the searched id's way: AniList files Throne of Seal 3
+    under the MAL id of Throne of Seal 2nd Season, and Dou Po Cangqiong: Nian
+    Fan 4 under Battle Through The Heavens Season 5's, so placing by idMal put
+    2025's answer on a series that finished in 2022. A source's own id still
+    wins over both: that one is not a cross-reference but this title's address.
     """
     current = data_dir / "processed" / "current" / f"{name}.parquet"
     if not current.exists():
@@ -168,20 +177,21 @@ def _current_placed(
 
     rows = f"read_parquet('{current}')"
     if has_registry:
-        placed, joins = ["a.wb_id", "m.wb_id"], [
+        placed, joins = ["a.wb_id"], [
             "LEFT JOIN anime_identity a ON a.source_key = 'anilist:' || CAST(l.anilist_id AS VARCHAR)",
-            "LEFT JOIN anime_identity m ON m.source_key = 'mal:' || CAST(l.mal_id AS VARCHAR)",
         ]
-        if mapped:
-            placed.append("k.wb_id")
-            joins.append("LEFT JOIN anime_mapped_mal_id k ON k.mal_id = CAST(l.mal_id AS BIGINT)")
         if resolved:
-            # Last: the id is this title's by search, not by anything a source
-            # said, so it only answers where nothing else could.
             placed.append("r.wb_id")
             joins.append(
                 "LEFT JOIN anime_anilist_resolved r ON r.anilist_id = CAST(l.anilist_id AS BIGINT)"
             )
+        placed.append("m.wb_id")
+        joins.append(
+            "LEFT JOIN anime_identity m ON m.source_key = 'mal:' || CAST(l.mal_id AS VARCHAR)"
+        )
+        if mapped:
+            placed.append("k.wb_id")
+            joins.append("LEFT JOIN anime_mapped_mal_id k ON k.mal_id = CAST(l.mal_id AS BIGINT)")
         sql = f"SELECT l.*, COALESCE({', '.join(placed)}) AS wb_id FROM {rows} l {' '.join(joins)}"
     else:
         sql = f"SELECT *, CAST(NULL AS VARCHAR) AS wb_id FROM {rows}"
