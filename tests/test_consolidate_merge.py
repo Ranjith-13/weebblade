@@ -538,17 +538,30 @@ def _reread(path):
     )
 
 
+def _write_bridge(spark, data_dir, rows):
+    """What processing/bridge.py decided: (source_key, mal_id)."""
+    from processing.bridge import OUT_NAME
+
+    out = data_dir / "processed" / OUT_NAME
+    out.parent.mkdir(parents=True, exist_ok=True)
+    schema = StructType([StructField("source_key", StringType()), StructField("mal_id", LongType())])
+    spark.createDataFrame(rows, schema).coalesce(1).write.mode("overwrite").parquet(str(out))
+
+
 def _write_source(spark, data_dir, dir_name, partition, run_date, rows):
-    schema = StructType(
-        [
-            StructField("source", StringType()),
-            StructField("source_id", StringType()),
-            StructField("title_romaji", StringType()),
-            StructField("format", StringType()),
-            StructField("season", StringType()),
-            StructField("season_year", LongType()),
-        ]
-    )
+    """A source's rows, each (source, source_id, romaji, format, season, year)
+    and optionally a MAL id."""
+    fields = [
+        StructField("source", StringType()),
+        StructField("source_id", StringType()),
+        StructField("title_romaji", StringType()),
+        StructField("format", StringType()),
+        StructField("season", StringType()),
+        StructField("season_year", LongType()),
+    ]
+    if rows and len(rows[0]) == 7:
+        fields.append(StructField("mal_id", LongType()))
+    schema = StructType(fields)
     out = data_dir / "processed" / dir_name / partition / f"{run_date}.parquet"
     spark.createDataFrame(rows, schema).write.mode("overwrite").parquet(str(out))
 
@@ -616,6 +629,55 @@ def test_one_fetch_listing_a_title_under_two_seasons_still_gives_one_row(spark, 
         runs.add((len(rows), rows[0]["season"]))
 
     assert runs == {(1, "SUMMER")}
+
+
+def test_a_mal_id_from_anilists_record_merges_a_pair_no_rule_could_see(spark, tmp_path):
+    """The catalogue held eleven shows twice: a Kitsu row with no MAL id whose
+    twin was already there under another name. Zhu Xian Final is Jade Dynasty
+    Final Season, and nothing in matching.py can tell - one is a romanised
+    Chinese title, the other its English name. Given the id AniList holds for
+    it, the first rule matches them like any other pair."""
+    _write_source(
+        spark, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-21",
+        [("kitsu", "50936", "Zhu Xian Final", "ONA", "SUMMER", 2026)],
+    )
+    _write_source(
+        spark, tmp_path, "mal_media", "2026-SUMMER", "2026-09-21",
+        [("mal", "62990", "Jade Dynasty Final Season", "ONA", "SUMMER", 2026, 62990)],
+    )
+    _write_bridge(spark, tmp_path, [("kitsu:50936", 62990)])
+
+    rows = _reread(str(consolidate_catalogue(tmp_path, "2026-09-21")))
+
+    assert len(rows) == 1
+    assert sorted(rows[0]["source_keys"]) == ["kitsu:50936", "mal:62990"]
+
+
+def test_without_that_record_the_pair_stays_two_titles(spark, tmp_path):
+    """The control: nothing else about these two rows says they are one work."""
+    _write_source(
+        spark, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-21",
+        [("kitsu", "50936", "Zhu Xian Final", "ONA", "SUMMER", 2026)],
+    )
+    _write_source(
+        spark, tmp_path, "mal_media", "2026-SUMMER", "2026-09-21",
+        [("mal", "62990", "Jade Dynasty Final Season", "ONA", "SUMMER", 2026, 62990)],
+    )
+
+    assert len(_reread(str(consolidate_catalogue(tmp_path, "2026-09-21")))) == 2
+
+
+def test_a_row_that_already_has_a_mal_id_keeps_its_own(spark, tmp_path):
+    """The record fills a gap; it never overrules a source."""
+    _write_source(
+        spark, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-21",
+        [("kitsu", "50936", "Zhu Xian Final", "ONA", "SUMMER", 2026, 11111)],
+    )
+    _write_bridge(spark, tmp_path, [("kitsu:50936", 62990)])
+
+    rows = _reread(str(consolidate_catalogue(tmp_path, "2026-09-21")))
+
+    assert [r["mal_id"] for r in rows] == [11111]
 
 
 def test_the_catalogue_keeps_titles_that_are_genuinely_distinct(spark, tmp_path):

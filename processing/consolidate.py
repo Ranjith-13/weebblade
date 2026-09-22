@@ -8,6 +8,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType
 
 from . import identity, matching
+from .bridge import OUT_NAME as bridge_file
 from .normalize import standardize_schema
 from .spark import get_spark_session
 
@@ -233,6 +234,8 @@ def consolidate_catalogue(data_dir: Path, run_date: str) -> Path | None:
         .drop("_rn", "_snapshot", "_partition")
     )
 
+    consolidated = _adopt_bridged_mal_ids(consolidated, data_dir)
+
     before = consolidated.count()
     consolidated = _merge_sources(consolidated).withColumn("run_date", F.lit(run_date))
     logger.info("Merged %s source rows into %s titles", before, consolidated.count())
@@ -245,6 +248,41 @@ def consolidate_catalogue(data_dir: Path, run_date: str) -> Path | None:
 
     spark.stop()
     return out_dir
+
+
+def _adopt_bridged_mal_ids(df: DataFrame, data_dir: Path) -> DataFrame:
+    """Give a row the MAL id AniList holds for it, where it has none.
+
+    The catalogue held eleven shows twice, each a Kitsu row with no MAL id whose
+    twin was already there under another name - Zhu Xian Final beside Jade
+    Dynasty Final Season. No rule here could see it: one name is a romanised
+    Chinese title and the other its English name, or one says "2" and the other
+    "2nd Season". With the id, the first rule matches them like any other pair,
+    so this changes nothing about how merging works - only what it can see.
+
+    Which ids those are is decided in processing/bridge.py, which will not adopt
+    one unless MAL's own row for it premiered on the same day. Here only in
+    consolidate_catalogue, not in consolidate_partition: the twin is usually in
+    another season's partition, which is the whole reason the catalogue is
+    consolidated as a whole.
+    """
+    bridge = data_dir / "processed" / bridge_file
+    if not bridge.exists():
+        return df
+
+    ids = (
+        df.sparkSession.read.parquet(str(bridge))
+        .withColumnRenamed("mal_id", "_bridged_mal_id")
+        .withColumnRenamed("source_key", "_bridged_key")
+    )
+    joined = df.join(
+        ids, F.concat_ws(":", F.col("source"), F.col("source_id")) == F.col("_bridged_key"), "left"
+    )
+    adopted = joined.filter(F.col("_bridged_mal_id").isNotNull() & F.col("mal_id").isNull()).count()
+    logger.info("Adopted a MAL id for %s row(s) from AniList's record of them", adopted)
+    return joined.withColumn(
+        "mal_id", F.coalesce(F.col("mal_id"), F.col("_bridged_mal_id").cast("long"))
+    ).drop("_bridged_key", "_bridged_mal_id")
 
 
 def _stamp_identities(spark, df: DataFrame, data_dir: Path, run_date: str) -> DataFrame:

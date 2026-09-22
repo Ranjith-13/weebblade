@@ -129,6 +129,32 @@ def anime_seasonal_pipeline():
             validate_rows(rows, "kitsu")
             write_parquet(rows, DATA_DIR / "processed" / "kitsu_media" / partition, run_date)
 
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def fetch_bridge_ids(data_interval_end=None):
+        """The MAL id AniList holds for a title only Kitsu lists. See
+        ingestion/anilist/bridge_ids.py.
+
+        After the fetches rather than beside them: this and fetch_anilist share
+        AniList's 30 requests a minute. It writes its own record and nothing
+        else, and is budgeted, so a week that finds a hundred new such titles
+        searches sixty of them and leaves the rest for the next run."""
+        from ingestion.anilist.bridge_ids import land_bridge
+
+        _, _, run_date, _ = capture_for(data_interval_end)
+        logger.info("MAL ids by AniList: %s found", land_bridge(DATA_DIR, run_date))
+
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def build_bridge():
+        """Which of those ids may actually be used, by the one rule that the
+        measurement supports: the two rows premiered on the same day. See
+        processing/bridge.py.
+
+        After the fetches, because it compares this week's snapshots, and before
+        consolidate, which reads what it writes."""
+        from processing.bridge import build_bridge as _build
+
+        logger.info("MAL ids adopted: %s", _build(DATA_DIR))
+
     # trigger_rule=ALL_DONE: run even if some (or all but one) of the fetch tasks
     # above failed - consolidate whatever snapshots actually landed rather than
     # blocking the whole pipeline on every source being healthy at once.
@@ -245,7 +271,8 @@ def anime_seasonal_pipeline():
     fetches = [fetch_anilist(), fetch_jikan(), fetch_mal(), fetch_kitsu()]
     # In a line, not in parallel: each of these opens the warehouse file, and
     # DuckDB allows one writer. The digest and the index read it after.
-    catalog = (fetches >> consolidate() >> record_changes() >> refresh_catalog()
+    catalog = (fetches >> fetch_bridge_ids() >> build_bridge() >> consolidate()
+               >> record_changes() >> refresh_catalog()
                >> fetch_mal_relations() >> build_franchises())
     catalog >> [generate_digest(), build_search_index()] >> check_run()
 
