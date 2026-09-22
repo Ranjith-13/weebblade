@@ -251,20 +251,28 @@ def consolidate_catalogue(data_dir: Path, run_date: str) -> Path | None:
 
 
 def _adopt_bridged_mal_ids(df: DataFrame, data_dir: Path) -> DataFrame:
-    """Give a row the MAL id AniList holds for it, where it has none.
+    """Give a row the MAL id it should carry, where its sources are silent or
+    wrong.
 
-    The catalogue held eleven shows twice, each a Kitsu row with no MAL id whose
-    twin was already there under another name - Zhu Xian Final beside Jade
-    Dynasty Final Season. No rule here could see it: one name is a romanised
-    Chinese title and the other its English name, or one says "2" and the other
-    "2nd Season". With the id, the first rule matches them like any other pair,
-    so this changes nothing about how merging works - only what it can see.
+    Silent: the catalogue held eleven shows twice, each a Kitsu row with no MAL
+    id whose twin was already there under another name - Zhu Xian Final beside
+    Jade Dynasty Final Season. No rule here could see it: one name is a
+    romanised Chinese title and the other its English name, or one says "2" and
+    the other "2nd Season".
 
-    Which ids those are is decided in processing/bridge.py, which will not adopt
-    one unless MAL's own row for it premiered on the same day. Here only in
-    consolidate_catalogue, not in consolidate_partition: the twin is usually in
-    another season's partition, which is the whole reason the catalogue is
-    consolidated as a whole.
+    Wrong: Kitsu maps its row for Yao Shen Ji 6 to the MAL id of Yao Shen Ji
+    7th Season, and the first rule then merged two different seasons into one
+    title, confidently, because a wrong MAL id looks exactly like a right one.
+
+    Either way the merge itself is unchanged - a row carries the id it should,
+    and the rules do the rest. Which id that is, and on what evidence, is
+    processing/bridge.py's decision. A fill never overrules a source; only a
+    correction does, and only where a second source contradicted the first and
+    MAL's own row for the proposed id premiered on this row's day.
+
+    Here only in consolidate_catalogue, not in consolidate_partition: the twin
+    is usually in another season's partition, which is the whole reason the
+    catalogue is consolidated as a whole.
     """
     bridge = data_dir / "processed" / bridge_file
     if not bridge.exists():
@@ -274,15 +282,25 @@ def _adopt_bridged_mal_ids(df: DataFrame, data_dir: Path) -> DataFrame:
         df.sparkSession.read.parquet(str(bridge))
         .withColumnRenamed("mal_id", "_bridged_mal_id")
         .withColumnRenamed("source_key", "_bridged_key")
+        .withColumnRenamed("action", "_bridged_action")
     )
     joined = df.join(
         ids, F.concat_ws(":", F.col("source"), F.col("source_id")) == F.col("_bridged_key"), "left"
     )
-    adopted = joined.filter(F.col("_bridged_mal_id").isNotNull() & F.col("mal_id").isNull()).count()
-    logger.info("Adopted a MAL id for %s row(s) from AniList's record of them", adopted)
+    counts = {
+        row["_bridged_action"]: row["n"]
+        for row in joined.filter(F.col("_bridged_key").isNotNull())
+        .groupBy("_bridged_action").count().withColumnRenamed("count", "n").collect()
+    }
+    logger.info(
+        "MAL ids: %s row(s) given one that had none, %s corrected",
+        counts.get("fill", 0), counts.get("replace", 0),
+    )
     return joined.withColumn(
-        "mal_id", F.coalesce(F.col("mal_id"), F.col("_bridged_mal_id").cast("long"))
-    ).drop("_bridged_key", "_bridged_mal_id")
+        "mal_id",
+        F.when(F.col("_bridged_action") == "replace", F.col("_bridged_mal_id").cast("long"))
+        .otherwise(F.coalesce(F.col("mal_id"), F.col("_bridged_mal_id").cast("long"))),
+    ).drop("_bridged_key", "_bridged_mal_id", "_bridged_action")
 
 
 def _stamp_identities(spark, df: DataFrame, data_dir: Path, run_date: str) -> DataFrame:

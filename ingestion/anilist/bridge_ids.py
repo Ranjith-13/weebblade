@@ -1,4 +1,4 @@
-"""The MAL id AniList holds for a title only Kitsu lists.
+"""The MAL id AniList holds for a row whose own sources are silent or wrong.
 
 A title the catalogue holds twice can only survive where its Kitsu row carries
 no MAL id: with one, matching.py's first rule would already have joined it to
@@ -13,6 +13,11 @@ name, or one says "2" where the other says "2nd Season", or a `special` faces a
 `music` PV.
 
 AniList bridges them: it holds both names, and its entry carries the MAL id.
+
+It also asks about rows whose MAL id looks wrong - one whose own MAL row
+premiered months away under another name, which is how Kitsu's mapping of Yao
+Shen Ji 6 to season 7's id was caught. Those rows are chosen by
+processing/bridge.doubtful_mappings.
 
 This records what AniList says and nothing more. Whether a recorded id is acted
 on is processing/bridge.py's decision, kept apart deliberately - six of the
@@ -94,20 +99,28 @@ def _searched_recently(data_dir: Path, run_date: str) -> set[str]:
 
 
 def unsearched(data_dir: Path, run_date: str) -> list[dict[str, Any]]:
-    """Titles with no MAL id that have not been searched for recently."""
+    """Rows worth asking AniList about, that have not been asked about recently:
+    those with no MAL id, and those whose MAL id looks wrong."""
+    from processing.bridge import doubtful_mappings
+
+    rows: dict[str, dict[str, Any]] = {}
     db_path = data_dir / "warehouse.duckdb"
-    if not db_path.exists():
-        return []
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
-        rows = con.execute(_CANDIDATES).fetch_arrow_table().to_pylist()
-    except duckdb.CatalogException:  # no catalogue yet
-        return []
-    finally:
-        con.close()
+    if db_path.exists():
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            rows = {r["source_key"]: r for r in con.execute(_CANDIDATES).fetch_arrow_table().to_pylist()}
+        except duckdb.CatalogException:  # no catalogue yet
+            pass
+        finally:
+            con.close()
+
+    # A doubtful mapping is a question about one source row, so it is keyed by
+    # that row rather than by whichever row won a merge.
+    for row in doubtful_mappings(data_dir):
+        rows.setdefault(row["source_key"], row)
 
     skip = _searched_recently(data_dir, run_date)
-    return [row for row in rows if row["source_key"] not in skip]
+    return [rows[key] for key in sorted(rows) if key not in skip]
 
 
 def land_bridge(

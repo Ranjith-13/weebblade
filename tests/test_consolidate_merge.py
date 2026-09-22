@@ -539,12 +539,15 @@ def _reread(path):
 
 
 def _write_bridge(spark, data_dir, rows):
-    """What processing/bridge.py decided: (source_key, mal_id)."""
+    """What processing/bridge.py decided: (source_key, mal_id) to fill, or
+    (source_key, mal_id, "replace") to correct."""
     from processing.bridge import OUT_NAME
 
     out = data_dir / "processed" / OUT_NAME
     out.parent.mkdir(parents=True, exist_ok=True)
-    schema = StructType([StructField("source_key", StringType()), StructField("mal_id", LongType())])
+    schema = StructType([StructField("source_key", StringType()), StructField("mal_id", LongType()),
+                         StructField("action", StringType())])
+    rows = [row if len(row) == 3 else (*row, "fill") for row in rows]
     spark.createDataFrame(rows, schema).coalesce(1).write.mode("overwrite").parquet(str(out))
 
 
@@ -668,7 +671,7 @@ def test_without_that_record_the_pair_stays_two_titles(spark, tmp_path):
 
 
 def test_a_row_that_already_has_a_mal_id_keeps_its_own(spark, tmp_path):
-    """The record fills a gap; it never overrules a source."""
+    """A fill fills a gap; it never overrules a source."""
     _write_source(
         spark, tmp_path, "kitsu_media", "2026-SUMMER", "2026-09-21",
         [("kitsu", "50936", "Zhu Xian Final", "ONA", "SUMMER", 2026, 11111)],
@@ -678,6 +681,29 @@ def test_a_row_that_already_has_a_mal_id_keeps_its_own(spark, tmp_path):
     rows = _reread(str(consolidate_catalogue(tmp_path, "2026-09-21")))
 
     assert [r["mal_id"] for r in rows] == [11111]
+
+
+def test_a_corrected_mapping_moves_a_row_to_the_season_it_belongs_to(spark, tmp_path):
+    """Kitsu maps Yao Shen Ji 6 to season 7's MAL id, so the two merged into one
+    title. Corrected, season 6 joins season 6 and season 7 is left to itself."""
+    _write_source(
+        spark, tmp_path, "kitsu_media", "2022-SPRING", "2026-09-21",
+        [("kitsu", "47013", "Yao Shen Ji 6", "ONA", "SPRING", 2022, 54285)],
+    )
+    _write_source(
+        spark, tmp_path, "mal_media", "2023-WINTER", "2026-09-21",
+        [("mal", "54285", "Yao Shen Ji 7th Season", "ONA", "WINTER", 2023, 54285)],
+    )
+    _write_source(
+        spark, tmp_path, "mal_media", "2022-SPRING", "2026-09-21",
+        [("mal", "59891", "Yao Shen Ji 6th Season", "ONA", "SPRING", 2022, 59891)],
+    )
+    _write_bridge(spark, tmp_path, [("kitsu:47013", 59891, "replace")])
+
+    rows = {tuple(sorted(r["source_keys"])): r for r in
+            _reread(str(consolidate_catalogue(tmp_path, "2026-09-21")))}
+
+    assert sorted(rows) == [("kitsu:47013", "mal:59891"), ("mal:54285",)]
 
 
 def test_the_catalogue_keeps_titles_that_are_genuinely_distinct(spark, tmp_path):
