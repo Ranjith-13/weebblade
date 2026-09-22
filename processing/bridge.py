@@ -8,18 +8,27 @@ Throne of Seal 3 carries the MAL id of Throne of Seal 2nd Season, which finished
 two and a half years earlier, so adopting it would have merged a 2025 series
 into a 2022 one and deleted a title.
 
-The rule, and the only one: the two rows must have premiered on the same day,
-both dates complete. It is matching.py's fourth rule read across sources - an
-identical premiere date is strong evidence of one work - and it is exactly what
-separated the eleven real pairs from the six refusals when measured. A window of
-a day or two would have caught three more likely pairs (Santa Tell Me, the
-Jujutsu Kaisen Modulo PVs, Changsheng Jie), and matching.py already explains why
-it stays shut: a window wide enough to bridge them is wide enough to join a
+The rule: the row and everything already carrying that MAL id must have
+premiered on the same day, every date complete. It is matching.py's fourth rule
+read across sources - an identical premiere date is strong evidence of one work
+- and it separated the eleven real pairs from the six refusals when measured. A
+window of a day or two would have caught three more likely pairs (Santa Tell Me,
+the Jujutsu Kaisen Modulo PVs, Changsheng Jie), and matching.py already explains
+why it stays shut: a window wide enough to bridge them is wide enough to join a
 series to its compilation film.
 
-Nothing is adopted where MAL has no row for the id either. Then there is no
-merge to verify, and an unverifiable id on a row is one that may merge something
-later for no reason anyone can check.
+"Everything already carrying it", not just MAL's own row, because an id can
+already be on rows that disagree - and then it names a group that is wrong
+before this ever touches it. Kitsu maps Yao Shen Ji 6 (23 April 2022) to the MAL
+id of Yao Shen Ji 7 (14 January 2023), so those two are one catalogue title
+today, wrongly. The Kitsu row for season 7 premieres on MAL's exact day and
+would be let in by a rule that only looked at MAL - joining a correct title to
+an incorrect group. Refused instead, which leaves the existing bad merge
+visible as its own problem rather than growing it.
+
+Nothing is adopted where no row carries the id either. Then there is no merge to
+verify, and an unverifiable id on a row is one that may merge something later
+for no reason anyone can check.
 
 Plain Python and DuckDB over a few hundred rows, like identity.py: the logic is
 branchy, and this way it is testable on any machine rather than only on one with
@@ -49,11 +58,26 @@ _LEDGER = """
 # Every source's current row per id: the newest snapshot it appears in, which is
 # the same rule consolidate._current_state applies before merging.
 _CURRENT = """
-    SELECT source, source_id, start_year, start_month, start_day FROM (
-        SELECT source, source_id, start_year, start_month, start_day,
+    SELECT source, source_id, mal_id, start_year, start_month, start_day FROM (
+        SELECT source, source_id, mal_id, start_year, start_month, start_day,
                regexp_extract(filename, '([0-9-]+)\\.parquet$', 1) AS _snapshot
         FROM read_parquet('{glob}', filename=true, union_by_name=true)
     ) QUALIFY ROW_NUMBER() OVER (PARTITION BY source, source_id ORDER BY _snapshot DESC) = 1
+"""
+
+# What every row that already carries a MAL id says about when it began. One
+# date, or the id names rows that disagree. Rows with a partial date say nothing
+# either way and are left out; CAST because make_date takes INTEGER and these
+# columns are BIGINT from Parquet.
+_CARRIERS = """
+    SELECT mal_id, MIN(_premiered) AS first_day, MAX(_premiered) AS last_day
+    FROM (
+        SELECT mal_id, make_date(CAST(start_year AS INTEGER), CAST(start_month AS INTEGER),
+                                 CAST(start_day AS INTEGER)) AS _premiered
+        FROM current
+        WHERE mal_id IS NOT NULL AND start_year IS NOT NULL
+          AND start_month IS NOT NULL AND start_day IS NOT NULL
+    ) GROUP BY mal_id
 """
 
 
@@ -76,13 +100,14 @@ def build_bridge(data_dir: Path) -> Path | None:
         ledger = _LEDGER.format(files=[str(p) for p in files])
         current = _CURRENT.format(glob=data_dir / "processed" / "*_media" / "*" / "*.parquet")
         rows = con.execute(
-            f"WITH ledger AS ({ledger}), current AS ({current}) "
+            f"WITH ledger AS ({ledger}), current AS ({current}), carriers AS ({_CARRIERS}) "
             "SELECT l.source_key, l.mal_id FROM ledger l "
             "JOIN current k ON k.source || ':' || k.source_id = l.source_key "
-            "JOIN current m ON m.source = 'mal' AND m.source_id = CAST(l.mal_id AS VARCHAR) "
+            "JOIN carriers c ON c.mal_id = l.mal_id "
             "WHERE k.start_year IS NOT NULL AND k.start_month IS NOT NULL AND k.start_day IS NOT NULL "
-            "  AND k.start_year = m.start_year AND k.start_month = m.start_month "
-            "  AND k.start_day = m.start_day "
+            "  AND c.first_day = c.last_day "
+            "  AND c.first_day = make_date(CAST(k.start_year AS INTEGER), "
+            "        CAST(k.start_month AS INTEGER), CAST(k.start_day AS INTEGER)) "
             "ORDER BY l.source_key"
         ).fetch_arrow_table()
     except duckdb.IOException:  # no source snapshots at all

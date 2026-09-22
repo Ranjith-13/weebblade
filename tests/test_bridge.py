@@ -8,19 +8,22 @@ from processing.bridge import OUT_NAME, build_bridge
 
 
 def _snapshot(data_dir, source, partition, run_date, rows):
-    """A source's own rows: (source_id, start_year, start_month, start_day)."""
+    """A source's own rows: (source_id, start_year, start_month, start_day) and
+    optionally the MAL id the row carries - its own for a MAL row, whatever
+    Kitsu maps it to for a Kitsu one."""
     out = data_dir / "processed" / f"{source}_media" / partition / f"{run_date}.parquet"
     out.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(
         pa.Table.from_pylist(
             [
-                {"source": source, "source_id": str(sid), "start_year": y,
-                 "start_month": m, "start_day": d}
-                for sid, y, m, d in rows
+                {"source": source, "source_id": str(row[0]), "start_year": row[1],
+                 "start_month": row[2], "start_day": row[3],
+                 "mal_id": row[4] if len(row) > 4 else (int(row[0]) if source == "mal" else None)}
+                for row in rows
             ],
             schema=pa.schema([("source", pa.string()), ("source_id", pa.string()),
                               ("start_year", pa.int64()), ("start_month", pa.int64()),
-                              ("start_day", pa.int64())]),
+                              ("start_day", pa.int64()), ("mal_id", pa.int64())]),
         ),
         out,
     )
@@ -103,6 +106,22 @@ def test_an_id_no_mal_row_carries_is_not_adopted(tmp_path):
     _snapshot(tmp_path, "kitsu", "2026-SUMMER", "2026-09-21", [("1", 2026, 8, 21)])
     _snapshot(tmp_path, "mal", "2026-SUMMER", "2026-09-21", [("999", 2026, 8, 21)])
     _ledger(tmp_path, "2026-09-22", [("kitsu:1", 900, 62990)])
+
+    build_bridge(tmp_path)
+
+    assert _adopted(tmp_path) == {}
+
+
+def test_an_id_already_on_rows_that_disagree_is_refused(tmp_path):
+    """Kitsu maps Yao Shen Ji 6 (23 April 2022) to the MAL id of Yao Shen Ji 7
+    (14 January 2023), so that id already names one catalogue title made of two
+    different seasons. Kitsu's own row for season 7 premieres on MAL's exact
+    day, and a rule that looked only at MAL's row would let it in - adding a
+    correct title to a group that is already wrong."""
+    _snapshot(tmp_path, "kitsu", "2023-WINTER", "2026-09-21", [("49158", 2023, 1, 14)])
+    _snapshot(tmp_path, "kitsu", "2022-SPRING", "2026-09-21", [("47013", 2022, 4, 23, 54285)])
+    _snapshot(tmp_path, "mal", "2023-WINTER", "2026-09-21", [("54285", 2023, 1, 14)])
+    _ledger(tmp_path, "2026-09-22", [("kitsu:49158", 900, 54285)])
 
     build_bridge(tmp_path)
 
