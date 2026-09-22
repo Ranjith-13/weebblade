@@ -120,6 +120,23 @@ def test_the_budget_leaves_the_rest_for_the_next_run(tmp_path):
     assert [row["wb_id"] for row in ri.unresolved(data_dir, "2026-09-21")] == ["wb_2", "wb_3", "wb_4"]
 
 
+def test_a_second_run_on_one_day_adds_to_it_rather_than_replacing_it(tmp_path):
+    """A day can search twice - a retry, a manual run, an Airflow rerun. The
+    second overwriting the first made those titles look unsearched, and
+    2026-09-22 spent 60 requests repeating the day before's work."""
+    data_dir = _warehouse(
+        tmp_path,
+        [(f"wb_{i}", None, f"Title {i}", "ONA", 2022, "current", None) for i in range(4)],
+    )
+    client = _AniList({f"Title {i}": [_media(700 + i, f"Title {i}")] for i in range(4)})
+
+    ri.land_resolved(data_dir, "2026-09-21", budget=2, client=client)
+    ri.land_resolved(data_dir, "2026-09-21", budget=2, client=client)
+
+    assert ri.resolved_ids(data_dir) == {"wb_0": 700, "wb_1": 701, "wb_2": 702, "wb_3": 703}
+    assert ri.unresolved(data_dir, "2026-09-21") == []
+
+
 def test_a_later_search_replaces_an_earlier_answer(tmp_path):
     """A miss is retried monthly because AniList gains entries."""
     data_dir = _warehouse(tmp_path, [("wb_a", None, "Late Arrival", "ONA", 2022, "current", None)])

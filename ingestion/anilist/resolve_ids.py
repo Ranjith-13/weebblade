@@ -223,8 +223,17 @@ def land_resolved(
     out_dir = data_dir / "processed" / "anilist_resolved"
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{run_date}.parquet"
+
+    # Added to the day's file, not written over it. A day can search twice - a
+    # retry, a manual run, an Airflow rerun - and the second overwriting the
+    # first threw away what the first had learned, so those titles looked
+    # unsearched again and were searched again: 60 requests spent on 2026-09-22
+    # repeating 2026-09-21's work. Newest answer per title wins.
+    kept = {row["wb_id"]: row for row in (pq.read_table(path).to_pylist() if path.exists() else [])}
+    kept.update({row["wb_id"]: row for row in rows})
+
     tmp = path.with_name(path.name + ".tmp")
-    pq.write_table(pa.Table.from_pylist(rows, schema=SCHEMA), tmp)
+    pq.write_table(pa.Table.from_pylist([kept[k] for k in sorted(kept)], schema=SCHEMA), tmp)
     tmp.replace(path)
 
     found = sum(1 for row in rows if row["anilist_id"] is not None)
