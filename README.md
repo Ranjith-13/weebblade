@@ -235,6 +235,17 @@ Tests:
 python -m pytest tests/ -v
 ```
 
+Two of them ask for a real SparkSession and skip without PySpark, which needs a JVM. CI has one;
+a laptop usually does not, and the server does inside the Airflow image. Any change to the merge
+has to clear them there before it is pushed:
+
+```bash
+./scripts/weebblade-spark-tests.sh
+```
+
+It copies this working tree to the server and runs the suite in a throwaway container, leaving
+the running one alone.
+
 The frontend is separate — see [frontend/README.md](frontend/README.md).
 
 ## Operations
