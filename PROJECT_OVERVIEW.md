@@ -50,7 +50,7 @@ Not every title has every field. An absent score means the merged record has no 
 ```text
 External anime APIs
         ↓
-Airflow schedules independent collection tasks
+A scheduler — GitHub Actions now, Airflow before it — runs independent collection tasks
         ↓
 Raw JSON saved → transformed rows validated → Parquet snapshots
         ↓
@@ -74,17 +74,17 @@ The merge chooses populated fields using a defined source priority. It does not 
 | API clients and source transforms | Working with different API protocols, schemas, and vocabularies. |
 | Ingest validation and normalization | Detecting malformed data and reconciling score scales, durations, and field types. |
 | Catalogue-wide field merging | Entity matching, deduplication, source precedence, and handling missing values. |
-| Airflow workflow and Parquet history | Scheduled processing, task dependencies, and repeatable data processing. |
+| Scheduled workflow and Parquet history | Scheduled processing, task dependencies, and repeatable data processing. The same steps run from Airflow DAGs or from a command, which is what let the pipeline move hosts without rewriting it. |
 | DuckDB warehouse and FastAPI | Turning processed data into a queryable application service. |
 | Embedding search and digest generation | Applying existing AI models to a concrete dataset; no claim of training a model. |
 | Next.js frontend and design system | Translating the data model into browsing, detail, search, and schedule surfaces. |
 | Tests, CI, containers, access controls, and backups | Operating the application beyond a local prototype. |
 
-The stack includes Python, Airflow, PySpark, Parquet, DuckDB, FastAPI, sentence-transformers, Chroma, Groq, Next.js, Tailwind, GSAP, Docker Compose, Caddy, AWS EC2, Terraform configuration, and GitHub Actions.
+The stack includes Python, Airflow, PySpark, Parquet, DuckDB (including its vector search), FastAPI, sentence-transformers, Groq, Next.js, Tailwind, GSAP, Docker Compose, Caddy, AWS EC2, Terraform configuration, and GitHub Actions — which now runs the pipeline as well as the tests.
 
 ## What is complete, and what is not
 
-At the documented September 2026 milestone, the backend pipeline and API run on AWS, with roughly 480 catalogue entries across two collected seasons. The frontend is implemented and checked in CI, but public frontend hosting is still pending. Counts change as ingestion and matching improve.
+At the documented October 2026 milestone, the pipeline runs on GitHub Actions at no cost, with 6,356 catalogue entries across 22 seasons; its state travels between runs as a release asset. The API and frontend ran on an AWS EC2 box that is now stopped, so nothing is publicly served while the hosting question is settled. Counts change as ingestion and matching improve.
 
 The main limitations are:
 
@@ -93,7 +93,7 @@ The main limitations are:
 - Matching rules can leave duplicates or incorrectly combine similar records; field-level contribution and freshness need clearer tracking.
 - Search-index replacement and data publication need stronger protection against partial failures.
 - The application has no personal watchlists, user-submitted ratings, or personalized recommendations.
-- Backups include a second-machine copy; independent cloud backup storage remains an improvement.
+- Backups are a twice-weekly pull of the published state to a second machine; a third copy, independent of GitHub, remains an improvement.
 
 This is a functioning portfolio application with real operational work behind it. It is not yet a proven large-scale consumer service.
 

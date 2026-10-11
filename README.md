@@ -29,7 +29,7 @@ Two AI features sit on top:
 ```
 AniList ──┐
 Jikan  ───┤
-MAL    ───┼──► Airflow ingestion tasks ──► raw JSON + per-source Parquet snapshots
+MAL    ───┼──► ingestion tasks ──► raw JSON + per-source Parquet snapshots
 Kitsu  ───┘         │
                     ▼
             PySpark consolidation — field-level merge across sources, snapshots
@@ -43,18 +43,25 @@ Kitsu  ───┘         │
                     │         ├── changes ◄── each source's fetch against its last one
                     │         └── airing schedule ◄── AniList, daily: six weeks of episodes
                     │
-        ┌───────────┼───────────┐
-        ▼           ▼           ▼
-  LLM digest   Chroma index   FastAPI (/anime, /schedule, /digest, /search)
-     (Groq)   (all-MiniLM-L6-v2)      │
-                                      ▼
-                          Caddy (TLS, security headers, access logs)
-                                      │
-                                      ▼
-                          Next.js frontend (Vercel)
+        ┌───────────┼───────────────────┐
+        ▼           ▼                   ▼
+  LLM digest   vector index        FastAPI (/anime, /schedule, /digest, /search)
+     (Groq)    (all-MiniLM-L6-v2 vectors, a table in the warehouse)
 ```
 
-Each ingestion source runs as an independent Airflow task — one API being down doesn't
+The pipeline runs on **GitHub Actions** — daily at 06:00 UTC, weekly on Sunday — calling the
+same functions the Airflow DAGs call (`python -m pipeline.run daily|weekly`). A runner starts
+empty, so each run pulls the state it needs from a GitHub release asset, works, and publishes it
+back; a weekly run also publishes a materialised warehouse, one self-contained file holding the
+catalogue and the vectors.
+
+The API and the Next.js frontend ran on a single AWS EC2 box behind Caddy. That box is stopped:
+it cost about $63/month to serve a portfolio site, and the pipeline was moved off it rather than
+paid for. Nothing serves the API today, which is the honest state of the project — the data half
+runs for free and unattended, the serving half is waiting on a decision about what the app
+becomes.
+
+Each ingestion source runs as an independent task — one API being down doesn't
 block the others from landing data, and the downstream merge/digest/search tasks run over
 whatever actually arrived rather than requiring every source to succeed. That isn't
 theoretical: Jikan has been down upstream for this project's whole life, and AniList was
@@ -192,32 +199,39 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 | Layer | Choice |
 |---|---|
 | Infra | GitHub Actions runs the pipeline; state in release assets. An AWS EC2 box served the API and is stopped pending the rebuild (its Terraform state was lost, so it is unmanaged) |
-| Orchestration | Apache Airflow 2.10.4 (self-hosted, Docker Compose, LocalExecutor) |
+| Orchestration | GitHub Actions on a schedule, calling `pipeline/run.py`. The Airflow 2.10.4 DAGs are the same steps in the same order and ran it on the server until October 2026 |
 | Ingestion | Python — AniList (GraphQL), Jikan / MAL / Kitsu (REST) |
 | Processing | PySpark (single-node) |
 | Storage | DuckDB views over Parquet |
 | Backend | FastAPI + slowapi rate limiting |
-| AI | Groq (digest) + sentence-transformers/Chroma (semantic search) |
-| Frontend | Next.js 16 App Router, Tailwind v4, GSAP — deployed on Vercel |
-| Reverse proxy / HTTPS | Caddy (Let's Encrypt, security headers, access logs) |
+| AI | Groq (digest) + sentence-transformers `all-MiniLM-L6-v2`; the vectors are a DuckDB table searched with `array_cosine_similarity` |
+| Frontend | Next.js 16 App Router, Tailwind v4, GSAP — runs locally, not deployed |
+| Reverse proxy / HTTPS | Caddy (Let's Encrypt, security headers, access logs) — on the stopped box |
 | CI/CD | GitHub Actions — pytest (including the Spark merge suite) and a frontend typecheck/lint on every push. The deploy and the network-dependent frontend checks are gated behind `SERVER_IS_LIVE` while the instance is stopped |
 
 ## Repository layout
 
 ```
 ingestion/    anilist/ jikan/ mal/ kitsu/ — each: client, fetch_season, transform;
+              land.py fetches a season for any of them (the DAG and the CLI share it);
               mal/ also fetch_relations (the franchise graph's edges), anilist/ also
-              fetch_airing (episode airdates); backfill, reprocess
+              fetch_airing, resolve_ids and bridge_ids (ids found by title search);
+              backfill, reprocess
 processing/   spark session, schema normalization, matching, consolidation, identity
-              registry, franchise graph, changes between fetches, DuckDB catalog
+              registry, franchise graph, changes between fetches, DuckDB catalog;
+              bridge.py decides which MAL id a row should carry and
+              mal_id_overrides.py holds the ones asserted by hand; publish.py
+              materialises the warehouse into something portable
 ai/           digest/ (Groq prompt + generation), search/ (embed, index, query)
 backend/      FastAPI app — routers, schemas, DuckDB access, rate limiter
 frontend/     Next.js app (see frontend/README.md and frontend/DESIGN.md)
 airflow/      the weekly DAG, the daily airing-schedule DAG, and their image
 infra/        Terraform for the EC2 host and security group
 caddy/        Caddyfile and image
-scripts/      per-session SSH, off-instance backup pull
-pipeline/     run the DAGs' work without Airflow (python -m pipeline.run daily|weekly)
+scripts/      per-session SSH, and the twice-weekly pull of published state to a
+              second machine
+pipeline/     run.py runs the DAGs' work without Airflow; state.py carries the lake
+              between runs as release assets
 tests/        pytest suite
 ```
 
@@ -285,15 +299,31 @@ The frontend is separate — see [frontend/README.md](frontend/README.md).
 
 ## Status
 
-Ingestion → merge → warehouse → both AI features → API → frontend → CI/CD are all live
-and verified end-to-end against real data: twenty seasons (Fall 2021 to Summer 2026) and
-6,136 titles from three live sources, a franchise graph over 895 franchises, and digests
-publishing weekly.
+**The pipeline runs itself, for nothing.** Ingestion → merge → warehouse → digest → search
+index all run on GitHub Actions, verified end to end on real data: 22 seasons and 6,356 titles
+from three live sources, a franchise graph, and a weekly digest. A weekly run takes about 13
+minutes and a daily about one, against 2,000 free minutes a month, and with no payment method on
+the account the workflows stop at the quota rather than billing anything.
 
-Known gaps: Jikan is down upstream (the pipeline degrades rather than fails). The
-frontend runs locally only — it builds, typechecks and lints in CI on every push, but has
-not been imported to Vercel. The only backup off the server's own disk is a pull to a
-second machine.
+**Nothing serves it.** The API and frontend only ever ran on one EC2 box, stopped since 7 October
+2026 because $63/month to host a portfolio site was the wrong trade. The box is parked, not
+deleted: its volume costs about $0.09/day and it can be started for a demo. Choosing where the
+API lives is the next real decision, and the data is already shaped for it — a weekly run
+publishes a materialised warehouse, one 37 MB file a reader can fetch over HTTPS with no lake,
+no object store and no credentials.
+
+**Known gaps, stated plainly:**
+
+- Jikan has been down upstream for this project's whole life; the pipeline degrades rather than
+  fails, and the catalogue is built from Kitsu, MAL and AniList.
+- The frontend has never been deployed. It typechecks and lints in CI on every push; the build
+  and smoke tests are gated behind `SERVER_IS_LIVE`, because they prerender against a live API.
+- Terraform's state file for the EC2 box was lost, so the host is unmanaged. It is not being
+  fixed: the host is being left behind rather than adopted.
+- The catalogue's identity is rule-based and occasionally wrong in both directions — a title can
+  split when a source renames it, or two rows can stay apart when no rule can see they are one
+  show. Each run checks its own output and fails loudly when that happens, which is how the last
+  three were found.
 
 ## License
 
