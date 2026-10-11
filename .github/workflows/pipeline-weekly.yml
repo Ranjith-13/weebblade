@@ -78,6 +78,22 @@ jobs:
           s.prune()
           "
 
+      # The serving artifact: one portable file holding the catalogue and the
+      # vectors. Separate from the state because it is for a reader, not for the
+      # next run - and only the weekly makes one, since only the weekly rebuilds
+      # the catalogue and the index. Not if: always(): there is no point
+      # publishing a warehouse from a run that fell over before building one.
+      - name: Publish the warehouse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c "
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import pipeline.state as s
+          s.publish_warehouse(Path('data'), datetime.now(timezone.utc).strftime('%Y-%m-%d'))
+          "
+
       - name: Write the run to RUNS.md
         if: always()
         run: |

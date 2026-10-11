@@ -32,7 +32,9 @@ every title changes address), and raw/ (the archived API responses, which cost
 
 Not kept: warehouse.duckdb and the digests, which any run rebuilds from the
 above in seconds - and which could not travel anyway, since the warehouse's
-views carry the absolute path of the machine that built them.
+views carry the absolute path of the machine that built them. A MATERIALISED
+copy of the warehouse is published all the same, as the artifact a reader
+serves; see publish_warehouse.
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ import json
 import logging
 import subprocess
 import tarfile
+import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -50,6 +53,7 @@ logger = logging.getLogger(__name__)
 # the second simply replaces the assets on that day's release.
 TAG_PREFIX = "state-"
 STATE_ASSET = "state.tar.gz"
+WAREHOUSE_ASSET = "warehouse.duckdb"
 
 # What travels between runs.
 KEPT = ("processed", "identity", "raw")
@@ -144,14 +148,34 @@ def publish_state(data_dir: Path, run_date: str) -> str | None:
     return tag
 
 
-# NOT published here: warehouse.duckdb. It is derived - any run rebuilds it from
-# the lake in about a second - but more to the point, publishing the one this
-# pipeline builds would ship a trap. refresh_catalog bakes the ABSOLUTE path of
-# each parquet file into every view at CREATE VIEW time, so a warehouse built at
-# /home/runner/... resolves to nothing anywhere else, and it fails by returning
-# no rows rather than by erroring. The serving artifact Phase 4 needs is a
-# warehouse whose views have been materialised into tables, which is portable
-# and 4-12x faster to query; that belongs with the work that consumes it.
+def publish_warehouse(data_dir: Path, run_date: str) -> str | None:
+    """Publish a portable copy of the warehouse beside the state.
+
+    Not the warehouse the run built: that one's views carry the absolute path of
+    every parquet file, so it resolves to nothing anywhere else - and fails by
+    returning no rows rather than erroring. processing/publish.materialise turns
+    the views into tables, which makes the file depend on nothing outside
+    itself and answers queries 4-12x faster besides.
+
+    This is the serving artifact: one file, catalogue and vectors together, that
+    a reader downloads over plain HTTPS with no lake, no object store and no
+    credentials. Nothing consumes it yet - the API still lives on a stopped
+    server - but it costs a second and 37 MB, and it is the thing any serving
+    arrangement will want, whatever this becomes.
+    """
+    from processing.publish import materialise
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / WAREHOUSE_ASSET
+        if materialise(data_dir / WAREHOUSE_ASSET, out) is None:
+            return None
+
+        tag = f"{TAG_PREFIX}{run_date}"
+        _ensure_release(tag, run_date)
+        _gh("release", "upload", tag, str(out), "--clobber")
+        logger.info("Published %s to %s (%.1f MB)", WAREHOUSE_ASSET, tag,
+                    out.stat().st_size / 1e6)
+    return tag
 
 
 def prune(keep: int = KEEP_RELEASES) -> list[str]:

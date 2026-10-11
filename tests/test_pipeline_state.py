@@ -157,6 +157,28 @@ def test_an_empty_lake_is_never_published_over_good_state(gh, tmp_path):
     assert (there / "identity/registry.parquet").read_bytes() == b"the registry"
 
 
+def test_the_published_warehouse_is_the_portable_one(gh, tmp_path, monkeypatch):
+    """What goes up is a materialised copy, not the run's own warehouse - whose
+    views carry this machine's absolute paths and would answer a reader with no
+    rows at all."""
+    store, _ = gh
+    here = _lake(tmp_path / "here")
+    monkeypatch.setattr(
+        "processing.publish.materialise",
+        lambda src, out: (out.write_bytes(b"portable"), out)[1] if src.exists() else None,
+    )
+
+    assert state.publish_warehouse(here, "2026-10-11") == "state-2026-10-11"
+
+    published = store / "state-2026-10-11" / state.WAREHOUSE_ASSET
+    assert published.read_bytes() == b"portable"
+    assert published.read_bytes() != (here / "warehouse.duckdb").read_bytes()
+
+
+def test_no_warehouse_is_not_an_error(gh, tmp_path):
+    assert state.publish_warehouse(tmp_path / "empty", "2026-10-11") is None
+
+
 def test_the_first_run_ever_starts_from_nothing_rather_than_failing(gh, tmp_path):
     assert state.fetch_state(tmp_path / "empty") is None
 
