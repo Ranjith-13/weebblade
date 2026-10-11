@@ -266,9 +266,11 @@ def _adopt_bridged_mal_ids(df: DataFrame, data_dir: Path) -> DataFrame:
 
     Either way the merge itself is unchanged - a row carries the id it should,
     and the rules do the rest. Which id that is, and on what evidence, is
-    processing/bridge.py's decision. A fill never overrules a source; only a
+    processing/bridge.py's decision. A fill never overrules a source; a
     correction does, and only where a second source contradicted the first and
-    MAL's own row for the proposed id premiered on this row's day.
+    MAL's own row for the proposed id premiered on this row's day. So does an
+    override - a person asserting what no evidence could reach, which is why it
+    is written down in processing/mal_id_overrides with its reason.
 
     Here only in consolidate_catalogue, not in consolidate_partition: the twin
     is usually in another season's partition, which is the whole reason the

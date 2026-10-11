@@ -265,6 +265,75 @@ def test_a_row_already_asked_about_is_not_asked_again(tmp_path):
     assert [r["source_key"] for r in unsearched(tmp_path, "2026-11-30")] == ["kitsu:47013"]
 
 
+# --- asserted by hand ---------------------------------------------------------------
+
+def test_an_override_wins_over_what_the_evidence_decided(tmp_path, monkeypatch):
+    """The point of the file: a person who knows two rows are the same show,
+    saying so, when no rule can get there."""
+    _yao_shen_ji(tmp_path)
+    _ledger(tmp_path, "2026-09-22", [("kitsu:47013", 900, 59891)])
+    monkeypatch.setattr("processing.mal_id_overrides.OVERRIDES",
+                        {"kitsu:47013": (54285, "a person looked")})
+
+    build_bridge(tmp_path)
+
+    assert _decided(tmp_path) == {"kitsu:47013": (54285, "override")}
+
+
+def test_an_override_can_also_say_there_is_no_right_id(tmp_path, monkeypatch):
+    """The opposite assertion: this mapping is wrong and nothing can contradict
+    it, so carry none rather than a wrong one."""
+    _yao_shen_ji(tmp_path)
+    monkeypatch.setattr("processing.mal_id_overrides.OVERRIDES",
+                        {"kitsu:47013": (None, "Kitsu maps this to the wrong season")})
+
+    build_bridge(tmp_path)
+
+    assert _decided(tmp_path) == {"kitsu:47013": (None, "override")}
+
+
+def test_an_override_reaches_a_row_no_rule_could(tmp_path, monkeypatch):
+    """Dandivine: Kitsu says Jyuou and MAL says Juuou, which differ for real, so
+    no title rule matches and the search has nothing strict to match back."""
+    _rows(tmp_path, "kitsu", "2026-FALL",
+          [{"source_id": "50991", "premiere": (2026, 10, 8), "title": "Jyuou Mujin Dandivine"}])
+    _rows(tmp_path, "mal", "2026-FALL",
+          [{"source_id": "64344", "premiere": (2026, 10, 8), "title": "Juuou Mujin Dandivine"}])
+    monkeypatch.setattr("processing.mal_id_overrides.OVERRIDES",
+                        {"kitsu:50991": (64344, "same premiere, same show")})
+
+    build_bridge(tmp_path)
+
+    assert _decided(tmp_path) == {"kitsu:50991": (64344, "override")}
+
+
+def test_an_override_for_a_row_that_is_gone_is_skipped_and_said_out_loud(tmp_path, monkeypatch, caplog):
+    """How a stale entry surfaces: the row it was about no longer exists, so the
+    assertion is now about nothing and the file should lose it."""
+    _yao_shen_ji(tmp_path)
+    _ledger(tmp_path, "2026-09-22", [("kitsu:47013", 900, 59891)])
+    monkeypatch.setattr("processing.mal_id_overrides.OVERRIDES",
+                        {"kitsu:99999": (1, "a row that left years ago")})
+
+    with caplog.at_level("WARNING"):
+        build_bridge(tmp_path)
+
+    assert _decided(tmp_path) == {"kitsu:47013": (59891, "replace")}
+    assert "names a row no source holds any more" in caplog.text
+
+
+def test_the_shipped_overrides_are_shaped_like_source_keys():
+    """They are typed by hand, and a typo would otherwise fail inside a weekly
+    run rather than here."""
+    from processing.mal_id_overrides import OVERRIDES
+
+    for key, (mal_id, reason) in OVERRIDES.items():
+        source, _, source_id = key.partition(":")
+        assert source and source_id, key
+        assert mal_id is None or isinstance(mal_id, int), key
+        assert reason.strip(), key
+
+
 # --- housekeeping -------------------------------------------------------------------
 
 def test_a_search_that_found_nothing_says_nothing(tmp_path):

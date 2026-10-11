@@ -3,6 +3,11 @@
 Two questions, one rule. A row with no MAL id may be given one, and a row whose
 MAL id cannot be right may have it corrected.
 
+A third path exists and is deliberately not a rule: processing/mal_id_overrides
+holds ids asserted by hand, for the pairs no evidence can reach. Those win over
+everything decided here, and each one carries its reason in the diff that added
+it.
+
 ingestion/anilist/bridge_ids.py records the MAL id AniList holds for each title
 the catalogue has no MAL id for. Acting on every one of them would be wrong:
 of the seventeen that named an id another title owns, six had to be refused, and
@@ -88,6 +93,7 @@ import logging
 from pathlib import Path
 
 import duckdb
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
@@ -225,20 +231,28 @@ def doubtful_mappings(data_dir: Path) -> list[dict]:
 def build_bridge(data_dir: Path) -> Path | None:
     """Write which MAL id each row should carry, and return the file.
 
-    None when there is nothing to say - no ledger yet, or nothing in it that
-    survives the rule - and then the file is removed, so a stale mapping cannot
-    go on merging titles after the evidence for it is gone.
+    None when there is nothing to say - and then the file is removed, so a stale
+    mapping cannot go on merging titles after the evidence for it is gone.
+
+    The ledger is optional. An override is a person's assertion about two rows,
+    not a conclusion drawn from what AniList said, so it stands whether or not
+    anything has ever been searched for.
     """
-    files = sorted((data_dir / "processed" / "anilist_bridge").glob("*.parquet"))
     out = data_dir / "processed" / OUT_NAME
-    if not files:
-        logger.info("No AniList bridge ledger yet - no MAL ids to decide")
-        _remove(out)
-        return None
+    parts = _parts(data_dir)
+    ledger_files = sorted((data_dir / "processed" / "anilist_bridge").glob("*.parquet"))
 
     con = duckdb.connect()
     try:
-        rows = con.execute(_DECIDE.format(**_parts(data_dir))).fetch_arrow_table()
+        here = {
+            row[0] for row in con.execute(
+                f"WITH current AS ({parts['current']}) SELECT source_key FROM current"
+            ).fetchall()
+        }
+        decided = (
+            con.execute(_DECIDE.format(**parts)).fetch_arrow_table().to_pylist()
+            if ledger_files else []
+        )
     except duckdb.IOException:  # no source snapshots to check a premiere against
         logger.warning("No source snapshots to check a premiere against - no MAL ids to decide")
         _remove(out)
@@ -246,21 +260,58 @@ def build_bridge(data_dir: Path) -> Path | None:
     finally:
         con.close()
 
-    if not rows.num_rows:
-        logger.info("Nothing in the AniList bridge ledger survives the premiere check")
+    decided = _with_overrides(decided, here)
+    if not decided:
+        logger.info("Nothing to say about any row's MAL id")
         _remove(out)
         return None
 
+    rows = pa.Table.from_pylist(decided, schema=pa.schema(
+        [("source_key", pa.string()), ("mal_id", pa.int64()), ("action", pa.string())]))
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(out.name + ".tmp")
     pq.write_table(rows, tmp)
     tmp.replace(out)
-    actions = rows.column("action").to_pylist()
+
+    actions = [row["action"] for row in decided]
     logger.info(
-        "MAL ids: %s row(s) given one that had none, %s corrected",
-        actions.count("fill"), actions.count("replace"),
+        "MAL ids: %s row(s) given one that had none, %s corrected, %s asserted by hand",
+        actions.count("fill"), actions.count("replace"), actions.count("override"),
     )
     return out
+
+
+def _with_overrides(decided: list[dict], here: set[str], overrides: dict | None = None) -> list[dict]:
+    """Let the hand-written assertions win over whatever the evidence decided.
+
+    A row named there is replaced rather than argued with - that is the point of
+    the file - and a row it names that no rule reached is added. Each is logged,
+    because an id nothing can derive should be visible in the run that used it,
+    not only in a diff from months ago.
+
+    An override for a row this lake does not hold is skipped and said out loud.
+    That is how a stale entry surfaces: the row it was about is gone, the
+    assertion is now about nothing, and the file should lose it.
+    """
+    if overrides is None:
+        from .mal_id_overrides import OVERRIDES as overrides
+
+    by_key = {row["source_key"]: row for row in decided}
+    for source_key, (mal_id, reason) in overrides.items():
+        if ":" not in source_key:
+            raise ValueError(f"override key {source_key!r} is not a source key like 'kitsu:50991'")
+        if source_key not in here:
+            logger.warning("Override for %s names a row no source holds any more - skipped", source_key)
+            continue
+        was = by_key.get(source_key)
+        by_key[source_key] = {"source_key": source_key, "mal_id": mal_id, "action": "override"}
+        logger.info(
+            "MAL id for %s set by hand to %s%s: %s",
+            source_key, mal_id if mal_id is not None else "nothing",
+            f" (the evidence was going to say {was['mal_id']} by {was['action']})" if was else "",
+            reason,
+        )
+    return [by_key[key] for key in sorted(by_key)]
 
 
 def _remove(out: Path) -> None:
