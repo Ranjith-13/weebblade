@@ -4,6 +4,11 @@ from typing import Any
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 
+# The width of what the model returns. DuckDB stores the vectors as a fixed-size
+# ARRAY - the only type array_cosine_similarity accepts - so the width has to be
+# known when the table is made rather than inferred row by row.
+DIM = 384
+
 _model = None
 
 

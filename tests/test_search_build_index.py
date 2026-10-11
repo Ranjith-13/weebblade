@@ -1,124 +1,120 @@
-from pathlib import Path
+"""The vector index: a table in the warehouse, beside the titles it indexes."""
 
-from ai.search.build_index import build_index
+import duckdb
+import pyarrow as pa
+import pyarrow.parquet as pq
+import pytest
+
+import ai.search.build_index as build_module
+from ai.search.build_index import TABLE_NAME, build_index
+from ai.search.embed import DIM
 from processing.duckdb_catalog import refresh_catalog
 
 
 def test_build_index_handles_missing_warehouse_file(tmp_path):
-    count = build_index(tmp_path / "does-not-exist.duckdb", tmp_path / "chroma")
-
-    assert count == 0
+    assert build_index(tmp_path / "does-not-exist.duckdb") == 0
 
 
 def test_build_index_handles_missing_view(tmp_path):
     db_path = tmp_path / "warehouse.duckdb"
     refresh_catalog(tmp_path / "data", db_path)
 
-    count = build_index(db_path, tmp_path / "chroma")
-
-    assert count == 0
-
-
-# --- rebuilding a live index ---------------------------------------------------------
-
-import pyarrow as pa  # noqa: E402
-import pyarrow.parquet as pq  # noqa: E402
-import pytest  # noqa: E402
-
-import ai.search.build_index as build_module  # noqa: E402
-
-
-class _FakeCollection:
-    def __init__(self, client, name):
-        self.client, self.name, self.ids = client, name, []
-
-    def add(self, ids, embeddings, documents, metadatas):
-        assert len(ids) <= self.client.max_batch, "a batch over the client's limit"
-        self.client.adds.append(len(ids))
-        if self.client.fail_on_add == len(self.client.adds):
-            raise RuntimeError("chroma refused the batch")
-        self.ids += ids
-
-    def modify(self, name):
-        self.client.cols[name] = self.client.cols.pop(self.name)
-        self.name = name
-
-
-class _FakeClient:
-    """Chroma's surface as build_index uses it, with Chroma's batch limit."""
-
-    def __init__(self, max_batch=3, fail_on_add=None):
-        self.max_batch, self.fail_on_add, self.cols, self.adds = max_batch, fail_on_add, {}, []
-
-    def get_max_batch_size(self):
-        return self.max_batch
-
-    def list_collections(self):
-        return list(self.cols.values())
-
-    def create_collection(self, name):
-        self.cols[name] = _FakeCollection(self, name)
-        return self.cols[name]
-
-    def delete_collection(self, name):
-        del self.cols[name]
+    assert build_index(db_path) == 0
 
 
 @pytest.fixture
 def warehouse(tmp_path, monkeypatch):
-    """A warehouse of `n` titles, and an index client standing in for Chroma."""
+    """A warehouse of `n` titles, with the model stubbed: what is under test is
+    what gets written, not what the model returns."""
 
-    def build(n: int, client: _FakeClient):
+    def build(n: int, embed=None):
         rows = [
-            {"source": "kitsu", "source_id": str(i), "title_english": f"Title {i}", "title_romaji": None,
-             "genres": ["Drama"], "synopsis": "A story.", "run_date": "2026-09-11"}
+            {"source": "kitsu", "source_id": str(i), "title_english": f"Title {i}",
+             "title_romaji": None, "genres": ["Drama"], "synopsis": "A story.",
+             "run_date": "2026-09-11"}
             for i in range(n)
         ]
-        path = tmp_path / "data" / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-09-11" / "p.parquet"
+        path = (tmp_path / "data" / "processed" / "anime_media_consolidated" / "_catalogue"
+                / "2026-09-11" / "p.parquet")
         path.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(pa.Table.from_pylist(rows), path)
-        refresh_catalog(tmp_path / "data", tmp_path / "warehouse.duckdb")
-        monkeypatch.setattr("ai.search.client.get_chroma_client", lambda chroma_dir: client)
-        monkeypatch.setattr(build_module, "embed_texts", lambda docs: [[0.0]] * len(docs))
-        return tmp_path / "warehouse.duckdb"
+        db_path = tmp_path / "warehouse.duckdb"
+        refresh_catalog(tmp_path / "data", db_path)
+        monkeypatch.setattr(
+            build_module, "embed_texts",
+            embed or (lambda docs: [[float(i)] + [0.0] * (DIM - 1) for i, _ in enumerate(docs)]),
+        )
+        return db_path
 
     return build
 
 
-def test_titles_go_in_batches_the_client_accepts(warehouse, tmp_path):
-    """The backfill took the catalogue to 6,055 titles, past Chroma's limit of
-    5,461 per add, and a single add of everything was refused."""
-    client = _FakeClient(max_batch=3)
-
-    count = build_index(warehouse(7, client), tmp_path / "chroma")
-
-    assert count == 7
-    assert client.adds == [3, 3, 1]
-    assert len(client.cols["anime_media"].ids) == 7
+def _indexed(db_path):
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        return con.execute(f"SELECT key, title FROM {TABLE_NAME} ORDER BY key").fetchall()
+    finally:
+        con.close()
 
 
-def test_a_failed_rebuild_leaves_the_live_index_serving(warehouse, tmp_path):
-    """The live collection used to be deleted before the new one was filled, so
-    when the fill failed, search answered every query with nothing."""
-    client = _FakeClient(max_batch=3, fail_on_add=2)
-    live = client.create_collection("anime_media")
-    live.ids = ["kitsu:old"]
-    db = warehouse(7, client)
+def test_every_title_is_indexed_under_its_own_key(warehouse):
+    db = warehouse(4)
+
+    assert build_index(db) == 4
+    assert [key for key, _ in _indexed(db)] == [f"kitsu:{i}" for i in range(4)]
+
+
+def test_the_vectors_are_an_array_the_similarity_function_accepts(warehouse):
+    """A fixed-size ARRAY, not a LIST. array_cosine_similarity takes only the
+    former, and Arrow's fixed-size list arrives as the latter without the cast -
+    which fails at query time, not here, so it is worth asserting here."""
+    db = warehouse(2)
+    build_index(db)
+
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        kind = con.execute(
+            f"SELECT data_type FROM information_schema.columns "
+            f"WHERE table_name = '{TABLE_NAME}' AND column_name = 'embedding'"
+        ).fetchone()[0]
+        nearest = con.execute(
+            f"SELECT key FROM {TABLE_NAME} "
+            f"ORDER BY array_cosine_similarity(embedding, ?::FLOAT[{DIM}]) DESC LIMIT 1",
+            [[1.0] + [0.0] * (DIM - 1)],
+        ).fetchone()[0]
+    finally:
+        con.close()
+
+    assert kind == f"FLOAT[{DIM}]"
+    assert nearest == "kitsu:1"  # the only row whose vector points that way
+
+
+def test_a_rebuild_replaces_the_previous_index(warehouse):
+    db = warehouse(4)
+    build_index(db)
+
+    con = duckdb.connect(str(db))
+    con.execute(f"INSERT INTO {TABLE_NAME} SELECT 'kitsu:stale', 'kitsu', 'stale', 'Stale', '', "
+                f"embedding FROM {TABLE_NAME} LIMIT 1")
+    con.close()
+
+    build_index(db)
+
+    assert [key for key, _ in _indexed(db)] == [f"kitsu:{i}" for i in range(4)]
+
+
+def test_a_failed_rebuild_leaves_the_live_index_serving(warehouse):
+    """The Chroma version once deleted the live collection and then failed to
+    write the new one, so search answered every query with nothing. Embedding
+    happens before the database is touched at all, so the old table survives
+    whatever goes wrong in the slow part."""
+    db = warehouse(4)
+    build_index(db)
+
+    def refuse(docs):
+        raise RuntimeError("the model fell over")
 
     with pytest.raises(RuntimeError):
-        build_index(db, tmp_path / "chroma")
+        build_index(warehouse(4, embed=refuse))
 
-    assert client.cols["anime_media"].ids == ["kitsu:old"]
-
-
-def test_a_successful_rebuild_replaces_the_live_index_and_any_leftover(warehouse, tmp_path):
-    client = _FakeClient(max_batch=10)
-    client.create_collection("anime_media").ids = ["kitsu:old"]
-    client.create_collection("anime_media__building").ids = ["kitsu:half-built"]
-    db = warehouse(4, client)
-
-    build_index(db, tmp_path / "chroma")
-
-    assert sorted(client.cols) == ["anime_media"]
-    # Sorted: the warehouse scan has no defined row order, and CI reads it differently.
-    assert sorted(client.cols["anime_media"].ids) == [f"kitsu:{i}" for i in range(4)]
+    assert [key for key, _ in _indexed(db)] == [f"kitsu:{i}" for i in range(4)]

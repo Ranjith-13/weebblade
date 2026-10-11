@@ -197,8 +197,10 @@ def anime_seasonal_pipeline():
         views = _refresh_catalog(DATA_DIR, DATA_DIR / "warehouse.duckdb")
         logger.info("Refreshed views: %s", views)
 
-    # Both read anime_media_latest from the warehouse - independent of each other,
-    # both tolerant of "no data yet" (see generate_digest/build_index docstrings).
+    # Both read anime_media_latest from the warehouse, and build_search_index
+    # writes its vectors back into it, so they stay in the single-writer line
+    # with everything else that opens the file (see the chain at the bottom).
+    # Both tolerate "no data yet" - see generate_digest/build_index.
     @task(trigger_rule=TriggerRule.ALL_DONE)
     def generate_digest(data_interval_end=None):
         from ai.digest.generate import generate_digest as _generate_digest
@@ -211,7 +213,7 @@ def anime_seasonal_pipeline():
     def build_search_index():
         from ai.search.build_index import build_index
 
-        count = build_index(DATA_DIR / "warehouse.duckdb", DATA_DIR / "chroma")
+        count = build_index(DATA_DIR / "warehouse.duckdb")
         logger.info("Indexed %s titles", count)
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
@@ -274,7 +276,7 @@ def anime_seasonal_pipeline():
     catalog = (fetches >> fetch_bridge_ids() >> build_bridge() >> consolidate()
                >> record_changes() >> refresh_catalog()
                >> fetch_mal_relations() >> build_franchises())
-    catalog >> [generate_digest(), build_search_index()] >> check_run()
+    catalog >> generate_digest() >> build_search_index() >> check_run()
 
 
 anime_seasonal_pipeline()

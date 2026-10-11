@@ -27,7 +27,7 @@
 #
 #   tar -xzf ~/weebblade-backups/data-YYYY-MM-DD.tar.gz -C /some/where
 #
-# The archive expands to data/{processed,raw,chroma,digests} plus warehouse.duckdb.
+# The archive expands to data/{processed,raw,digests} plus warehouse.duckdb.
 #
 # Do NOT trust the restored warehouse.duckdb anywhere other than a host that mounts
 # the data directory at /data. DuckDB bakes the absolute parquet path into each
@@ -45,9 +45,11 @@
 # That path was exercised on a machine that has never run the pipeline: 475 rows
 # across both seasons came back intact, scores included.
 #
-# The Chroma index and the digests are derived too - rebuildable from the warehouse
-# via ai.search.build_index and ai.digest.generate - so losing them costs a rerun,
-# not data.
+# The vector index and the digests are derived too - rebuildable from the
+# warehouse via ai.search.build_index and ai.digest.generate - so losing them
+# costs a rerun, not data. The index is a table inside warehouse.duckdb, so a
+# rebuilt warehouse needs ai.search.build_index run against it before search
+# answers anything.
 #
 # ONE EXCEPTION, and it is the file this backup most needs to protect:
 # data/identity/registry.parquet. It maps every source key ever seen to a stable

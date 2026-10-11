@@ -30,11 +30,13 @@ def get_db() -> Iterator[duckdb.DuckDBPyConnection]:
 def get_db_optional() -> Iterator[duckdb.DuckDBPyConnection | None]:
     """Like get_db, but yields None where get_db would refuse with a 503.
 
-    For endpoints whose answer does not come from the warehouse and is only
-    decorated from it: /search's matches come from the vector index, so a missing
-    warehouse should cost the results their artwork, not the results themselves.
-    It also never raises during dependency resolution, where a 503 would pre-empt
-    the 422 a malformed query deserves.
+    For an endpoint that must validate its own input first. A dependency that
+    raises does so during dependency resolution, which happens before FastAPI
+    checks the query parameters - so a 503 about the warehouse would pre-empt
+    the 422 a malformed query has earned. /search is the case: its query is user
+    text, and "your query was empty" is the more useful answer even on a
+    warehouse that does not exist. The endpoint raises the 503 itself once it
+    knows the request was well formed.
     """
     if not DB_PATH.exists():
         yield None

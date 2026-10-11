@@ -108,14 +108,11 @@ services:
       DATA_DIR: /data
     volumes:
       - ./ai:/app/ai
+      # Genuinely read-only now. It used to need a writable hole punched in it
+      # for chromadb, whose Rust storage engine wanted lock and WAL files even to
+      # answer a query; the vectors are a table in the warehouse instead, and the
+      # backend only ever reads.
       - ./data:/data:ro
-      # chromadb 1.x's Rust storage engine needs write access to open the database
-      # at all (lock/WAL files) even for pure queries - "attempt to write a
-      # readonly database" otherwise, confirmed live. Everything else under /data
-      # (warehouse.duckdb, raw/processed snapshots, digests) stays genuinely
-      # read-only for the backend; this narrower mount overrides just the chroma
-      # subdirectory.
-      - ./data/chroma:/data/chroma
     expose:
       - "8000"
     healthcheck:

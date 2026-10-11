@@ -1,5 +1,5 @@
 # fastapi/uvicorn/httpx/slowapi are duplicated from backend/requirements.txt rather
-# than `-r`'d in, since that would also pull chromadb/sentence-transformers again
+# than `-r`'d in, since that would also pull sentence-transformers again
 # (already covered via airflow/requirements.txt below) - keep this list in sync
 # with backend/requirements.txt by hand when it changes. This has bitten twice
 # already (pyarrow, then slowapi): CI caught both because it actually installs

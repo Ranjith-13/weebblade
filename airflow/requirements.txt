@@ -3,10 +3,9 @@ pyarrow==23.0.1
 pyspark==3.5.4
 duckdb==1.1.3
 sentence-transformers==6.0.1
-chromadb==1.5.9
 
 # The base apache/airflow image ships pandas 2.1.4, compiled against numpy<2.
-# sentence-transformers/chromadb's own dependency chain pulls in numpy 2.x, which
+# sentence-transformers' own dependency chain pulls in numpy 2.x, which
 # breaks pandas' compiled C extensions at import time (ValueError: numpy.dtype size
 # changed...) - and pyarrow.Table.from_pylist() opportunistically imports pandas
 # internally even though we never import it ourselves, so this silently broke every
