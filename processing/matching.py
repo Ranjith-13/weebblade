@@ -118,8 +118,26 @@ def node(source: str, source_id: Any) -> str:
     return f"{source}:{source_id}"
 
 
+# Letters that are not Latin but look exactly like it, folded to what they
+# impersonate. Six of 11,692 live source rows carry a Cyrillic o (U+043E) where
+# MAL has a Latin one, and the strings are indistinguishable on screen: Kitsu
+# and AniList both spell Dandivine's romaji with one, so no title rule could
+# ever match MAL's. An equality test that two identical-looking titles fail is
+# the kind of bug nobody finds by reading.
+#
+# Folded by hand rather than with NFKC, which also rewrites ligatures, widths
+# and roman numerals - more than was measured. Every pair this newly joins was
+# checked: four, each the same work under the same name (2026-10-11).
+_CONFUSABLE = str.maketrans({
+    0x0430: "a", 0x0435: "e", 0x0441: "c", 0x0440: "p", 0x0445: "x", 0x0443: "y",
+    0x0456: "i", 0x0455: "s", 0x0458: "j", 0x043E: "o",  # Cyrillic
+    0x03BF: "o", 0x03B1: "a", 0x03B5: "e", 0x03C1: "p", 0x03C5: "u",  # Greek
+})
+
+
 def _clean(title: str | None) -> str | None:
-    title = (title or "").strip().lower()
+    # Lowercased first, so the uppercase forms of those letters fold too.
+    title = (title or "").strip().lower().translate(_CONFUSABLE)
     return title or None
 
 

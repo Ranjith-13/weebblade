@@ -5,7 +5,7 @@ The fixtures are live rows, trimmed to the columns the rules read."""
 
 import random
 
-from processing.matching import group
+from processing.matching import group, keys as title_keys
 
 
 def _row(source, source_id, mal_id=None, romaji=None, english=None, fmt="TV", year=2026, date=None):
@@ -187,3 +187,30 @@ def test_two_films_released_the_same_day_under_different_titles_stay_two():
                  year=2024, date=(2024, 12, 27))]
 
     assert len(_titles(rows)) == 2
+
+
+def test_a_title_that_only_looks_latin_still_matches():
+    """Kitsu and AniList spell Dandivine's romaji with a Cyrillic o (U+043E) and
+    MAL with a Latin one. The strings are indistinguishable on screen and no
+    title rule could match them, so the Kitsu row sat outside the title it
+    belongs to. Six live rows carry one."""
+    cyrillic = {"source": "anilist", "source_id": "213068",
+                "title_romaji": "Juu\u043eu Mujin Dandivine", "format": "TV", "season_year": 2026}
+    latin = {"source": "mal", "source_id": "64344",
+             "title_romaji": "Juuou Mujin Dandivine", "format": "TV", "season_year": 2026}
+
+    groups, _ = group([cyrillic, latin])
+
+    assert groups["anilist:213068"] == groups["mal:64344"]
+
+
+def test_folding_does_not_reach_past_the_letters_measured():
+    """Folded by hand rather than with NFKC: a full compatibility fold also
+    rewrites ligatures, widths and roman numerals, which was never measured."""
+    built = dict(title_keys({"title_romaji": "Gundam \uff29\uff29", "format": "TV",
+                             "season_year": 2026}))
+
+    # NFKC would have made those "ii" and matched a title that is not this one.
+    assert built["romaji"] == "gundam \uff49\uff49|tv|2026"
+    assert "gundam ii" not in built["romaji"]
+

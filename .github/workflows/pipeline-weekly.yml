@@ -81,9 +81,13 @@ jobs:
       # The serving artifact: one portable file holding the catalogue and the
       # vectors. Separate from the state because it is for a reader, not for the
       # next run - and only the weekly makes one, since only the weekly rebuilds
-      # the catalogue and the index. Not if: always(): there is no point
-      # publishing a warehouse from a run that fell over before building one.
+      # the catalogue and the index. if: always(), for the same reason the state
+      # is: a failing check does not mean the data is bad. The first weekly run
+      # on Actions proved it - a correct catalogue, digest and index, and then a
+      # red run over one title splitting. materialise returns None when there is
+      # no warehouse, so a run that died earlier publishes nothing.
       - name: Publish the warehouse
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
