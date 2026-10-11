@@ -217,6 +217,7 @@ airflow/      the weekly DAG, the daily airing-schedule DAG, and their image
 infra/        Terraform for the EC2 host and security group
 caddy/        Caddyfile and image
 scripts/      per-session SSH, off-instance backup pull
+pipeline/     run the DAGs' work without Airflow (python -m pipeline.run daily|weekly)
 tests/        pytest suite
 ```
 
@@ -228,6 +229,17 @@ The whole backend stack runs from Docker Compose:
 cp .env.example .env   # fill in the values it names
 docker compose up -d
 ```
+
+The pipeline also runs without Airflow — the same functions in the same order, started by a
+command, which is what a scheduler that isn't Airflow (or a laptop) can use:
+
+```bash
+python -m pipeline.run daily
+python -m pipeline.run weekly --dry-run
+```
+
+A failing step is recorded and the run carries on, exactly as `trigger_rule=ALL_DONE` makes it
+behave in the DAG; the run's own check decides the outcome and sets the exit code.
 
 Tests:
 

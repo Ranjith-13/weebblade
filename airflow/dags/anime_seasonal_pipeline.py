@@ -7,9 +7,7 @@ import pendulum
 from airflow.decorators import dag, task
 from airflow.utils.trigger_rule import TriggerRule
 
-from ingestion.seasons import capture_both, capture_for
-from ingestion.validate import validate_rows
-from ingestion.storage import write_parquet, write_raw_json
+from ingestion.seasons import capture_for
 
 logger = logging.getLogger(__name__)
 
@@ -31,44 +29,23 @@ def anime_seasonal_pipeline():
     # One task per source, deliberately not chained together: if one API is down (as
     # Jikan has been throughout, and AniList was until 2026-09) the others should
     # still land data rather than the whole DAG run blocking on it.
+    #
+    # The work itself is ingestion/land.py, which these four and the Airflow-free
+    # entrypoint (pipeline/run.py) both call. It used to be written out here four
+    # times, identically but for a module name - fine while this was the only way
+    # to run the pipeline, and four copies free to drift the moment it was not.
 
     @task
     def fetch_anilist(data_interval_end=None):
-        from ingestion.anilist.fetch_season import fetch_season
-        from ingestion.anilist.transform import flatten_media
+        from ingestion.land import land_season
 
-        # This season and the next one: the sources list a season months before it
-        # airs, and fetching only the running season left the catalogue with no
-        # Fall 2026 title nine days before Fall 2026 began.
-        for season, season_year, run_date, partition in capture_both(data_interval_end):
-            raw = fetch_season(season, season_year)
-            logger.info("AniList: fetched %s titles for %s %s", len(raw), season, season_year)
-            write_raw_json(raw, DATA_DIR / "raw" / "anilist" / partition, run_date)
-            rows = [flatten_media(m) for m in raw]
-            # Between flattening and writing: the boundary where this source's own
-            # vocabulary and units are supposed to have become this project's, and the
-            # only place a scale or vocabulary error is still cheap to catch.
-            validate_rows(rows, "anilist")
-            write_parquet(rows, DATA_DIR / "processed" / "anilist_media" / partition, run_date)
+        land_season("anilist", data_interval_end, DATA_DIR)
 
     @task
     def fetch_jikan(data_interval_end=None):
-        from ingestion.jikan.fetch_season import fetch_season
-        from ingestion.jikan.transform import flatten_media
+        from ingestion.land import land_season
 
-        # This season and the next one: the sources list a season months before it
-        # airs, and fetching only the running season left the catalogue with no
-        # Fall 2026 title nine days before Fall 2026 began.
-        for season, season_year, run_date, partition in capture_both(data_interval_end):
-            raw = fetch_season(season, season_year)
-            logger.info("Jikan: fetched %s titles for %s %s", len(raw), season, season_year)
-            write_raw_json(raw, DATA_DIR / "raw" / "jikan" / partition, run_date)
-            rows = [flatten_media(m) for m in raw]
-            # Between flattening and writing: the boundary where this source's own
-            # vocabulary and units are supposed to have become this project's, and the
-            # only place a scale or vocabulary error is still cheap to catch.
-            validate_rows(rows, "jikan")
-            write_parquet(rows, DATA_DIR / "processed" / "jikan_media" / partition, run_date)
+        land_season("jikan", data_interval_end, DATA_DIR)
 
     @task
     def fetch_mal(data_interval_end=None):
@@ -81,53 +58,19 @@ def anime_seasonal_pipeline():
         two columns that are null for 100% of stored rows, studios and
         source_material, plus scores for titles Kitsu does not rate.
 
-        Skips cleanly when MAL_CLIENT_ID is unset so the DAG stays green on an
-        installation that has not registered one, rather than failing a task for
-        a configuration choice.
+        Skips cleanly when MAL_CLIENT_ID is unset - see ingestion/land.py - so
+        the DAG stays green on an installation that has not registered one,
+        rather than failing a task for a configuration choice.
         """
-        from ingestion.mal.client import MissingClientId
-        from ingestion.mal.fetch_season import fetch_season
-        from ingestion.mal.transform import flatten_media
+        from ingestion.land import land_season
 
-        # This season and the next one: the sources list a season months before it
-        # airs, and fetching only the running season left the catalogue with no
-        # Fall 2026 title nine days before Fall 2026 began.
-        for season, season_year, run_date, partition in capture_both(data_interval_end):
-            try:
-                raw = fetch_season(season, season_year)
-            except MissingClientId as exc:
-                # A configuration choice, not a failure, and it is the same for
-                # both seasons: say so once and leave.
-                logger.warning("Skipping MAL: %s", exc)
-                return
-
-            logger.info("MAL: fetched %s titles for %s %s", len(raw), season, season_year)
-            write_raw_json(raw, DATA_DIR / "raw" / "mal" / partition, run_date)
-            rows = [flatten_media(m) for m in raw]
-            # Between flattening and writing: the boundary where this source's own
-            # vocabulary and units are supposed to have become this project's, and the
-            # only place a scale or vocabulary error is still cheap to catch.
-            validate_rows(rows, "mal")
-            write_parquet(rows, DATA_DIR / "processed" / "mal_media" / partition, run_date)
+        land_season("mal", data_interval_end, DATA_DIR)
 
     @task
     def fetch_kitsu(data_interval_end=None):
-        from ingestion.kitsu.fetch_season import fetch_season
-        from ingestion.kitsu.transform import flatten_media
+        from ingestion.land import land_season
 
-        # This season and the next one: the sources list a season months before it
-        # airs, and fetching only the running season left the catalogue with no
-        # Fall 2026 title nine days before Fall 2026 began.
-        for season, season_year, run_date, partition in capture_both(data_interval_end):
-            raw = fetch_season(season, season_year)
-            logger.info("Kitsu: fetched %s titles for %s %s", len(raw), season, season_year)
-            write_raw_json(raw, DATA_DIR / "raw" / "kitsu" / partition, run_date)
-            rows = [flatten_media(m) for m in raw]
-            # Between flattening and writing: the boundary where this source's own
-            # vocabulary and units are supposed to have become this project's, and the
-            # only place a scale or vocabulary error is still cheap to catch.
-            validate_rows(rows, "kitsu")
-            write_parquet(rows, DATA_DIR / "processed" / "kitsu_media" / partition, run_date)
+        land_season("kitsu", data_interval_end, DATA_DIR)
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
     def fetch_bridge_ids(data_interval_end=None):
