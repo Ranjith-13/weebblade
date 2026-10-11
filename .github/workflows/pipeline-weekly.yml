@@ -1,0 +1,86 @@
+name: Pipeline (weekly)
+
+# The anime_seasonal_pipeline DAG, run by GitHub. Same steps, same order, same
+# check - see pipeline/run.py. Sunday 00:00 UTC, as @weekly always meant.
+on:
+  schedule:
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Shared with the daily run: the two must never touch the state at once, and on
+# a Sunday they are both due.
+concurrency:
+  group: weebblade-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # Longer than the daily because of MAL's related titles, which spends up to
+    # 2,000 requests at the API's rate limit, and the embedding rebuild, which
+    # is 6,349 titles through a sentence-transformers model on CPU - 54s on a
+    # laptop. The timeout is a stop, not a budget: a run that hangs should cost
+    # an hour of the month's 2,000 minutes, not all of them.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: airflow/requirements.txt
+
+      # PySpark needs a JVM. consolidate.py is a window function over every
+      # column of every source row, and it is the one step this project will not
+      # rewrite to run without Spark - it is the entity resolution the whole
+      # catalogue rests on, and it is tested as Spark code.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - run: pip install -r airflow/requirements.txt
+
+      - name: Restore state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -c "from pathlib import Path; import pipeline.state as s; s.fetch_state(Path('data'))"
+
+      - name: Run the weekly pipeline
+        env:
+          MAL_CLIENT_ID: ${{ secrets.MAL_CLIENT_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python -m pipeline.run weekly --data-dir data
+
+      # See the daily workflow for why this is if: always().
+      - name: Publish state
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c "
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import pipeline.state as s
+          s.publish_state(Path('data'), datetime.now(timezone.utc).strftime('%Y-%m-%d'))
+          s.prune()
+          "
+
+      - name: Write the run to RUNS.md
+        if: always()
+        run: |
+          printf -- '- %s weekly — %s ([log](%s/%s/actions/runs/%s))\n' \
+            "$(date -u +%Y-%m-%d)" "${{ job.status }}" \
+            "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" \
+            > /tmp/line
+          touch RUNS.md && cat RUNS.md >> /tmp/line && mv /tmp/line RUNS.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add RUNS.md
+          git commit -m "Pipeline (weekly) $(date -u +%Y-%m-%d) [skip ci]" || exit 0
+          git push

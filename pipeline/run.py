@@ -183,6 +183,29 @@ DAILY = [
 ]
 
 
+def _ensure_warehouse(data_dir: Path) -> None:
+    """Make sure there is a warehouse here before any step reads one.
+
+    Not a step, because it is not work the pipeline does - it is a fact about
+    where the pipeline is running. The server keeps a warehouse between runs, so
+    the daily DAG can assume one; a GitHub runner starts empty and the daily
+    steps (resolve_ids, fetch_status, the check) all read it.
+
+    Rebuilding is right rather than restoring it from somewhere: refresh_catalog
+    bakes each parquet file's ABSOLUTE path into every view, so a warehouse built
+    on another machine resolves to nothing here - and does it by returning no
+    rows rather than erroring, which is the worst way to fail. A second's work
+    gets views that point at this machine.
+    """
+    warehouse = data_dir / "warehouse.duckdb"
+    if warehouse.exists():
+        return
+    from processing.duckdb_catalog import refresh_catalog
+
+    logger.info("No warehouse here yet - building views over the lake first")
+    refresh_catalog(data_dir, warehouse)
+
+
 def run(which: str, data_dir: Path = DATA_DIR, at: datetime | None = None) -> int:
     """Run a pipeline and return a process exit code: 0 passed, 1 did not."""
     from ingestion.seasons import capture_for
@@ -192,6 +215,7 @@ def run(which: str, data_dir: Path = DATA_DIR, at: datetime | None = None) -> in
     _, _, run_date, _ = capture_for(at)
     steps = WEEKLY if which == "weekly" else DAILY
     logger.info("%s run for %s (%s steps)", which, run_date, len(steps))
+    _ensure_warehouse(data_dir)
 
     failed: list[str] = []
     for step in steps:
