@@ -100,11 +100,11 @@ jobs:
       # is deliberately stopped (2026-10-07) while the pipeline moves off it, so
       # this check would be red every push for a reason nobody needs telling -
       # and a permanently red pipeline is one nobody reads. Set the repository
-      # variable API_IS_LIVE to "true" when there is an API again, and the
+      # variable SERVER_IS_LIVE to "true" when the instance is running again, and the
       # signal comes back exactly as it was. The typecheck and lint above touch
       # no network and still run on every push.
       - run: npm run build
-        if: vars.API_IS_LIVE == 'true'
+        if: vars.SERVER_IS_LIVE == 'true'
 
       # Smoke tests against that build (frontend/e2e). Until 2026-09-21 this job
       # proved the frontend compiled and nothing proved a page rendered anything:
@@ -114,11 +114,11 @@ jobs:
       # They assert no title, count or season: the catalogue changes weekly and a
       # test that goes red when Summer becomes Fall is a test that gets deleted.
       - run: npx playwright install --with-deps chromium
-        if: vars.API_IS_LIVE == 'true'
+        if: vars.SERVER_IS_LIVE == 'true'
       - run: npm run test:e2e
-        if: vars.API_IS_LIVE == 'true'
+        if: vars.SERVER_IS_LIVE == 'true'
       - uses: actions/upload-artifact@v4
-        if: failure() && vars.API_IS_LIVE == 'true'
+        if: failure() && vars.SERVER_IS_LIVE == 'true'
         with:
           name: playwright-report
           path: frontend/playwright-report/
@@ -127,7 +127,13 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # The same gate as the frontend's network steps: there is nothing to deploy
+    # to while the instance is stopped, and a job that fails every push teaches
+    # people to ignore the one that matters. Revoking the runner's SSH rule is
+    # if: always(), so a skipped or failed deploy never leaves ingress open.
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && vars.SERVER_IS_LIVE == 'true'
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_AWS_SECRET_ACCESS_KEY }}
