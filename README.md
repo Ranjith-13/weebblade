@@ -247,16 +247,11 @@ Tests:
 python -m pytest tests/ -v
 ```
 
-Two of them ask for a real SparkSession and skip without PySpark, which needs a JVM. CI has one;
-a laptop usually does not, and the server does inside the Airflow image. Any change to the merge
-has to clear them there before it is pushed:
-
-```bash
-./scripts/weebblade-spark-tests.sh
-```
-
-It copies this working tree to the server and runs the suite in a throwaway container, leaving
-the running one alone.
+Two modules ask for a real SparkSession and skip where PySpark is absent, so a laptop without a
+JVM runs about 380 of them and CI runs all 428 - the merge is a window function over every column,
+which is exactly the kind of code that looks right and behaves differently at runtime. CI installs
+PySpark and has a JVM, so any change to `processing/consolidate.py` is proved there on the push
+rather than anywhere local.
 
 The frontend is separate — see [frontend/README.md](frontend/README.md).
 
