@@ -43,6 +43,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # CPU-only torch first, for the reason airflow/Dockerfile spells out:
+      # sentence-transformers depends on torch, and PyPI's default wheel is the
+      # CUDA build - several GB of nvidia-* libraries that are useless on a
+      # CPU runner and fill its disk. Installing the CPU wheel first satisfies
+      # the dependency before anything can pull the GPU one. The first run on
+      # Actions died here, the same way the image build once did.
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -r airflow/requirements.txt
 
       - name: Restore state

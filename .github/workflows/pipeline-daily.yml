@@ -38,12 +38,18 @@ jobs:
           cache: pip
           cache-dependency-path: airflow/requirements.txt
 
-      # The same file the Airflow image installs, so the runner and the server
-      # run identical versions - including duckdb 1.1.3, which behaves
-      # differently from newer ones in ways this project has already been bitten
-      # by. The daily run does not need torch, but splitting the file into two
-      # that must be kept in sync is a worse problem than a cached install.
-      - run: pip install -r airflow/requirements.txt
+      # The daily run touches three libraries, and -c rather than -r is how it
+      # gets them at exactly the versions the Airflow image pins - including
+      # duckdb 1.1.3, which behaves differently from newer ones in ways this
+      # project has already been bitten by. A constraints file cannot drift from
+      # a requirements file it IS.
+      #
+      # Installing all of airflow/requirements.txt here would pull
+      # sentence-transformers, and with it the default torch wheel - several GB
+      # of CUDA libraries that filled the runner's disk and failed this exact
+      # step on the first run. The weekly workflow, which does need the model,
+      # installs the CPU wheel first the way airflow/Dockerfile does.
+      - run: pip install -c airflow/requirements.txt requests pyarrow duckdb
 
       - name: Restore state
         env:

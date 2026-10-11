@@ -109,8 +109,25 @@ def fetch_state(data_dir: Path) -> str | None:
     return tag
 
 
-def publish_state(data_dir: Path, run_date: str) -> str:
-    """Write the state back, as the assets of that date's release."""
+def publish_state(data_dir: Path, run_date: str) -> str | None:
+    """Write the state back, as the asset of that date's release.
+
+    Refuses to publish a lake with nothing in it, and that refusal is the most
+    important line in this file. Publishing happens with if: always(), so a run
+    that dies before it restores anything would otherwise upload an empty
+    tarball - and the next run would restore THAT, losing the registry and every
+    snapshot the project has. It is exactly what happened on the first run on
+    Actions: pip ran out of disk, every later step was skipped, and this was
+    still asked to publish a data directory that did not exist.
+    """
+    present = [name for name in KEPT if (data_dir / name).exists()]
+    if not present:
+        logger.warning(
+            "Nothing at %s to publish - refusing rather than replacing good state "
+            "with an empty archive", data_dir,
+        )
+        return None
+
     tag = f"{TAG_PREFIX}{run_date}"
     archive = data_dir / STATE_ASSET
     with tarfile.open(archive, "w:gz") as tar:

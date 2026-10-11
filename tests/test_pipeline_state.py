@@ -139,6 +139,24 @@ def test_a_second_run_on_one_day_replaces_that_days_assets(gh, tmp_path):
     assert (there / "identity/registry.parquet").read_bytes() == b"after the weekly"
 
 
+def test_an_empty_lake_is_never_published_over_good_state(gh, tmp_path):
+    """The most important refusal here. Publishing runs with if: always(), so a
+    run that dies before restoring anything would upload an empty archive and
+    the next run would restore it - losing the registry and every snapshot. The
+    first run on Actions did exactly that: pip filled the disk, every later step
+    was skipped, and this was still asked to publish a directory that was not
+    there."""
+    store, _ = gh
+    state.publish_state(_lake(tmp_path / "here"), "2026-10-11")
+
+    assert state.publish_state(tmp_path / "never-existed", "2026-10-12") is None
+    assert [p.name for p in store.iterdir()] == ["state-2026-10-11"]
+
+    there = tmp_path / "there"
+    state.fetch_state(there)
+    assert (there / "identity/registry.parquet").read_bytes() == b"the registry"
+
+
 def test_the_first_run_ever_starts_from_nothing_rather_than_failing(gh, tmp_path):
     assert state.fetch_state(tmp_path / "empty") is None
 
