@@ -21,6 +21,12 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+# Declared rather than inherited. This workflow reads the tree, runs tests and
+# SSHes out; it writes nothing back to the repository, and a token that cannot
+# write is one that cannot be turned against it.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
