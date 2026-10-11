@@ -42,7 +42,11 @@ def warehouse(tmp_path, monkeypatch):
         refresh_catalog(tmp_path / "data", db_path)
         monkeypatch.setattr(
             build_module, "embed_texts",
-            embed or (lambda docs: [[float(i)] + [0.0] * (DIM - 1) for i, _ in enumerate(docs)]),
+            # One axis each, never a zero vector: cosine similarity against zero
+            # is undefined, and DuckDB 1.1.3 sorts that NaN to the front where
+            # 1.5.6 sorts it to the back. CI found that; the laptop could not.
+            embed or (lambda docs: [[1.0 if j == i else 0.0 for j in range(DIM)]
+                                    for i, _ in enumerate(docs)]),
         )
         return db_path
 
@@ -80,13 +84,13 @@ def test_the_vectors_are_an_array_the_similarity_function_accepts(warehouse):
         nearest = con.execute(
             f"SELECT key FROM {TABLE_NAME} "
             f"ORDER BY array_cosine_similarity(embedding, ?::FLOAT[{DIM}]) DESC LIMIT 1",
-            [[1.0] + [0.0] * (DIM - 1)],
+            [[0.0, 1.0] + [0.0] * (DIM - 2)],
         ).fetchone()[0]
     finally:
         con.close()
 
     assert kind == f"FLOAT[{DIM}]"
-    assert nearest == "kitsu:1"  # the only row whose vector points that way
+    assert nearest == "kitsu:1"  # the only row whose vector points down that axis
 
 
 def test_a_rebuild_replaces_the_previous_index(warehouse):

@@ -92,10 +92,19 @@ jobs:
       # It DOES reach the network: pages are prerendered at build time and fetch
       # the live API, so this job goes red if weebblade.duckdns.org is down.
       # Verified by pointing NEXT_PUBLIC_API_BASE_URL at a dead host - the build
-      # exits 1 on "Error occurred prerendering page /". That is kept rather than
-      # worked around, because Vercel's build will fail in exactly the same way:
-      # a red check here means the deploy would not have worked either.
+      # exits 1 on "Error occurred prerendering page /". That is worth keeping,
+      # because Vercel's build fails in exactly the same way: red here means the
+      # deploy would not have worked either.
+      #
+      # Which is why these steps are gated rather than deleted. The EC2 instance
+      # is deliberately stopped (2026-10-07) while the pipeline moves off it, so
+      # this check would be red every push for a reason nobody needs telling -
+      # and a permanently red pipeline is one nobody reads. Set the repository
+      # variable API_IS_LIVE to "true" when there is an API again, and the
+      # signal comes back exactly as it was. The typecheck and lint above touch
+      # no network and still run on every push.
       - run: npm run build
+        if: vars.API_IS_LIVE == 'true'
 
       # Smoke tests against that build (frontend/e2e). Until 2026-09-21 this job
       # proved the frontend compiled and nothing proved a page rendered anything:
@@ -105,9 +114,11 @@ jobs:
       # They assert no title, count or season: the catalogue changes weekly and a
       # test that goes red when Summer becomes Fall is a test that gets deleted.
       - run: npx playwright install --with-deps chromium
+        if: vars.API_IS_LIVE == 'true'
       - run: npm run test:e2e
+        if: vars.API_IS_LIVE == 'true'
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: failure() && vars.API_IS_LIVE == 'true'
         with:
           name: playwright-report
           path: frontend/playwright-report/
