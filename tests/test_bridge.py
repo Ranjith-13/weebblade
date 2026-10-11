@@ -90,11 +90,22 @@ def test_a_stale_cross_reference_to_an_earlier_season_is_refused(tmp_path):
     assert _decided(tmp_path) == {}
 
 
-def test_a_premiere_a_day_apart_is_refused(tmp_path):
-    """Santa Tell Me is a day apart across the two sources and probably one
-    work, but a window wide enough to bridge it joins a series to its
-    compilation film - the reason matching.py keeps it shut."""
+def test_a_premiere_a_few_days_apart_is_accepted(tmp_path):
+    """Santa Tell Me is a day apart across the two sources and is one work. The
+    window was zero until it was measured: every real pair sits within three
+    days and nothing new appears beyond, out to a month."""
     _rows(tmp_path, "kitsu", "2024-WINTER", [{"source_id": "1", "premiere": (2023, 12, 4)}])
+    _rows(tmp_path, "mal", "2023-FALL", [{"source_id": "57586", "premiere": (2023, 12, 5)}])
+    _ledger(tmp_path, "2026-09-22", [("kitsu:1", 900, 57586)])
+
+    build_bridge(tmp_path)
+
+    assert _decided(tmp_path) == {"kitsu:1": (57586, "fill")}
+
+
+def test_a_premiere_outside_the_window_is_still_refused(tmp_path):
+    """Four days is outside it, and nothing real was ever found out there."""
+    _rows(tmp_path, "kitsu", "2024-WINTER", [{"source_id": "1", "premiere": (2023, 12, 1)}])
     _rows(tmp_path, "mal", "2023-FALL", [{"source_id": "57586", "premiere": (2023, 12, 5)}])
     _ledger(tmp_path, "2026-09-22", [("kitsu:1", 900, 57586)])
 

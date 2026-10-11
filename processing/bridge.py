@@ -12,13 +12,30 @@ two and a half years earlier, so adopting it would have merged a 2025 series
 into a 2022 one and deleted a title.
 
 The rule: the row and everything already carrying that MAL id must have
-premiered on the same day, every date complete. It is matching.py's fourth rule
-read across sources - an identical premiere date is strong evidence of one work
-- and it separated the eleven real pairs from the six refusals when measured. A
-window of a day or two would have caught three more likely pairs (Santa Tell Me,
-the Jujutsu Kaisen Modulo PVs, Changsheng Jie), and matching.py already explains
-why it stays shut: a window wide enough to bridge them is wide enough to join a
-series to its compilation film.
+premiered within FILL_WINDOW_DAYS of each other, every date complete. It is
+matching.py's fourth rule read across sources - a shared premiere is strong
+evidence of one work.
+
+The window started at zero, on matching.py's argument that one wide enough to
+bridge a near-miss is wide enough to join a series to its compilation film. Then
+it was measured over the sixteen candidates the ledger holds, and the argument
+did not survive contact:
+
+    exact day   11 adopted
+    +/- 1 day   13
+    +/- 3 days  14
+    +/- 7 days  14
+    +/- 14 days 14
+    +/- 31 days 14
+
+Flat from three days out. The feared join never appears, because the window is
+not what decides whether two rows are one title - the strict title match that
+accepted the AniList entry already did that, and this only asks whether the id
+is already spoken for by something that disagrees. Three days buys the two
+Jujutsu Kaisen Modulo PVs, the two Santa Tell Me entries, and Changsheng Jie
+beside World of Immortals - the same show under its Chinese and English names.
+Widening further buys nothing at all, which is the best argument for stopping
+there.
 
 "Everything already carrying it", not just MAL's own row, because an id can
 already be on rows that disagree - and then it names a group that is wrong
@@ -82,6 +99,13 @@ OUT_NAME = Path("bridge") / "mal_ids.parquet"
 # beyond it they are describing different works. Nothing is decided on this - it
 # only chooses which rows AniList is asked about.
 SUSPECT_DAYS = 92
+
+# How far apart the premieres may be before an id is treated as spoken for by
+# something else. Three, because that is where the measurement above goes flat:
+# every real pair is inside it and nothing new appears outside it. Correcting a
+# mapping stays exact-day - see the replacement rule below - because that
+# overrules a source rather than filling a gap it left.
+FILL_WINDOW_DAYS = 3
 
 # The newest thing each ledger says about a row, and only the rows AniList gave
 # an id for.
@@ -160,7 +184,9 @@ _DECIDE = """
         JOIN corrected k ON k.source_key = l.source_key
         JOIN settled c ON c.mal_id = l.mal_id
         WHERE k.mal_id IS NULL
-          AND k.premiered IS NOT NULL AND c.first_day = c.last_day AND c.first_day = k.premiered
+          AND k.premiered IS NOT NULL
+          AND c.first_day = c.last_day
+          AND abs(datediff('day', c.first_day, k.premiered)) <= {window}
     )
     SELECT source_key, mal_id, 'fill' AS action FROM fill
     UNION ALL SELECT source_key, mal_id, 'replace' AS action FROM replacement
@@ -176,6 +202,7 @@ def _parts(data_dir: Path) -> dict[str, str]:
         "doubtful": _DOUBTFUL.format(days=SUSPECT_DAYS),
         "carriers_now": _CARRIERS.format(rows="current"),
         "carriers_settled": _CARRIERS.format(rows="corrected"),
+        "window": FILL_WINDOW_DAYS,
     }
 
 
