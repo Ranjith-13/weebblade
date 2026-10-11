@@ -191,7 +191,7 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 
 | Layer | Choice |
 |---|---|
-| Infra | AWS EC2, managed by Terraform (imported, zero drift) |
+| Infra | GitHub Actions runs the pipeline; state in release assets. An AWS EC2 box served the API and is stopped pending the rebuild (its Terraform state was lost, so it is unmanaged) |
 | Orchestration | Apache Airflow 2.10.4 (self-hosted, Docker Compose, LocalExecutor) |
 | Ingestion | Python — AniList (GraphQL), Jikan / MAL / Kitsu (REST) |
 | Processing | PySpark (single-node) |
@@ -200,7 +200,7 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 | AI | Groq (digest) + sentence-transformers/Chroma (semantic search) |
 | Frontend | Next.js 16 App Router, Tailwind v4, GSAP — deployed on Vercel |
 | Reverse proxy / HTTPS | Caddy (Let's Encrypt, security headers, access logs) |
-| CI/CD | GitHub Actions — pytest and a frontend build/typecheck/lint on every push, auto-deploy `main` to EC2 |
+| CI/CD | GitHub Actions — pytest (including the Spark merge suite) and a frontend typecheck/lint on every push. The deploy and the network-dependent frontend checks are gated behind `SERVER_IS_LIVE` while the instance is stopped |
 
 ## Repository layout
 
@@ -265,9 +265,12 @@ The frontend is separate — see [frontend/README.md](frontend/README.md).
 - **SSH is closed by default.** No standing rule for a home address; both CI and
   `scripts/weebblade-ssh.sh` authorize a single `/32` for the session and revoke it after,
   using an IAM user scoped to ingress rules on one security group and nothing else.
-- **Backups** run twice a week on the server (Sunday and Wednesday) and are kept two weeks
-  there, on the same EBS volume as the data, by choice. `scripts/weebblade-backup.sh` pulls a
-  copy to a second machine on the same days - the one copy off that volume.
+- **Backups.** The pipeline publishes its state as a release asset after every run, and
+  `scripts/weebblade-backup.sh` pulls that to a second machine twice a week (Sunday after the
+  weekly run, Wednesday for what the dailies added), keeping two weeks. The point is the same
+  as it was when the state lived on an EBS volume: a year of ingested history should not sit
+  in one company's account. The irreplaceable file is `identity/registry.parquet` - everything
+  else can be rebuilt from the parquet, and that cannot.
 - **The Airflow UI sits behind HTTP basic auth** as well as its own login. It runs
   arbitrary code by design, so its pre-authentication surface should not be reachable by
   anything unauthenticated.

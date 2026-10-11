@@ -1,199 +1,128 @@
 #!/usr/bin/env bash
-# Pulls the server's backups onto this machine.
+# Pulls the pipeline's state off GitHub, onto this machine.
 #
-# Why this exists: the server backs itself up (~/backup.sh, 02:00 UTC on Sundays
-# and Wednesdays, kept 14 days), but everything it writes lives on the same EBS
-# volume as the data it is protecting. That covers a bad deploy or an accidental
-# delete. It covers nothing about losing the instance, and the instance cannot be
-# rebuilt from code - infra/terraform carries prevent_destroy precisely because
-# the box was provisioned by hand.
+# WHAT CHANGED, AND WHY THIS IS NOT THE SCRIPT IT WAS
 #
-# So this is the one copy off that volume: a different machine, in a different
-# country. The author decided on 2026-09-14 against S3, so it stays the only one.
-# A data archive was 149 MB at that date.
+# It used to open a security-group rule, SSH to an EC2 instance, and copy back
+# the archives the server wrote to its own EBS volume. That instance has been
+# stopped since 2026-10-07, and the pipeline now runs on GitHub Actions, which
+# publishes its state as a release asset after every run (pipeline/state.py). So
+# the thing worth copying is no longer on a server.
 #
-# Run by a systemd user timer (~/.config/systemd/user/weebblade-backup.timer) on
-# the same two days, after the server's run. Keeps the same 14 days, judged by
-# each archive's own date rather than a file count.
+# The reason to copy it at all has not changed and is the whole point: a year of
+# ingested history should not live in one company's account. It lived on an EBS
+# volume and here; now it lives in GitHub releases and here.
 #
-# Usage:
-#   ./scripts/weebblade-backup.sh            # pull, verify, prune
-#   ./scripts/weebblade-backup.sh --verify   # verify what is already local, pull nothing
+# WHAT IT TAKES
 #
-# Deliberately writes OUTSIDE the repo. A backup that lands inside a working tree
-# eventually gets committed, and this contains the warehouse and a Postgres dump.
+#   state-<date>.tar.gz      processed/, identity/, raw/ - what a run needs to
+#                            carry on, and everything that cannot be rebuilt.
+#   warehouse-<date>.duckdb  the materialised catalogue and vectors, when a
+#                            weekly run published one. Derived, so losing it
+#                            costs a rebuild rather than data.
 #
-# RESTORING - verified end to end on 2026-09-10, not assumed:
+# It leaves the server-era archives (data-*.tar.gz, postgres-*.sql.gz) alone.
+# They cover something the release state does not - Airflow's own metadata DB -
+# and pruning by date would quietly delete the last copy of them.
 #
-#   tar -xzf ~/weebblade-backups/data-YYYY-MM-DD.tar.gz -C /some/where
+# Deliberately writes OUTSIDE the repo. A backup that lands inside a working
+# tree eventually gets committed.
 #
-# The archive expands to data/{processed,raw,digests} plus warehouse.duckdb.
+# RESTORING
 #
-# Do NOT trust the restored warehouse.duckdb anywhere other than a host that mounts
-# the data directory at /data. DuckDB bakes the absolute parquet path into each
-# view at CREATE VIEW time (processing/duckdb_catalog.py says so, and it is why the
-# compose file mounts /data rather than /opt/airflow/data), so a warehouse restored
-# to any other path has views that all resolve to nothing. It fails by returning
-# no rows, not by erroring, which is the worst way for it to fail.
+#   tar -xzf ~/weebblade-backups/state-YYYY-MM-DD.tar.gz -C /some/where
 #
-# The parquet under data/processed is the actual source of truth and it is fully
-# portable. Rebuild the warehouse from it anywhere:
+# That expands to processed/, identity/ and raw/. The parquet under processed/
+# is the source of truth and is fully portable; rebuild a warehouse from it
+# anywhere, which takes about a second:
 #
 #   python -c "from pathlib import Path; from processing.duckdb_catalog import \
-#     refresh_catalog; print(refresh_catalog(Path('DIR/data'), Path('DIR/new.duckdb')))"
+#     refresh_catalog; print(refresh_catalog(Path('DIR'), Path('DIR/new.duckdb')))"
 #
-# That path was exercised on a machine that has never run the pipeline: 475 rows
-# across both seasons came back intact, scores included.
+# then `python -m ai.search.build_index --db-path DIR/new.duckdb` if search
+# needs to answer. The warehouse-<date>.duckdb here is the materialised one and
+# carries no absolute paths, so unlike the server-era copies it can be opened
+# anywhere as it is.
 #
-# The vector index and the digests are derived too - rebuildable from the
-# warehouse via ai.search.build_index and ai.digest.generate - so losing them
-# costs a rerun, not data. The index is a table inside warehouse.duckdb, so a
-# rebuilt warehouse needs ai.search.build_index run against it before search
-# answers anything.
+# THE FILE THIS MOST NEEDS TO PROTECT: identity/registry.parquet. It maps every
+# source key ever seen to a stable title identity, and it is state rather than
+# derivation - no rerun can rebuild it, because identities are minted once and
+# remembered (processing/identity.py explains why no stateless scheme works).
+# Lose it and the pipeline still runs, but it mints a fresh identity for every
+# title, and every stored reference to one - a shared link, a franchise edge -
+# points at nothing.
 #
-# ONE EXCEPTION, and it is the file this backup most needs to protect:
-# data/identity/registry.parquet. It maps every source key ever seen to a stable
-# title identity, and it is state rather than derivation - no rerun can rebuild
-# it, because identities are minted once and remembered (processing/identity.py
-# explains why no stateless scheme works). Restore it with everything else. If
-# it is lost, the pipeline still runs, but it mints a fresh identity for every
-# title and every stored reference to one - a shared link, a franchise edge, a
-# watchlist entry - stops resolving at once.
+# Usage:
+#   ./scripts/weebblade-backup.sh            # pull the newest, verify, prune
 set -euo pipefail
 
 DEST="${WEEBBLADE_BACKUP_DIR:-$HOME/weebblade-backups}"
-# Archives dated more than this many days ago are deleted, and not pulled.
+REPO="${WEEBBLADE_REPO:-Ranjith-13/weebblade}"
 KEEP_DAYS="${WEEBBLADE_BACKUP_KEEP_DAYS:-14}"
-REMOTE_DIR="${WEEBBLADE_REMOTE_BACKUP_DIR:-~/backups}"
-NETWORK_PROBE="${WEEBBLADE_NETWORK_PROBE:-checkip.amazonaws.com}"
 NETWORK_WAIT="${WEEBBLADE_NETWORK_WAIT:-300}"
 CUTOFF="$(date -d "$KEEP_DAYS days ago" +%F)"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SSH="$SCRIPT_DIR/weebblade-ssh.sh"
+fail() { echo "weebblade-backup: $*" >&2; exit 1; }
+note() { echo "weebblade-backup: $*"; }
 
-log() { echo "[$(date +%H:%M:%S)] $*" >&2; }
-fail() { echo "ERROR: $*" >&2; exit 1; }
+# A timer that fires at boot or on resume can beat the network up. The unit
+# cannot wait on network-online.target - that is a system target, and a user
+# unit does not wait on it - which is how the 2026-09-14 run failed. So wait
+# here, and name the problem rather than reporting "nothing found".
+waited=0
+until getent hosts api.github.com >/dev/null 2>&1; do
+  [ "$waited" -ge "$NETWORK_WAIT" ] && fail "no DNS for api.github.com after ${NETWORK_WAIT}s - the network is not up"
+  sleep 10
+  waited=$((waited + 10))
+done
 
-# The date in an archive's name: data-2026-09-14.tar.gz -> 2026-09-14.
-# Empty for a name with no date, which is then never pruned - and never aborts
-# the run under pipefail.
-archive_date() { basename "$1" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1 || true; }
-
-# A timer that fires at boot or on resume can beat the network up. On 2026-09-14
-# the pull ran before DNS answered, could not find its own public IP, and gave up
-# for the day. The unit's After=network-online.target cannot help: that is a
-# system target, and a user unit does not wait on it.
-wait_for_network() {
-  local deadline=$((SECONDS + NETWORK_WAIT))
-  until getent hosts "$NETWORK_PROBE" >/dev/null 2>&1; do
-    (( SECONDS < deadline )) || return 1
-    sleep 10
-  done
-}
-
-# A gzip file that does not pass this is not a backup, it is a file. Checked on
-# every pull rather than at restore time, because a corrupt archive discovered
-# during a restore is discovered at the worst possible moment.
-verify_archive() {
-  local f="$1"
-  gzip -t "$f" 2>/dev/null || return 1
-  tar -tzf "$f" >/dev/null 2>&1 || return 1
-  return 0
-}
-
-verify_all() {
-  local ok=0 bad=0
-  shopt -s nullglob
-  for f in "$DEST"/*.tar.gz; do
-    if verify_archive "$f"; then ok=$((ok + 1)); else bad=$((bad + 1)); echo "  CORRUPT: $f" >&2; fi
-  done
-  for f in "$DEST"/*.sql.gz; do
-    if gzip -t "$f" 2>/dev/null; then ok=$((ok + 1)); else bad=$((bad + 1)); echo "  CORRUPT: $f" >&2; fi
-  done
-  shopt -u nullglob
-  log "verified: $ok intact, $bad corrupt"
-  [[ "$bad" -eq 0 ]] || fail "$bad corrupt archive(s) in $DEST"
-}
-
-if [[ "${1:-}" == "--verify" ]]; then
-  [[ -d "$DEST" ]] || fail "no local backup directory at $DEST"
-  verify_all
-  exit 0
-fi
+# gh authenticates through the keyring here, which is unlocked only while there
+# is a desktop session. The timer is a user unit without lingering, so it fires
+# only in one anyway - but when this does fail it must say so, rather than
+# producing an empty backup that looks like success.
+gh auth status >/dev/null 2>&1 || fail "gh is not authenticated (keyring locked, or no session) - nothing pulled"
 
 mkdir -p "$DEST"
 
-# One SSH session to list, rather than one per file: each invocation of
-# weebblade-ssh.sh opens and closes a security-group rule, which takes seconds
-# and churns the group's audit trail.
-wait_for_network || fail "no network after ${NETWORK_WAIT}s ($NETWORK_PROBE does not resolve)"
+tag="$(gh release list --repo "$REPO" --limit 100 --json tagName,createdAt \
+  --jq 'map(select(.tagName | startswith("state-"))) | sort_by(.createdAt) | reverse | .[0].tagName // empty')"
+[ -n "$tag" ] || fail "no state release published yet in $REPO"
+date_of="${tag#state-}"
+state_local="$DEST/state-$date_of.tar.gz"
 
-# The listing's own failure and an empty listing are different news. This used
-# to be `|| true`, which reported a machine that could not reach the server as
-# "no backups found on the server".
-log "listing remote backups"
-if ! REMOTE_FILES="$("$SSH" "ls -1 $REMOTE_DIR/*.gz 2>/dev/null || true")"; then
-  fail "could not reach the server to list its backups"
+if [ -f "$state_local" ] && tar tzf "$state_local" >/dev/null 2>&1; then
+  note "already holding a good copy of $tag"
+else
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+  gh release download "$tag" --repo "$REPO" --pattern "state.tar.gz" --dir "$tmp" \
+    || fail "could not download state.tar.gz from $tag"
+  # Verified before it replaces anything. A truncated download that silently
+  # becomes the newest backup is worse than no backup, because it looks fine.
+  tar tzf "$tmp/state.tar.gz" >/dev/null 2>&1 \
+    || fail "the archive from $tag is corrupt - keeping what was already here"
+  mv "$tmp/state.tar.gz" "$state_local"
+  note "pulled $tag ($(du -h "$state_local" | cut -f1))"
+
+  # Only the weekly run publishes one, so its absence is ordinary.
+  if gh release download "$tag" --repo "$REPO" --pattern "warehouse.duckdb" --dir "$tmp" >/dev/null 2>&1; then
+    mv "$tmp/warehouse.duckdb" "$DEST/warehouse-$date_of.duckdb"
+    note "pulled the warehouse too ($(du -h "$DEST/warehouse-$date_of.duckdb" | cut -f1))"
+  fi
 fi
-[[ -n "$REMOTE_FILES" ]] || fail "no backups found in $REMOTE_DIR on the server"
 
-pulled=0 skipped=0
-while IFS= read -r remote_path; do
-  [[ -n "$remote_path" ]] || continue
-  name="$(basename "$remote_path")"
-  local_path="$DEST/$name"
-
-  # Past the retention the server keeps too, and pruned below: pulling it would
-  # only fetch it to delete it.
-  date_of="$(archive_date "$name")"
-  if [[ -n "$date_of" && "$date_of" < "$CUTOFF" ]]; then
-    continue
-  fi
-
-  # Backups are immutable once written - a given date's archive never changes -
-  # so an existing verified copy is skipped rather than re-downloaded.
-  if [[ -f "$local_path" ]] && { [[ "$name" == *.sql.gz ]] && gzip -t "$local_path" 2>/dev/null || verify_archive "$local_path"; }; then
-    skipped=$((skipped + 1))
-    continue
-  fi
-
-  log "pulling $name"
-  # Stream through the existing helper rather than scp, so the security-group
-  # authorize/revoke and key resolution stay in exactly one place. Writes to a
-  # .part file first: an interrupted transfer must never look like a good backup.
-  # </dev/null is load-bearing: ssh reads stdin, and stdin here is the list of
-  # files this loop is iterating. Without it the first transfer swallows every
-  # remaining line and the run "succeeds" having fetched exactly one file.
-  if ! "$SSH" "cat '$remote_path'" < /dev/null > "$local_path.part"; then
-    rm -f "$local_path.part"
-    fail "transfer failed for $name"
-  fi
-
-  if [[ "$name" == *.sql.gz ]]; then
-    gzip -t "$local_path.part" 2>/dev/null || { rm -f "$local_path.part"; fail "$name arrived corrupt"; }
-  else
-    verify_archive "$local_path.part" || { rm -f "$local_path.part"; fail "$name arrived corrupt"; }
-  fi
-
-  mv "$local_path.part" "$local_path"
-  pulled=$((pulled + 1))
-done <<< "$REMOTE_FILES"
-
-log "pulled $pulled, skipped $skipped already present"
-
-# The same 14 days the server keeps, by each archive's own date. It used to keep
-# the newest 14 files, which was a week of daily pairs, not 14 days.
-deleted=0
-shopt -s nullglob
-for f in "$DEST"/*.gz; do
-  date_of="$(archive_date "$f")"
-  if [[ -n "$date_of" && "$date_of" < "$CUTOFF" ]]; then
-    rm -f "$f"; deleted=$((deleted + 1))
+# Only what this script writes: the server-era archives are a different scheme
+# covering different things, and are not ours to delete.
+pruned=0
+for f in "$DEST"/state-*.tar.gz "$DEST"/warehouse-*.duckdb; do
+  [ -e "$f" ] || continue
+  when="$(basename "$f" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1 || true)"
+  [ -n "$when" ] || continue
+  if [[ "$when" < "$CUTOFF" ]]; then
+    rm -f "$f"
+    pruned=$((pruned + 1))
   fi
 done
-shopt -u nullglob
-[[ "$deleted" -eq 0 ]] || log "pruned $deleted dated before $CUTOFF"
+[ "$pruned" -eq 0 ] || note "pruned $pruned copy(ies) older than $KEEP_DAYS days"
 
-verify_all
-log "backup directory: $DEST ($(du -sh "$DEST" | cut -f1))"
+note "holding $(ls -1 "$DEST"/state-*.tar.gz 2>/dev/null | wc -l) state archive(s) in $DEST"
