@@ -29,7 +29,7 @@ def search_over(tmp_path, monkeypatch):
     # The limiter counts process-wide, and the rate-limit test below spends a
     # whole allowance on purpose.
     limiter.reset()
-    monkeypatch.setattr(query_module, "embed_texts", lambda texts: [_vector()])
+    monkeypatch.setattr(query_module, "embed_query", lambda text: _vector())
 
     def build(rows: list[dict] | None, vectors: dict[str, list[float]] | None = None) -> TestClient:
         if rows is None:  # no warehouse at all

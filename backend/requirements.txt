@@ -2,5 +2,9 @@ fastapi==0.141.1
 uvicorn[standard]==0.34.0
 duckdb==1.1.3
 pyarrow==23.0.1
-sentence-transformers==6.0.1
 slowapi==0.1.9
+# Query-time embedding through ONNX instead of sentence-transformers/torch. Same
+# weights, same vectors (tests/test_embed_backends.py), 406 MB resident against
+# 868 - which is what makes a 512 MB container possible at all. Pinned to the
+# version the measurement was taken on.
+fastembed==0.9.0

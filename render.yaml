@@ -1,0 +1,49 @@
+# The API, as Render reads it. One free container, no database, no disk.
+#
+# WHY RENDER AND WHAT IT COSTS
+#
+# $0, and it cannot become anything else: with no payment method on file, Render
+# suspends a Free service that exceeds its allowances rather than billing for
+# them (https://render.com/docs/free). That property is why this and not the
+# alternatives - it is the same reason the pipeline's state lives in release
+# assets rather than in an object store that wants a card.
+#
+# What the free plan actually gives: 512 MB of memory, 0.1 CPU, 750 instance
+# hours a month per workspace, 5 GB of outbound bandwidth, and no persistent
+# disk at all. It spins down after 15 minutes without a request and takes about
+# a minute to come back, so the first visitor after a quiet spell waits.
+#
+# 512 MB is the number this whole shape was designed around, and it is why the
+# API embeds search queries through ONNX rather than torch: 406 MB resident
+# against 868 (ai/search/embed.get_query_embedder). Having no disk is why it
+# downloads its warehouse at startup (backend/app/warehouse.py).
+#
+# TO DEPLOY: New > Blueprint in the Render dashboard, point it at this
+# repository, and it will ask for the one value that is not in this file.
+services:
+  - type: web
+    name: weebblade-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    # The repository root, because the image needs ai/ beside backend/app.
+    dockerContext: .
+    plan: free
+    # Nearest to both the readers this is for and the sources it mirrors.
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      # Where to find the published warehouse. Setting this is what switches the
+      # API from "read a mounted file" to "fetch the newest release asset".
+      - key: WAREHOUSE_REPO
+        value: Ranjith-13/weebblade
+      # Who may call this from a browser. The frontend's own origin; see
+      # backend/app/main.py for why this is narrowed and what it is not.
+      - key: ALLOWED_ORIGINS
+        value: https://weebblade.vercel.app
+      # sync: false means Render asks for it on setup and keeps it out of this
+      # file. A fine-grained token, Contents: read, this repository only.
+      # Required while the repository is private; still worth setting if it ever
+      # goes public, because unauthenticated GitHub API calls are capped at 60
+      # an hour per IP and a free container's address is shared.
+      - key: GITHUB_TOKEN
+        sync: false

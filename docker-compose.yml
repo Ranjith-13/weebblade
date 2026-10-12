@@ -101,12 +101,25 @@ services:
     restart: unless-stopped
 
   backend:
-    build: ./backend
+    # Context is the repository root, not ./backend: the image needs ai/ as well
+    # as backend/app, and a context of ./backend cannot see a sibling directory.
+    # See backend/Dockerfile.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     logging: *default-logging
     environment:
       PYTHONPATH: /app
       DATA_DIR: /data
+      # Unset deliberately. WAREHOUSE_REPO is what tells the API to fetch its
+      # own warehouse from a release; here the warehouse arrives on the mount
+      # below, written by the same machine's pipeline, and a process that tried
+      # to download over a read-only mount would fail for no reason.
     volumes:
+      # Still mounted, so an edit on the server takes effect on restart without
+      # a rebuild. The image now carries its own copy underneath (the API has to
+      # run where nobody arranges mounts), and this shadows it with the same
+      # files.
       - ./ai:/app/ai
       # Genuinely read-only now. It used to need a writable hole punched in it
       # for chromadb, whose Rust storage engine wanted lock and WAL files even to
