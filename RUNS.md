@@ -1,3 +1,4 @@
+- 2026-10-12 weekly — failure ([log](https://github.com/Ranjith-13/weebblade/actions/runs/38288339803))
 - 2026-10-12 daily — success ([log](https://github.com/Ranjith-13/weebblade/actions/runs/38266173545))
 - 2026-10-11 weekly — failure ([log](https://github.com/Ranjith-13/weebblade/actions/runs/38126086737))
 - 2026-10-11 daily — success ([log](https://github.com/Ranjith-13/weebblade/actions/runs/38123523471))
