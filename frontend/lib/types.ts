@@ -4,8 +4,16 @@
  * importing anything from api.ts there drags the whole server module into the
  * client bundle and fails the build. */
 
+/* The API this site reads. Overridden by NEXT_PUBLIC_API_BASE_URL - set it in
+ * Vercel's project settings, and in CI through the API_BASE_URL repository
+ * variable - so the default is only what applies when nobody says otherwise.
+ *
+ * It was https://weebblade.duckdns.org, an EC2 instance that is being
+ * terminated. The API runs as a container built from backend/Dockerfile now;
+ * see render.yaml. Baked into the client bundle at build time, like every
+ * NEXT_PUBLIC_ variable, which is fine - it is a public read-only API. */
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://weebblade.duckdns.org";
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://weebblade-api.onrender.com";
 
 /** Mirrors backend/app/schemas.py:Anime. Almost everything is nullable because
  *  the sources genuinely disagree on what they provide - Kitsu carries no studios

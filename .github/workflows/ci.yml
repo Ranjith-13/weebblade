@@ -1,29 +1,25 @@
-# Required repository secrets (Settings -> Secrets and variables -> Actions):
-#   WEEBBLADE_SSH_KEY  - private half of the EC2 key pair (contents of
-#                        weebblade-key.pem), used only within this workflow run
-#   WEEBBLADE_HOST     - the server's public IP or hostname
-#   WEEBBLADE_USER     - ubuntu
-#   CI_AWS_ACCESS_KEY_ID / CI_AWS_SECRET_ACCESS_KEY - a minimally-scoped IAM user
-#                        (weebblade-ci-sg) that can only Authorize/Revoke
-#                        ingress on the one weebblade security group (not even
-#                        describe it - checked 2026-09-14) - used to
-#                        punch a temporary hole for this runner's own IP so SSH
-#                        can stay closed to the internet at large the rest of the
-#                        time (see infra/terraform, allowed_ssh_cidr)
-#   WEEBBLADE_SG_ID    - the security group ID (sg-029497100335e0355)
+# Every push to main: the Python suite, and the frontend typechecked, linted,
+# built and smoke-tested.
 #
-# Without these set, the deploy job's SSH step fails cleanly (bad host/auth) -
-# it doesn't silently do nothing or fall back to some other behavior.
-name: Test and deploy
+# THIS USED TO DEPLOY. It shipped the whole repository to an EC2 instance over
+# SSH, punching a temporary security-group hole for the runner's own IP and
+# revoking it afterwards. That instance is being terminated - the pipeline moved
+# to Actions (.github/workflows/pipeline-*.yml) and the API to a free container
+# built from backend/Dockerfile - so there is nothing to SSH to, and the AWS
+# credentials, host and security-group secrets it needed are no longer used by
+# anything. Delete them from the repository's settings; infra/terraform stays
+# until the instance and its volume are actually gone, because it is what tears
+# them down.
+name: Tests
 
 on:
   push:
     branches: [main]
   workflow_dispatch: {}
 
-# Declared rather than inherited. This workflow reads the tree, runs tests and
-# SSHes out; it writes nothing back to the repository, and a token that cannot
-# write is one that cannot be turned against it.
+# Declared rather than inherited. This workflow reads the tree and runs tests;
+# it writes nothing back, and a token that cannot write is one that cannot be
+# turned against it.
 permissions:
   contents: read
 
@@ -41,7 +37,12 @@ jobs:
       # is the CUDA/GPU build - several GB of unnecessary nvidia-*/triton packages
       # that exhausted disk on both the EC2 build and (found here) the Actions
       # runner's smaller disk too ("No space left on device"). Same fix as the
-      # Airflow/backend Dockerfiles: install the CPU wheel first.
+      # Airflow Dockerfile: install the CPU wheel first.
+      #
+      # Still needed here even though the API no longer uses torch at all: the
+      # index is still built with sentence-transformers, and
+      # tests/test_embed_backends.py is the check that the ONNX queries the API
+      # sends still match it. That test can only run where both are installed.
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - run: pip install -r requirements-dev.txt
@@ -57,15 +58,19 @@ jobs:
   # did not compile could land and nobody would know until someone ran `npm run
   # build` by hand - which is exactly how one got caught during development.
   #
-  # Deliberately NOT a dependency of deploy. That job ships the backend and
-  # pipeline to EC2; the frontend goes to Vercel separately, and a lint error in
-  # a React component is no reason to block a data-pipeline fix from shipping.
-  # A red check on the commit is the signal, and it is enough.
+  # Deliberately NOT dependent on the test job: a lint error in a React component
+  # is no reason to hide a passing data-pipeline suite. A red check on the commit
+  # is the signal, and it is enough.
   frontend:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
+    env:
+      # Where the prerender and the smoke tests point. Set the repository
+      # variable API_BASE_URL to the deployed API's URL; unset, the default in
+      # frontend/lib/types.ts applies.
+      NEXT_PUBLIC_API_BASE_URL: ${{ vars.API_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -96,21 +101,22 @@ jobs:
       # boundaries, anything that only fails at prerender.
       #
       # It DOES reach the network: pages are prerendered at build time and fetch
-      # the live API, so this job goes red if weebblade.duckdns.org is down.
-      # Verified by pointing NEXT_PUBLIC_API_BASE_URL at a dead host - the build
-      # exits 1 on "Error occurred prerendering page /". That is worth keeping,
-      # because Vercel's build fails in exactly the same way: red here means the
-      # deploy would not have worked either.
+      # the live API, so this job goes red when the API is down. Verified by
+      # pointing NEXT_PUBLIC_API_BASE_URL at a dead host - the build exits 1 on
+      # "Error occurred prerendering page /". That is worth keeping, because
+      # Vercel's build fails in exactly the same way: red here means the deploy
+      # would not have worked either.
       #
-      # Which is why these steps are gated rather than deleted. The EC2 instance
-      # is deliberately stopped (2026-10-07) while the pipeline moves off it, so
-      # this check would be red every push for a reason nobody needs telling -
-      # and a permanently red pipeline is one nobody reads. Set the repository
-      # variable SERVER_IS_LIVE to "true" when the instance is running again, and the
+      # Which is why these steps are gated rather than deleted. Set the
+      # repository variable API_IS_LIVE to "true" once the API answers, and this
       # signal comes back exactly as it was. The typecheck and lint above touch
-      # no network and still run on every push.
+      # no network and run on every push regardless.
+      #
+      # The API sleeps when idle and takes about a minute to wake, so the first
+      # fetch of a build can be slow. Next has no default fetch timeout, so it
+      # waits rather than failing.
       - run: npm run build
-        if: vars.SERVER_IS_LIVE == 'true'
+        if: vars.API_IS_LIVE == 'true'
 
       # Smoke tests against that build (frontend/e2e). Until 2026-09-21 this job
       # proved the frontend compiled and nothing proved a page rendered anything:
@@ -120,118 +126,12 @@ jobs:
       # They assert no title, count or season: the catalogue changes weekly and a
       # test that goes red when Summer becomes Fall is a test that gets deleted.
       - run: npx playwright install --with-deps chromium
-        if: vars.SERVER_IS_LIVE == 'true'
+        if: vars.API_IS_LIVE == 'true'
       - run: npm run test:e2e
-        if: vars.SERVER_IS_LIVE == 'true'
+        if: vars.API_IS_LIVE == 'true'
       - uses: actions/upload-artifact@v4
-        if: failure() && vars.SERVER_IS_LIVE == 'true'
+        if: failure() && vars.API_IS_LIVE == 'true'
         with:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
-
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    # The same gate as the frontend's network steps: there is nothing to deploy
-    # to while the instance is stopped, and a job that fails every push teaches
-    # people to ignore the one that matters. Revoking the runner's SSH rule is
-    # if: always(), so a skipped or failed deploy never leaves ingress open.
-    if: >-
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && vars.SERVER_IS_LIVE == 'true'
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ap-south-2
-    steps:
-      - uses: actions/checkout@v4
-
-      # SSH is closed to the internet at large (see infra/terraform,
-      # allowed_ssh_cidr) - runners don't have a fixed IP, so this punches a
-      # /32 hole for just this run's own IP, used only for the SSH steps below.
-      # The "Revoke temporary SSH access" step at the bottom always removes it
-      # again, success or failure - a runner's IP is never left allowed.
-      - name: Authorize this runner's IP for SSH
-        run: |
-          RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
-          echo "RUNNER_IP=$RUNNER_IP" >> "$GITHUB_ENV"
-          aws ec2 authorize-security-group-ingress \
-            --group-id "${{ secrets.WEEBBLADE_SG_ID }}" \
-            --protocol tcp --port 22 --cidr "${RUNNER_IP}/32"
-
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.WEEBBLADE_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          # The rule the step above adds takes a few seconds to apply, and a scan
-          # that starts first times out: the deploy of bf7e422 failed here on
-          # 2026-09-14 and passed on a rerun. So retry for up to two minutes
-          # rather than fail on the race - scripts/weebblade-ssh.sh waits for the
-          # same reason. Checked for output too: a scan that reaches nothing can
-          # still exit 0 with no keys.
-          for attempt in $(seq 1 12); do
-            if keys="$(ssh-keyscan -T 5 -H "${{ secrets.WEEBBLADE_HOST }}" 2>/dev/null)" && [ -n "$keys" ]; then
-              echo "$keys" >> ~/.ssh/known_hosts
-              echo "Host keys on attempt $attempt"
-              exit 0
-            fi
-            echo "SSH not reachable yet (attempt $attempt of 12), retrying in 5s"
-            sleep 5
-          done
-          echo "SSH never became reachable" >&2
-          exit 1
-
-      # Same tar/scp approach used for every manual deploy this project has had so
-      # far - not git-clone-on-server, since the repo is private and that would
-      # need a second credential (a deploy key or PAT) just for the server to read
-      # its own code. The GitHub Actions runner already has the code checked out;
-      # this just ships it over.
-      - name: Sync code to server
-        run: |
-          # frontend/ is excluded deliberately: it's deployed by Vercel, not to
-          # this server, and shipping it here would drag node_modules and build
-          # output into every backend deploy for no reason.
-          tar --exclude='.git' --exclude='.github' --exclude='PROGRESS.md' \
-              --exclude='data' --exclude='.pytest_cache' --exclude='__pycache__' \
-              --exclude='frontend' \
-              -czf /tmp/weebblade.tar.gz .
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-              /tmp/weebblade.tar.gz \
-              "${{ secrets.WEEBBLADE_USER }}@${{ secrets.WEEBBLADE_HOST }}:/home/${{ secrets.WEEBBLADE_USER }}/weebblade.tar.gz"
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-              "${{ secrets.WEEBBLADE_USER }}@${{ secrets.WEEBBLADE_HOST }}" '
-                tar -xzf ~/weebblade.tar.gz -C ~/weebblade &&
-                rm ~/weebblade.tar.gz &&
-                find ~/weebblade -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-              '
-
-      # docker compose up --build alone reuses whatever base image layers
-      # (python:3.12-slim, postgres:16-alpine, caddy:2-alpine,
-      # apache/airflow:...) already happen to be cached locally - it does NOT
-      # re-pull them just because a newer, patched build of the same tag has
-      # since been published upstream. Confirmed this was real: caddy:2-alpine
-      # on the server was still the copy from over two months earlier. `pull`
-      # (for the postgres image: service) and `build --pull` (for the
-      # Dockerfile-built services) force a fresh check on every deploy so OS-
-      # level security patches in these base images actually get picked up.
-      - name: Rebuild and restart the stack
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-              "${{ secrets.WEEBBLADE_USER }}@${{ secrets.WEEBBLADE_HOST }}" '
-                cd ~/weebblade &&
-                sudo docker compose pull postgres &&
-                sudo docker compose build --pull &&
-                sudo docker compose up -d
-              '
-
-      # if: always() - this must run whether the deploy above succeeded or
-      # failed, otherwise a failed run would leave this runner's IP permanently
-      # allowed through SSH until manually cleaned up.
-      - name: Revoke temporary SSH access
-        if: always()
-        run: |
-          aws ec2 revoke-security-group-ingress \
-            --group-id "${{ secrets.WEEBBLADE_SG_ID }}" \
-            --protocol tcp --port 22 --cidr "${RUNNER_IP}/32"
