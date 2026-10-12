@@ -1,0 +1,107 @@
+# Builds the API image and proves it actually serves, before anyone deploys it.
+#
+# WHY THIS EXISTS. Everything about the serving container was verified by
+# running its code in a virtualenv: 382 MB resident, searches in 150 ms, the
+# published warehouse fetched and queried. None of that touches the image
+# itself - the apt layer, the baked model, uvicorn binding $PORT, whether
+# python:3.12-slim has the shared libraries onnxruntime needs. There is no
+# Docker on the machine this was written on, so the first real build would have
+# been on someone else's build server, where a failure is a confusing email
+# rather than a log you can read.
+#
+# So it builds here, starts the container the way the host starts it, and asks
+# it a question. Under a 512 MB cap, which is the free plan's memory limit: if
+# the API ever stops fitting, this goes red instead of the deployment.
+name: API image
+
+on:
+  push:
+    paths:
+      - backend/**
+      - ai/**
+      - render.yaml
+      - .github/workflows/api-image.yml
+  workflow_dispatch:
+
+# Reads the tree, and reads its own releases to fetch the published warehouse.
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Context is the repository root: the image needs ai/ beside backend/app.
+      - name: Build
+        run: docker build -f backend/Dockerfile -t weebblade-api:ci .
+
+      - name: Report the image size
+        run: |
+          docker image inspect weebblade-api:ci --format 'image: {{.Size}} bytes'
+
+      # Started the way a host starts it: a port it is told about rather than
+      # the one in the Dockerfile, and 512 MB to live in. --memory-swap equal to
+      # --memory means no swap, so exceeding it is an OOM kill rather than a
+      # slow container that passes anyway.
+      - name: Start it the way the host does
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          docker run -d --name api \
+            --memory=512m --memory-swap=512m \
+            -e PORT=10000 \
+            -e WAREHOUSE_REPO="${{ github.repository }}" \
+            -e GITHUB_TOKEN="$GH_TOKEN" \
+            -p 10000:10000 \
+            weebblade-api:ci
+
+      # Up to three minutes: a cold start downloads a 41 MB warehouse and loads
+      # the embedding model. Fails with the container's own logs, which is the
+      # whole point of doing this here.
+      - name: Wait for it to serve
+        run: |
+          for attempt in $(seq 1 36); do
+            if curl -fsS http://127.0.0.1:10000/health -o /tmp/health 2>/dev/null; then
+              cat /tmp/health; echo
+              if [ "$(jq -r .warehouse /tmp/health)" != "null" ]; then
+                echo "Serving $(jq -r .warehouse /tmp/health) after ~$((attempt * 5))s"
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo "The API never served a warehouse" >&2
+          docker logs api
+          exit 1
+
+      # The checks worth making on a running container, rather than on code.
+      - name: Check what it is actually doing
+        run: |
+          # ONNX, not torch. The image has no torch in it, so a fallback here
+          # would mean fastembed failed to load - which would still answer
+          # searches, just at twice the memory, and only this names it.
+          docker logs api 2>&1 | grep -q "Query embedding backend: onnx" \
+            || { echo "Not using the ONNX query backend:" >&2; docker logs api; exit 1; }
+
+          # A real search against the real published index.
+          curl -fsS --get --data-urlencode "q=cozy slice of life about cooking" \
+            --data "n=3" http://127.0.0.1:10000/search > /tmp/search
+          jq -e '.results | length == 3' /tmp/search > /dev/null \
+            || { echo "Search returned nothing:" >&2; cat /tmp/search; exit 1; }
+          jq -r '.results[] | "  \(.title)  d=\(.distance)"' /tmp/search
+
+          # The digest, which is the part of the artifact that reached a reader
+          # last and would be the first to silently stop.
+          curl -fsS http://127.0.0.1:10000/digest/latest | jq -r '"digest: \(.run_date)"'
+
+          # Alive after answering, i.e. not OOM-killed by the 512 MB cap.
+          docker inspect api --format 'still running: {{.State.Running}}' | grep -q true \
+            || { echo "The container died while serving:" >&2; docker logs api; exit 1; }
+          docker stats api --no-stream --format 'memory: {{.MemUsage}} ({{.MemPerc}})'
+
+      - name: Logs
+        if: always()
+        run: docker logs api 2>&1 | tail -40
