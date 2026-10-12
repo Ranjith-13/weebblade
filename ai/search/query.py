@@ -6,7 +6,7 @@ from typing import Any
 import duckdb
 
 from .build_index import TABLE_NAME
-from .embed import DIM, embed_texts
+from .embed import DIM, embed_query
 
 # Nearest first, decorated in the same pass. Chroma could only return what it
 # stored, so a match had to be looked up in the warehouse afterwards - and when a
@@ -38,8 +38,11 @@ def find_similar(
     Takes a connection rather than a path: the API already holds one per request,
     and opening the warehouse twice to answer one question is both slower and a
     second chance to fail.
+
+    One query at a time, through embed_query rather than the batch path the index
+    is built with - same model, far less memory. See embed.get_query_embedder.
     """
-    [query_embedding] = embed_texts([query_text])
+    query_embedding = embed_query(query_text)
     return con.execute(_SEARCH, [query_embedding, n_results]).fetch_arrow_table().to_pylist()
 
 
