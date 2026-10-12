@@ -17,6 +17,17 @@ ENV PYTHONUNBUFFERED=1 \
     DATA_DIR=/data \
     FASTEMBED_CACHE_PATH=/opt/fastembed
 
+# libstdc++6, because onnxruntime needs it and python:3.12-slim may not have it.
+# Verified rather than guessed: every shared object in the cp312 onnxruntime
+# wheel declares libstdc++.so.6 and libgcc_s.so.1 and nothing else outside libc
+# (no libgomp, despite that being the usual story). CPython links libgcc_s but
+# it is C, so it has no reason to pull libstdc++ - and the slim image's build
+# stage purges g++. "Probably already there" is not something to find out from a
+# crash loop on a build server, and this costs about 2 MB.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt .
 
 # No torch here any more, and that is the point of this image fitting where it

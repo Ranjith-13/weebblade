@@ -74,7 +74,7 @@ _PROBE = "SELECT count(*) FROM anime_media_latest"
 # Reported by /health, so the live service can be asked which day's catalogue it
 # is actually serving - a question that has no answer anywhere else once the
 # file is fetched rather than mounted.
-state: dict[str, object] = {"tag": None, "origin": None, "checked": None}
+state: dict[str, object] = {"tag": None, "origin": None}
 
 
 def _db_path(data_dir: Path) -> Path:
@@ -199,16 +199,18 @@ def ensure_warehouse(data_dir: Path, timeout: float = 60.0) -> str | None:
     """
     repo = os.environ.get("WAREHOUSE_REPO")
     db = _db_path(data_dir)
+
+    # Reported before anything can fail, so /health describes what is actually
+    # being served even on a run where the check could not be made. A tag file
+    # beside the warehouse means some process fetched it, even if this one was
+    # not asked to - where the file came from is the question being asked, not
+    # what this process did about it.
+    have = current_tag(data_dir)
+    state.update(tag=have,
+                 origin="fetched" if have else "mounted" if db.exists() else None)
     if not repo:
-        # A tag file beside the warehouse means some process fetched it, even if
-        # this one was not asked to - so report where the file came from rather
-        # than what this process did, which is the question /health is asked.
-        have = current_tag(data_dir)
-        state.update(tag=have,
-                     origin="fetched" if have else "mounted" if db.exists() else None)
         return have
 
-    have = current_tag(data_dir)
     try:
         newest = newest_warehouse(_fetch_releases(repo, timeout))
     except urllib.error.HTTPError as exc:
@@ -229,7 +231,6 @@ def ensure_warehouse(data_dir: Path, timeout: float = 60.0) -> str | None:
 
     tag, asset_id = newest
     if tag == have:
-        state.update(tag=tag, origin="fetched")
         logger.info("Already serving the newest published warehouse (%s)", tag)
         return tag
 
