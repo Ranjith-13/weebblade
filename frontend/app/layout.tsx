@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { NavList, PrimaryNav } from "@/components/nav/PrimaryNav";
 import { Provenance, PROVENANCE_FALLBACK } from "@/components/Provenance";
 import { SeasonIndex } from "@/components/SeasonIndex";
+import { SITE_URL } from "@/lib/types";
 import "./globals.css";
 
 /* Bodoni Moda for the masthead. A didone: the historical face of printed
@@ -30,7 +31,7 @@ const archivo = Archivo({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://weebblade.duckdns.org"),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "WeebBlade: a seasonal anime almanac",
     template: "%s | WeebBlade",

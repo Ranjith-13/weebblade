@@ -200,9 +200,13 @@ def ensure_warehouse(data_dir: Path, timeout: float = 60.0) -> str | None:
     repo = os.environ.get("WAREHOUSE_REPO")
     db = _db_path(data_dir)
     if not repo:
-        state.update(tag=current_tag(data_dir),
-                     origin="mounted" if db.exists() else None)
-        return state["tag"]  # type: ignore[return-value]
+        # A tag file beside the warehouse means some process fetched it, even if
+        # this one was not asked to - so report where the file came from rather
+        # than what this process did, which is the question /health is asked.
+        have = current_tag(data_dir)
+        state.update(tag=have,
+                     origin="fetched" if have else "mounted" if db.exists() else None)
+        return have
 
     have = current_tag(data_dir)
     try:

@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 
-const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://weebblade.duckdns.org";
+import { SITE_URL } from "@/lib/types";
+
+const BASE = SITE_URL;
 
 /* /search is disallowed rather than indexed: results are generated per query
  * against a rate-limited endpoint (20/min per IP), so letting a crawler walk

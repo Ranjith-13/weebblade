@@ -19,9 +19,24 @@ function watchConsole(page: Page): string[] {
   page.on("console", (m) => {
     if (m.type() !== "error") return;
     const text = m.text();
+    const url = m.location().url;
     // Image CDNs and the preload heuristic are upstream noise, not this app.
     if (/favicon|preloaded using link preload|ERR_(BLOCKED|CERT|NAME)/i.test(text)) return;
-    errors.push(text);
+    // A POSTER THE SOURCE HAS SINCE DELETED. The catalogue stores the URL a
+    // source gave for a title's artwork, and those rot: two of the schedule's
+    // were gone from media.kitsu.app on 2026-10-13, 404 at the origin, which
+    // the image optimiser passes through as a 404 of its own. That is the
+    // catalogue being older than the CDN, not this app being broken, and there
+    // is nothing a frontend can do about it - so it must not fail a suite that
+    // runs on every push, or the suite gets turned off.
+    //
+    // Narrow deliberately: only a 404, and only through /_next/image. A
+    // misconfigured remotePattern answers 400 and still fails here, as it
+    // should, and so does a 404 on anything this app actually serves.
+    if (/404/.test(text) && /\/_next\/image\?/.test(url)) return;
+    // The URL, because "Failed to load resource" alone names nothing and the
+    // first time this fired it cost a quarter of an hour to find out what.
+    errors.push(url ? `${text} <- ${url}` : text);
   });
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
   return errors;

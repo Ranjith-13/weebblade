@@ -4,8 +4,9 @@ Anime trend-tracking platform built as an end-to-end data engineering project �
 ingestion, orchestration, processing, storage, an API, a frontend, and two AI-assisted
 features on real pipeline infrastructure, not a one-off notebook.
 
-Live: [weebblade.duckdns.org](https://weebblade.duckdns.org) (API) ·
-[weebblade-airflow.duckdns.org](https://weebblade-airflow.duckdns.org) (Airflow UI, credentialed)
+The pipeline runs itself on GitHub Actions for nothing. The serving half is being
+pointed at a free container and a free static host; see
+[Where it runs](#where-it-runs). There is no live link yet.
 
 ## What it does
 
@@ -55,11 +56,26 @@ empty, so each run pulls the state it needs from a GitHub release asset, works, 
 back; a weekly run also publishes a materialised warehouse, one self-contained file holding the
 catalogue and the vectors.
 
+<a id="where-it-runs"></a>
 The API and the Next.js frontend ran on a single AWS EC2 box behind Caddy. That box is stopped:
 it cost about $63/month to serve a portfolio site, and the pipeline was moved off it rather than
-paid for. Nothing serves the API today, which is the honest state of the project — the data half
-runs for free and unattended, the serving half is waiting on a decision about what the app
-becomes.
+paid for.
+
+The API is now a container built from [`backend/Dockerfile`](backend/Dockerfile), deployed from
+[`render.yaml`](render.yaml) on a free instance: 512 MB of memory, no persistent disk, and no way
+to bill anyone — with no payment method on file, Render suspends a Free service that exceeds its
+allowances rather than charging for them. Two consequences shaped the code:
+
+- **No disk.** The API downloads the published warehouse at startup
+  ([`backend/app/warehouse.py`](backend/app/warehouse.py)) and serves it from the container's
+  own filesystem. That artifact was already being built weekly and had no reader.
+- **512 MB.** Search queries are embedded through ONNX rather than torch — 406 MB resident
+  against 868, same weights, vectors identical to 3e-7
+  ([`ai/search/embed.py`](ai/search/embed.py)). Measured end to end, the whole serving process
+  peaks at 382 MB: app, model, catalogue reads and five searches.
+
+It sleeps after 15 minutes without a request and takes about a minute to wake, so the first
+visitor after a quiet spell waits. The frontend goes to Vercel's free tier.
 
 Each ingestion source runs as an independent task — one API being down doesn't
 block the others from landing data, and the downstream merge/digest/search tasks run over
@@ -198,16 +214,16 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 
 | Layer | Choice |
 |---|---|
-| Infra | GitHub Actions runs the pipeline; state in release assets. An AWS EC2 box served the API and is stopped pending the rebuild (its Terraform state was lost, so it is unmanaged) |
+| Infra | GitHub Actions runs the pipeline; state in release assets. The API is a Docker container on a free 512 MB instance (`render.yaml`) that fetches the published warehouse at startup. An AWS EC2 box served the API until October 2026 and is stopped pending deletion (its Terraform state was lost, so it has to be torn down by hand) |
 | Orchestration | GitHub Actions on a schedule, calling `pipeline/run.py`. The Airflow 2.10.4 DAGs are the same steps in the same order and ran it on the server until October 2026 |
 | Ingestion | Python — AniList (GraphQL), Jikan / MAL / Kitsu (REST) |
 | Processing | PySpark (single-node) |
 | Storage | DuckDB views over Parquet |
 | Backend | FastAPI + slowapi rate limiting |
-| AI | Groq (digest) + sentence-transformers `all-MiniLM-L6-v2`; the vectors are a DuckDB table searched with `array_cosine_similarity` |
-| Frontend | Next.js 16 App Router, Tailwind v4, GSAP — runs locally, not deployed |
-| Reverse proxy / HTTPS | Caddy (Let's Encrypt, security headers, access logs) — on the stopped box |
-| CI/CD | GitHub Actions — pytest (including the Spark merge suite) and a frontend typecheck/lint on every push. The deploy and the network-dependent frontend checks are gated behind `SERVER_IS_LIVE` while the instance is stopped |
+| AI | Groq (digest) + `all-MiniLM-L6-v2`; the vectors are a DuckDB table searched with `array_cosine_similarity`. The index is built with sentence-transformers, queries embedded through ONNX to fit 512 MB — a test asserts the two agree |
+| Frontend | Next.js 16 App Router, Tailwind v4, GSAP — Vercel free tier |
+| Reverse proxy / HTTPS | Caddy (Let's Encrypt, security headers, access logs) — on the stopped box; the free instance terminates TLS itself |
+| CI/CD | GitHub Actions — pytest (including the Spark merge suite) and a frontend typecheck/lint on every push. The frontend build and smoke tests prerender against the live API, so they are gated behind the `API_IS_LIVE` repository variable |
 
 ## Repository layout
 
@@ -269,6 +285,32 @@ rather than anywhere local.
 
 The frontend is separate — see [frontend/README.md](frontend/README.md).
 
+## Deploying
+
+Both halves are free and neither can bill: with no payment method on file, each provider
+suspends rather than charges.
+
+**The API** — [`render.yaml`](render.yaml) is a Render blueprint. New > Blueprint, point it at
+this repository, and it asks for the one value the file deliberately does not carry:
+
+| Variable | Value |
+|---|---|
+| `GITHUB_TOKEN` | A fine-grained token, **Contents: read**, this repository only. Required while the repository is private, since the warehouse is a release asset; worth setting even if it goes public, because unauthenticated GitHub API calls are capped at 60/hour per IP and a free container's outbound address is shared. |
+| `WAREHOUSE_REPO` | Already set to this repository. Setting it is what switches the API from "read a mounted file" to "fetch the newest published warehouse". |
+| `ALLOWED_ORIGINS` | The frontend's origin. Update it if the Vercel project is named something else — `/search` is fetched from the browser, so an origin missing here is a search box that fails. |
+
+**The frontend** — a Vercel project with **Root Directory** set to `frontend`, and
+`NEXT_PUBLIC_API_BASE_URL` set to the API's URL.
+
+**Then, in this repository's settings** — set the variable `API_IS_LIVE` to `true`, which
+un-gates the frontend build and the Playwright smoke tests, and `API_BASE_URL` to the same URL
+so CI prerenders against the real thing. Delete the now-unused AWS secrets
+(`WEEBBLADE_SSH_KEY`, `WEEBBLADE_HOST`, `WEEBBLADE_USER`, `WEEBBLADE_SG_ID`,
+`CI_AWS_ACCESS_KEY_ID`, `CI_AWS_SECRET_ACCESS_KEY`).
+
+`GET /health` reports which release the API is serving, which is the only way to tell a stale
+container from a current one once the warehouse is fetched rather than mounted.
+
 ## Operations
 
 - **SSH is closed by default.** No standing rule for a home address; both CI and
@@ -305,21 +347,23 @@ from three live sources, a franchise graph, and a weekly digest. A weekly run ta
 minutes and a daily about one, against 2,000 free minutes a month, and with no payment method on
 the account the workflows stop at the quota rather than billing anything.
 
-**Nothing serves it.** The API and frontend only ever ran on one EC2 box, stopped since 7 October
-2026 because $63/month to host a portfolio site was the wrong trade. The box is parked, not
-deleted: its volume costs about $0.09/day and it can be started for a demo. Choosing where the
-API lives is the next real decision, and the data is already shaped for it — a weekly run
-publishes a materialised warehouse, one 37 MB file a reader can fetch over HTTPS with no lake,
-no object store and no credentials.
+**The serving half has somewhere to live.** The API and frontend only ever ran on one EC2 box,
+stopped since 7 October 2026 because $63/month to host a portfolio site was the wrong trade.
+The API is now a container on a free 512 MB instance that downloads the published warehouse at
+startup, and the frontend goes to Vercel's free tier — both measured rather than assumed before
+being chosen (382 MB peak against 512; searches answer in 130–180 ms). What remains is clicking
+through two dashboards, which needs an account holder rather than a commit.
 
 **Known gaps, stated plainly:**
 
 - Jikan has been down upstream for this project's whole life; the pipeline degrades rather than
   fails, and the catalogue is built from Kitsu, MAL and AniList.
 - The frontend has never been deployed. It typechecks and lints in CI on every push; the build
-  and smoke tests are gated behind `SERVER_IS_LIVE`, because they prerender against a live API.
-- Terraform's state file for the EC2 box was lost, so the host is unmanaged. It is not being
-  fixed: the host is being left behind rather than adopted.
+  and smoke tests are gated behind `API_IS_LIVE`, because they prerender against a live API — so
+  until the API answers, nothing proves a page still renders.
+- Terraform's state file for the EC2 box was lost, so `terraform destroy` cannot tear it down;
+  the instance and its volume have to be deleted from the AWS console. `infra/` stays as the
+  record of what exists there until they are gone.
 - The catalogue's identity is rule-based and occasionally wrong in both directions — a title can
   split when a source renames it, or two rows can stay apart when no rule can see they are one
   show. Each run checks its own output and fails loudly when that happens, which is how the last

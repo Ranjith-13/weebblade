@@ -15,6 +15,14 @@
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://weebblade-api.onrender.com";
 
+/* Where this site itself lives: the base for canonical URLs, Open Graph images,
+ * robots.txt and the sitemap. Three files used to hardcode it separately, all
+ * three to the EC2 host, which would have published a dead domain in every
+ * crawler's index and every shared link's preview. Override with
+ * NEXT_PUBLIC_SITE_URL if the deployment is named something else. */
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://weebblade.vercel.app";
+
 /** Mirrors backend/app/schemas.py:Anime. Almost everything is nullable because
  *  the sources genuinely disagree on what they provide - Kitsu carries no studios
  *  or source material, MAL no slug, cover art, trailer or streaming link. Coverage

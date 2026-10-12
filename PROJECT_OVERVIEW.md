@@ -80,11 +80,11 @@ The merge chooses populated fields using a defined source priority. It does not 
 | Next.js frontend and design system | Translating the data model into browsing, detail, search, and schedule surfaces. |
 | Tests, CI, containers, access controls, and backups | Operating the application beyond a local prototype. |
 
-The stack includes Python, Airflow, PySpark, Parquet, DuckDB (including its vector search), FastAPI, sentence-transformers, Groq, Next.js, Tailwind, GSAP, Docker Compose, Caddy, AWS EC2, Terraform configuration, and GitHub Actions — which now runs the pipeline as well as the tests.
+The stack includes Python, Airflow, PySpark, Parquet, DuckDB (including its vector search), FastAPI, sentence-transformers and ONNX, Groq, Next.js, Tailwind, GSAP, Docker Compose, Caddy, AWS EC2, Terraform configuration, and GitHub Actions — which now runs the pipeline as well as the tests.
 
 ## What is complete, and what is not
 
-At the documented October 2026 milestone, the pipeline runs on GitHub Actions at no cost, with 6,356 catalogue entries across 22 seasons; its state travels between runs as a release asset. The API and frontend ran on an AWS EC2 box that is now stopped, so nothing is publicly served while the hosting question is settled. Counts change as ingestion and matching improve.
+At the documented October 2026 milestone, the pipeline runs on GitHub Actions at no cost, with 6,356 catalogue entries across 22 seasons; its state travels between runs as a release asset. The API and frontend ran on an AWS EC2 box that is now stopped. The API has been rebuilt to run as a container on a free 512 MB instance, downloading the published warehouse at startup instead of sharing a disk with the pipeline, and the frontend goes to a free static host; neither is publicly served until the accounts are connected. Counts change as ingestion and matching improve.
 
 The main limitations are:
 

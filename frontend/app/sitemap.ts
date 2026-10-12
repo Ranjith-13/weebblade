@@ -1,8 +1,8 @@
 import type { MetadataRoute } from "next";
 import { getDigestDates, getSeason } from "@/lib/api";
-import { titleHref } from "@/lib/types";
+import { SITE_URL, titleHref } from "@/lib/types";
 
-const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://weebblade.duckdns.org";
+const BASE = SITE_URL;
 
 /* Every route is real content and none of it is behind auth, so the whole thing
  * is listed. The per-title pages are the long tail worth indexing, each with a

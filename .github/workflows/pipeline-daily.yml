@@ -100,4 +100,19 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add RUNS.md
           git commit -m "Pipeline (daily) $(date -u +%Y-%m-%d) [skip ci]" || exit 0
-          git push
+          # Rebase and retry, because this push races. A run takes minutes and
+          # anyone pushing to main in that window wins: the weekly run of
+          # 2026-10-12 did every piece of work, published its state AND its
+          # warehouse, and went red here on "! [rejected] (fetch first)" over a
+          # one-line changelog. A note about a run must never be what fails it.
+          #
+          # Rebase rather than merge: this commit appends one line to the top of
+          # RUNS.md, so replaying it onto whatever arrived is exactly right, and
+          # a merge commit per run would be noise.
+          for attempt in 1 2 3; do
+            git push && exit 0
+            echo "Push rejected (attempt $attempt) - rebasing onto main and retrying"
+            git pull --rebase --quiet || break
+          done
+          echo "Could not record the run in RUNS.md; the run itself is unaffected" >&2
+          exit 1
