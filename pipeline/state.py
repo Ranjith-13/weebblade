@@ -27,14 +27,20 @@ WHAT IS STATE AND WHAT IS NOT
 
 Kept: processed/ (every source snapshot, the catalogue, the ledgers), identity/
 (the registry - the one irreplaceable thing here, since a lost registry means
-every title changes address), and raw/ (the archived API responses, which cost
-10 MB compressed and are what makes reprocessing possible).
+every title changes address), raw/ (the archived API responses, which cost
+10 MB compressed and are what makes reprocessing possible), and digests/.
 
-Not kept: warehouse.duckdb and the digests, which any run rebuilds from the
-above in seconds - and which could not travel anyway, since the warehouse's
-views carry the absolute path of the machine that built them. A MATERIALISED
-copy of the warehouse is published all the same, as the artifact a reader
-serves; see publish_warehouse.
+The digests were on the "not kept" list, described as something any run rebuilds
+in seconds. That was wrong, and it took publishing a warehouse to notice: a
+digest is what a language model wrote about one week, not a derivation. Asking
+again next week does not reproduce it - it produces different prose about
+different data, and the week it described is gone. The site has an archive page
+for them. They cost a few kilobytes.
+
+Not kept: warehouse.duckdb, which any run does rebuild in seconds - and which
+could not travel anyway, since its views carry the absolute path of the machine
+that built them. A MATERIALISED copy is published all the same, as the artifact
+a reader serves; see publish_warehouse.
 """
 
 from __future__ import annotations
@@ -56,7 +62,7 @@ STATE_ASSET = "state.tar.gz"
 WAREHOUSE_ASSET = "warehouse.duckdb"
 
 # What travels between runs.
-KEPT = ("processed", "identity", "raw")
+KEPT = ("processed", "identity", "raw", "digests")
 
 # How many dated releases to keep. Not a limit anyone imposes - GitHub's only
 # hard cap is 2 GB per file - but an unpruned pile of 35 MB tarballs is how a

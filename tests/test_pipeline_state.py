@@ -97,7 +97,20 @@ def test_the_warehouse_does_not_travel(gh, tmp_path):
     state.fetch_state(there)
 
     assert not (there / "warehouse.duckdb").exists()
-    assert not (there / "digests").exists()  # derived too
+
+
+def test_the_digests_do_travel(gh, tmp_path):
+    """They were on the "not kept" list as something a run rebuilds. They are
+    not: a digest is what a model wrote about one particular week, and asking
+    again next week writes different prose about different data. Published
+    without them, the site's archive page would have listed exactly one entry
+    for ever - whichever week the reader happened to arrive in."""
+    here, there = _lake(tmp_path / "here"), tmp_path / "there"
+
+    state.publish_state(here, "2026-10-11")
+    state.fetch_state(there)
+
+    assert (there / "digests" / "2026-10-11.md").read_bytes() == b"# digest"
 
 
 def test_the_tarball_is_not_left_behind_in_the_lake(gh, tmp_path):
@@ -221,4 +234,4 @@ def test_the_archive_holds_plain_relative_paths(gh, tmp_path):
         names = tar.getnames()
 
     assert all(not n.startswith("/") and ".." not in n for n in names)
-    assert {n.split("/")[0] for n in names} == {"processed", "identity", "raw"}
+    assert {n.split("/")[0] for n in names} == {"processed", "identity", "raw", "digests"}

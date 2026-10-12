@@ -15,8 +15,10 @@
 #
 # WHAT IT TAKES
 #
-#   state-<date>.tar.gz      processed/, identity/, raw/ - what a run needs to
-#                            carry on, and everything that cannot be rebuilt.
+#   state-<date>.tar.gz      processed/, identity/, raw/, digests/ - what a run
+#                            needs to carry on, and everything that cannot be
+#                            rebuilt (a digest is what a model wrote about one
+#                            week; asking again next week writes something else).
 #   warehouse-<date>.duckdb  the materialised catalogue and vectors, when a
 #                            weekly run published one. Derived, so losing it
 #                            costs a rebuild rather than data.
@@ -32,7 +34,7 @@
 #
 #   tar -xzf ~/weebblade-backups/state-YYYY-MM-DD.tar.gz -C /some/where
 #
-# That expands to processed/, identity/ and raw/. The parquet under processed/
+# That expands to processed/, identity/, raw/ and digests/. The parquet under processed/
 # is the source of truth and is fully portable; rebuild a warehouse from it
 # anywhere, which takes about a second:
 #
