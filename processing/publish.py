@@ -66,8 +66,7 @@ def materialise(warehouse: Path, out_path: Path) -> Path | None:
     out = duckdb.connect(str(out_path))
     try:
         out.execute(f"ATTACH '{warehouse}' AS src (READ_ONLY)")
-        for name in names:
-            out.execute(f"CREATE TABLE {name} AS SELECT * FROM src.{name}")
+        _copy_in_dependency_order(out, names)
         out.execute("DETACH src")
     finally:
         out.close()
@@ -77,3 +76,38 @@ def materialise(warehouse: Path, out_path: Path) -> Path | None:
         len(names), out_path.name, out_path.stat().st_size / 1e6,
     )
     return out_path
+
+
+def _copy_in_dependency_order(out: duckdb.DuckDBPyConnection, names: list[str]) -> None:
+    """Copy every object, a view's own dependencies first.
+
+    THE ORDER MATTERS AND IT TOOK A RUN TO FIND OUT. Half of these are views
+    over other views - anime_media_latest reads anime_identity, the change feed
+    and the airing schedule read both - and a view body stores its table names
+    unqualified. Expanding one while copying resolves those names against the
+    database being written, not the one being read, so a view whose dependency
+    has not been copied yet fails with "Table with name anime_identity does not
+    exist". The first weekly run to reach this step died exactly there, after
+    doing all the real work; no local run had, because the order
+    information_schema happens to return is not the same everywhere.
+
+    Resolved by trying, rather than by hardcoding an order that would rot the
+    next time a view is added: each pass copies what it can, and a view whose
+    turn has not come yet is left for the next one. Progress is guaranteed as
+    long as the dependencies form no cycle, which SQL views cannot.
+    """
+    remaining = sorted(names)
+    while remaining:
+        deferred, failures = [], {}
+        for name in remaining:
+            try:
+                out.execute(f"CREATE TABLE {name} AS SELECT * FROM src.{name}")
+            except duckdb.Error as exc:
+                deferred.append(name)
+                failures[name] = str(exc).splitlines()[0]
+        if len(deferred) == len(remaining):
+            raise RuntimeError(
+                "Could not materialise " + ", ".join(
+                    f"{name} ({why})" for name, why in failures.items())
+            )
+        remaining = deferred
