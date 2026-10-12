@@ -73,8 +73,63 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
         created += _franchise_views(con, data_dir)
         created += _change_view(con, data_dir, has_registry)
         created += _airing_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
+        created += _prose_views(con, data_dir)
     finally:
         con.close()
+    return created
+
+
+def _prose_views(con: duckdb.DuckDBPyConnection, data_dir: Path) -> list[str]:
+    """The two things the API serves that were never rows: the weekly digest and
+    each run's own check of its output.
+
+    Both were read straight off the filesystem by their routers - DATA_DIR/digests
+    for one, DATA_DIR/processed/runs for the other - which worked for exactly as
+    long as the API and the pipeline shared a disk. They do not any more: the API
+    runs on a container that downloads one published file and has no lake behind
+    it, so anything it serves has to be IN that file. Four pages of the site are
+    the digest, and they would have gone live permanently empty.
+
+    VIEWS, NOT TABLES, AND NOT GUARDED ON THE FILES EXISTING. Both of these are
+    written AFTER this function runs: generate_digest is three steps later in the
+    weekly, and a run's check record is the last thing it writes at all (see
+    pipeline/run.py). A table built here would hold every digest except the one
+    the run just produced, and a view only created where files already exist
+    would miss the first of each. A bare view over the glob has neither problem:
+    read_text evaluates it when read, which is processing/publish.materialise at
+    the end of the run, and an empty glob is zero rows rather than an error.
+
+    The same laziness is why the franchise and change views can be created here
+    before the steps that write their parquet.
+    """
+    created = []
+    for name, sql in {
+        "digest":
+            "SELECT regexp_extract(filename, '([0-9]{4}-[0-9]{2}-[0-9]{2})\\.md$', 1) "
+            "         AS run_date, content "
+            f"FROM read_text('{data_dir / "digests"}/*.md') "
+            "WHERE run_date <> ''",
+        # The record is kept as the text it was written as, and parsed by the
+        # router against its own schema. Splitting it into columns here would put
+        # half of backend/app/schemas.py in this file and break the API every
+        # time a check learned a new field.
+        #
+        # No ORDER BY: a materialised table has no promised row order, so the
+        # ordering lives in the query that reads it.
+        "run_check":
+            "SELECT regexp_extract(filename, '([^/]+)/[^/]+\\.json$', 1) AS dag, "
+            "       regexp_extract(filename, '([^/]+)\\.json$', 1) AS run_date, "
+            "       content AS record "
+            f"FROM read_text('{data_dir / "processed" / "runs"}/*/*.json')",
+    }.items():
+        try:
+            con.execute(f"CREATE OR REPLACE VIEW {name} AS {sql}")
+            created.append(name)
+        except duckdb.Error:
+            # Belt and braces across DuckDB versions: 1.5.6 binds a glob that
+            # matches nothing without complaint, and an older one refusing to
+            # should cost this one view and a warning, not the whole refresh.
+            logger.warning("Could not create view %s over %s", name, data_dir, exc_info=True)
     return created
 
 

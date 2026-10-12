@@ -39,12 +39,27 @@ def test_refresh_catalog_creates_views_for_available_sources(tmp_path):
 
 
 def test_refresh_catalog_handles_no_data_at_all(tmp_path):
+    """Nothing in the lake claims nothing over it - except the two views that
+    exist whether their files do or not.
+
+    digest and run_check are written later in the same run than this function
+    is called (see _prose_views), so guarding them on the files already being
+    there would mean a run never publishing its own digest. An empty glob is
+    zero rows, so the views are honest about having nothing.
+    """
     data_dir = tmp_path / "data"
     db_path = tmp_path / "warehouse.duckdb"
 
     created = refresh_catalog(data_dir, db_path)
 
-    assert created == []
+    assert created == ["digest", "run_check"]
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        assert con.execute("SELECT count(*) FROM digest").fetchone()[0] == 0
+        assert con.execute("SELECT count(*) FROM run_check").fetchone()[0] == 0
+    finally:
+        con.close()
 
 
 def test_anime_media_latest_dedupes_to_most_recent_run(tmp_path):
