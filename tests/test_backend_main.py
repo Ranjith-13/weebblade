@@ -25,15 +25,21 @@ def test_an_unnamed_origin_gets_no_cors_header():
     assert "access-control-allow-origin" not in response.headers
 
 
-def test_health_says_which_warehouse_it_is_serving():
-    """The warehouse used to be a file on a volume someone could look at, and is
-    now a release asset the process picked itself. Without this, "is the live
-    site stale?" has no answer short of counting titles by hand."""
+def test_health_says_what_it_is_serving_and_how():
+    """Two questions that have no other answer once the API fetches its own
+    warehouse onto a box with no disk and 512 MB.
+
+    Which release: "is the live site stale?" would otherwise mean counting
+    titles by hand. Which embedding backend: a fallback from ONNX to torch
+    answers searches perfectly well at twice the memory, right up until the box
+    kills it for that, and the log line saying so was being dropped entirely
+    before logging was configured."""
     with TestClient(app) as client:
         body = client.get("/health").json()
 
     assert body["status"] == "ok"
     assert "warehouse" in body and "warehouse_origin" in body
+    assert body["search_backend"] in ("onnx", "torch", None)
 
 
 def test_root_lists_endpoints():

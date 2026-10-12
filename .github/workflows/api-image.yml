@@ -82,9 +82,14 @@ jobs:
         run: |
           # ONNX, not torch. The image has no torch in it, so a fallback here
           # would mean fastembed failed to load - which would still answer
-          # searches, just at twice the memory, and only this names it.
-          docker logs api 2>&1 | grep -q "Query embedding backend: onnx" \
-            || { echo "Not using the ONNX query backend:" >&2; docker logs api; exit 1; }
+          # searches, just at twice the memory, silently, until the box killed
+          # it. Asked of /health rather than grepped out of the logs: the first
+          # version of this check grepped, failed, and was right to - the app
+          # configured no logging at all, so the line it looked for had never
+          # been emitted. A field is not susceptible to that.
+          [ "$(jq -r .search_backend /tmp/health)" = "onnx" ] \
+            || { echo "Not using the ONNX query backend:" >&2; cat /tmp/health; \
+                 docker logs api; exit 1; }
 
           # A real search against the real published index.
           curl -fsS --get --data-urlencode "q=cozy slice of life about cooking" \

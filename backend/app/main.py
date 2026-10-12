@@ -18,6 +18,29 @@ from .routers import anime, catalogue, changes, digest, runs, schedule, search
 
 logger = logging.getLogger(__name__)
 
+# WITHOUT THIS, NOTHING THIS APP LOGS IS EVER SEEN. Python's root logger has no
+# handler unless something installs one, and the fallback it uses instead emits
+# WARNING and above - so every INFO line on the serving path went nowhere.
+# uvicorn configures its own named loggers and not the root, so its lines
+# appeared and the application's did not, which is a log that looks healthy
+# precisely because the interesting half is missing.
+#
+# Found by building the image in CI and asking the running container which
+# embedding backend it had chosen: the answer was not in its logs, because none
+# of the three lines that say so had ever been emitted anywhere.
+#
+# Render collects stdout, so a handler on it is all this needs.
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
+# Which embedding backend the warm-up actually got, for /health to report.
+# Recorded rather than asked for on demand: calling get_query_embedder here
+# would try to LOAD the model if the warm-up had failed, turning a health check
+# into several seconds of work on a box with 512 MB.
+search_backend: str | None = None
+
 # How often a long-lived process re-checks for a newly published warehouse. The
 # weekly run publishes once a week, so this only has to be shorter than that to
 # be correct; six hours means a reader is at most six hours behind a release
@@ -70,11 +93,12 @@ def _warm_up_search_model() -> None:
     got, which is the one line worth reading in a cold-start log - see
     ai/search/embed.get_query_embedder.
     """
+    global search_backend
     try:
         from ai.search.embed import get_query_embedder
 
-        backend, _ = get_query_embedder()
-        logger.info("Search model ready (%s)", backend)
+        search_backend, _ = get_query_embedder()
+        logger.info("Search model ready (%s)", search_backend)
     except Exception:
         logger.warning("Could not warm up the search embedding model at startup", exc_info=True)
 
@@ -138,6 +162,11 @@ def health():
         "status": "ok",
         "warehouse": warehouse.state["tag"],
         "warehouse_origin": warehouse.state["origin"],
+        # "onnx" or "torch", or null where the warm-up failed. Here rather than
+        # only in a log line because the difference is 406 MB against 868 on a
+        # box with 512, and a fallback answers searches perfectly well right up
+        # until it is killed for memory. Worth being able to ask.
+        "search_backend": search_backend,
     }
 
 
