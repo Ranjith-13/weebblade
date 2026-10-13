@@ -1,0 +1,118 @@
+# Rebuilds the serving artifact from the state that is already published, and
+# nothing else. No ingestion, no merge, no digest - so no upstream request to
+# any of the four sources, no Groq call, and no JVM.
+#
+# WHAT IT IS FOR. The warehouse a reader serves is published by the weekly run,
+# so anything that changes how it is BUILT rather than what is in it - a new
+# view, a fix to materialising, a correction seeded into the state by hand -
+# otherwise waits until Sunday to reach anyone. This is the short path: restore,
+# refresh the views over it, materialise, publish. About two minutes.
+#
+# It is deliberately manual. A schedule would republish an artifact nobody
+# asked for; the weekly already does that with fresh data.
+#
+# It does NOT regenerate the digest. That is the point: a digest is what a model
+# wrote about one week (see pipeline/state.py), and asking again would overwrite
+# it with different prose about the same week.
+#
+# It DOES rebuild the search index, and must. warehouse.duckdb is not state -
+# it is rebuilt from the lake every run - so this starts from no warehouse at
+# all, and refresh_catalog builds views over parquet and nothing else. The
+# vectors are a table that build_search_index writes. Publishing without this
+# step would ship an artifact with a perfect catalogue and no anime_embedding,
+# which is an API whose every search answers 503. Nearly shipped exactly that.
+name: Republish the warehouse
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# The pipeline's group: this writes the same release assets a run does, and the
+# two must never do it at once.
+concurrency:
+  group: weebblade-pipeline
+  cancel-in-progress: false
+
+jobs:
+  republish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: airflow/requirements.txt
+
+      # CPU-only torch first, for the reason airflow/Dockerfile spells out: the
+      # default wheel is the CUDA build, several GB of nvidia-* libraries that
+      # are useless here and have filled a runner's disk before.
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      # The pinned set, duckdb 1.1.3 above all: the file this publishes has to
+      # be readable by the API, which pins the same. A warehouse written by a
+      # newer DuckDB is a warehouse the API cannot open.
+      - run: pip install -r airflow/requirements.txt
+
+      - name: Restore the published state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -c "from pathlib import Path; import pipeline.state as s; s.fetch_state(Path('data'))"
+
+      - name: Rebuild the views over it
+        run: |
+          python -c "
+          from pathlib import Path
+          from processing.duckdb_catalog import refresh_catalog
+          names = refresh_catalog(Path('data'), Path('data/warehouse.duckdb'))
+          print(f'{len(names)} objects: ' + ', '.join(sorted(names)))
+          "
+
+      # The vectors. See the note at the top: they are a table rather than a
+      # view, this starts from no warehouse, and an artifact without them is an
+      # API that 503s every search.
+      - name: Rebuild the search index
+        run: |
+          python -c "
+          from pathlib import Path
+          from ai.search.build_index import build_index
+          print('indexed', build_index(Path('data/warehouse.duckdb')), 'titles')
+          "
+
+      # What a reader would get, checked before anyone can get it. Before the
+      # publish deliberately: an artifact with a perfect catalogue and no vectors
+      # is an API that answers 503 to every search, and finding that out from the
+      # live service rather than from here is the whole thing this job exists to
+      # avoid.
+      - name: Check what the artifact holds
+        run: |
+          python -c "
+          import sys, duckdb
+          con = duckdb.connect('data/warehouse.duckdb', read_only=True)
+          titles = con.execute('SELECT count(*) FROM anime_media_latest').fetchone()[0]
+          vectors = con.execute('SELECT count(*) FROM anime_embedding').fetchone()[0]
+          digests = [r[0] for r in con.execute('SELECT run_date FROM digest ORDER BY 1').fetchall()]
+          checks = con.execute('SELECT count(*) FROM run_check').fetchone()[0]
+          print('titles  ', titles)
+          print('vectors ', vectors)
+          print('digests ', digests)
+          print('checks  ', checks)
+          if not titles or not vectors:
+              sys.exit('An artifact with no catalogue or no vectors is not worth serving')
+          "
+
+      - name: Materialise and publish it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c "
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import pipeline.state as s
+          tag = s.publish_warehouse(Path('data'), datetime.now(timezone.utc).strftime('%Y-%m-%d'))
+          print('published to', tag)
+          "
