@@ -58,10 +58,29 @@ jobs:
       # newer DuckDB is a warehouse the API cannot open.
       - run: pip install -r airflow/requirements.txt
 
+      # The tag is carried forward, because the artifact belongs to the state it
+      # was built from. Tagging it by today's date instead - which is what
+      # publish_warehouse does when you let it - creates a release holding a
+      # warehouse and no state, and the next run's fetch_state asked that
+      # release for a state.tar.gz that was never there. It happened on this
+      # job's first invocation and would have failed the following daily at its
+      # first step. fetch_state no longer trusts the newest tag blindly; this
+      # stops making the shape in the first place.
       - name: Restore the published state
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python -c "from pathlib import Path; import pipeline.state as s; s.fetch_state(Path('data'))"
+        run: |
+          python -c "
+          import os
+          from pathlib import Path
+          import pipeline.state as s
+          tag = s.fetch_state(Path('data'))
+          if tag is None:
+              raise SystemExit('Nothing published yet - there is no state to rebuild from')
+          Path('state_tag').write_text(tag)
+          print('restored', tag)
+          "
+          echo "STATE_TAG=$(cat state_tag)" >> "$GITHUB_ENV"
 
       - name: Rebuild the views over it
         run: |
@@ -105,14 +124,14 @@ jobs:
               sys.exit('An artifact with no catalogue or no vectors is not worth serving')
           "
 
-      - name: Materialise and publish it
+      - name: Materialise and publish it, onto the release its state came from
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python -c "
+          import os
           from pathlib import Path
-          from datetime import datetime, timezone
           import pipeline.state as s
-          tag = s.publish_warehouse(Path('data'), datetime.now(timezone.utc).strftime('%Y-%m-%d'))
-          print('published to', tag)
+          run_date = os.environ['STATE_TAG'].removeprefix(s.TAG_PREFIX)
+          print('published to', s.publish_warehouse(Path('data'), run_date))
           "

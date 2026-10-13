@@ -80,15 +80,30 @@ def _gh(*args: str, check: bool = True) -> str:
     return result.stdout.strip()
 
 
-def _releases() -> list[str]:
-    """Every state release, newest first."""
-    out = _gh("release", "list", "--limit", "100", "--json", "tagName,createdAt")
-    tags = [
-        r["tagName"] for r in sorted(json.loads(out or "[]"),
-                                     key=lambda r: r["createdAt"], reverse=True)
-        if r["tagName"].startswith(TAG_PREFIX)
+def _releases(carrying: str | None = None) -> list[str]:
+    """Every state release, newest first - or only those carrying `carrying`.
+
+    ASSET-AWARE, AND IT HAS TO BE. "The newest release" and "the newest release
+    that has what I need" are not the same thing, and treating them as the same
+    broke the next run the first time a release existed without a state asset.
+    That happened immediately: publish_warehouse tags by today's date, so
+    republishing an artifact built from yesterday's state created a release
+    holding a warehouse and nothing else - and the next fetch_state would have
+    asked it for a state.tar.gz that was never there and failed the run at its
+    first step. A partially failed run can leave the same shape.
+
+    Via the REST API rather than `gh release list`, which cannot report assets
+    at all: its --json takes no "assets" field. One request either way.
+    """
+    out = _gh("api", "repos/{owner}/{repo}/releases?per_page=100")
+    releases = sorted(json.loads(out or "[]"),
+                      key=lambda r: r.get("created_at") or "", reverse=True)
+    return [
+        r["tag_name"] for r in releases
+        if str(r.get("tag_name", "")).startswith(TAG_PREFIX)
+        and (carrying is None
+             or any(a.get("name") == carrying for a in r.get("assets") or []))
     ]
-    return tags
 
 
 def fetch_state(data_dir: Path) -> str | None:
@@ -96,8 +111,11 @@ def fetch_state(data_dir: Path) -> str | None:
 
     Returns the tag restored, or None on the very first run, when starting from
     nothing is correct rather than fatal.
+
+    The newest release that actually HAS a state asset, which is not always the
+    newest release - see _releases.
     """
-    tags = _releases()
+    tags = _releases(carrying=STATE_ASSET)
     if not tags:
         logger.warning("No published state yet - starting from an empty lake")
         return None

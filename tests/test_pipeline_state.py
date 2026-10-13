@@ -28,6 +28,15 @@ def gh(tmp_path, monkeypatch):
 
     def fake_gh(*args, check=True):
         calls.append(args)
+        if args[0] == "api":
+            # What the REST API answers, assets included - which is the whole
+            # reason the code asks it rather than `gh release list`.
+            tags = sorted(p.name for p in store.iterdir())
+            return json.dumps([
+                {"tag_name": t, "created_at": f"2026-10-{i:02d}T00:00:00Z",
+                 "assets": [{"name": f.name} for f in sorted((store / t).iterdir())]}
+                for i, t in enumerate(tags, 1)
+            ])
         verb = args[1]
         if verb == "list":
             tags = sorted(p.name for p in store.iterdir())
@@ -44,8 +53,17 @@ def gh(tmp_path, monkeypatch):
             return ""
         if verb == "download":
             target = Path(args[args.index("--dir") + 1])
+            pattern = args[args.index("--pattern") + 1] if "--pattern" in args else None
             target.mkdir(parents=True, exist_ok=True)
-            for f in (store / args[2]).iterdir():
+            wanted = [f for f in (store / args[2]).iterdir()
+                      if pattern is None or f.name == pattern]
+            if not wanted:
+                # gh exits non-zero when the pattern matches no asset, and _gh
+                # turns that into a RuntimeError. Modelled, because a release
+                # that lacks the asset being asked for is exactly the case this
+                # suite needs to cover.
+                raise RuntimeError(f"gh release download: no asset matching {pattern}")
+            for f in wanted:
                 (target / f.name).write_bytes(f.read_bytes())
             return ""
         if verb == "delete":
@@ -111,6 +129,30 @@ def test_the_digests_do_travel(gh, tmp_path):
     state.fetch_state(there)
 
     assert (there / "digests" / "2026-10-11.md").read_bytes() == b"# digest"
+
+
+def test_a_release_holding_only_a_warehouse_is_not_mistaken_for_state(gh, tmp_path):
+    """The newest release and the newest release that HAS state are different
+    things, and treating them as one broke the next run within minutes of it
+    first happening.
+
+    publish_warehouse tags by today's date, so republishing an artifact built
+    from yesterday's state made a release carrying a warehouse and nothing
+    else. fetch_state took the newest tag, asked it for a state.tar.gz that was
+    never there, and would have failed the following run at its first step - a
+    whole pipeline stopped by an extra file in the wrong place. A run that dies
+    between publishing its warehouse and its state leaves the same shape.
+    """
+    here, there = _lake(tmp_path / "here"), tmp_path / "there"
+    state.publish_state(here, "2026-10-12")
+
+    # A later release with only the serving artifact on it.
+    store, _ = gh
+    (store / "state-2026-10-13").mkdir()
+    (store / "state-2026-10-13" / state.WAREHOUSE_ASSET).write_bytes(b"portable")
+
+    assert state.fetch_state(there) == "state-2026-10-12"
+    assert (there / "identity" / "registry.parquet").read_bytes() == b"the registry"
 
 
 def test_the_tarball_is_not_left_behind_in_the_lake(gh, tmp_path):
