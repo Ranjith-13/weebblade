@@ -34,6 +34,7 @@ type State =
  * would buy nothing, and results have no SEO value worth prerendering. */
 export function SearchClient({ total }: { total: number }) {
   const [state, setState] = useState<State>({ status: "idle" });
+  const [isWaking, setIsWaking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   // Guards against an earlier slow request resolving after a later one and
   // overwriting fresher results.
@@ -44,7 +45,14 @@ export function SearchClient({ total }: { total: number }) {
     if (!trimmed) return;
 
     const id = ++requestId.current;
+    setIsWaking(false);
     setState({ status: "loading", query: trimmed });
+
+    const wakeTimer = setTimeout(() => {
+      if (id === requestId.current) {
+        setIsWaking(true);
+      }
+    }, 3500);
 
     try {
       const url = new URL("/search", API_BASE);
@@ -85,6 +93,8 @@ export function SearchClient({ total }: { total: number }) {
         message: "Could not reach the API. It may be restarting after a deploy.",
         retry: trimmed,
       });
+    } finally {
+      clearTimeout(wakeTimer);
     }
   }
 
@@ -154,7 +164,14 @@ export function SearchClient({ total }: { total: number }) {
         )}
 
         {state.status === "loading" && (
-          <p className="meta">Embedding &ldquo;{state.query}&rdquo;&hellip;</p>
+          <div>
+            <p className="meta">Embedding &ldquo;{state.query}&rdquo;&hellip;</p>
+            {isWaking && (
+              <p className="mt-2.5 max-w-[50ch] text-[0.82rem] leading-relaxed text-ink-soft">
+                Waking up the server container on Render&hellip; The free tier sleeps after 15 minutes of inactivity; initial query after idle takes ~30 seconds while the container boots.
+              </p>
+            )}
+          </div>
         )}
 
         {state.status === "error" && (

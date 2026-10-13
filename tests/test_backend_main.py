@@ -14,6 +14,17 @@ def test_a_named_origin_is_allowed():
     assert response.headers["access-control-allow-origin"] == DEFAULT_ORIGINS[0]
 
 
+def test_vercel_preview_origins_are_allowed():
+    """Vercel branches produce preview domains (e.g. weebblade-git-feat-user.vercel.app).
+    These must be allowed by CORS regex so client-side /search functions in preview builds."""
+    preview_origin = "https://weebblade-git-feature-branch-ranjith-13.vercel.app"
+    with TestClient(app) as client:
+        response = client.get("/health", headers={"Origin": preview_origin})
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == preview_origin
+
+
 def test_an_unnamed_origin_gets_no_cors_header():
     """It was "*" while there was no frontend origin to name. The request still
     succeeds - this is a public read-only API and curl was never subject to CORS

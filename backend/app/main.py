@@ -136,6 +136,7 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins(),
+    allow_origin_regex=r"^https://weebblade(-.*)?\.vercel\.app$",
     allow_methods=["GET"],
     allow_headers=["*"],
 )

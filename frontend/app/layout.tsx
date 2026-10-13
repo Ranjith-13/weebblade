@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { NavList, PrimaryNav } from "@/components/nav/PrimaryNav";
 import { Provenance, PROVENANCE_FALLBACK } from "@/components/Provenance";
 import { SeasonIndex } from "@/components/SeasonIndex";
+import { WarmupPing } from "@/components/WarmupPing";
 import { SITE_URL } from "@/lib/types";
 import "./globals.css";
 
@@ -52,6 +53,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${bodoni.variable} ${archivo.variable}`}>
       <body className="flex min-h-dvh flex-col">
+        <WarmupPing />
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:border focus:border-ink focus:bg-paper focus:px-3 focus:py-2 focus:text-sm"
