@@ -363,6 +363,30 @@ async function AnimeDetail({
         </h1>
         {secondary && <p className="mt-2.5 text-ink-soft">{secondary}</p>}
 
+        {/* THE ONE THING HERE NO OTHER ANIME SITE HAS, and until now the only
+            way to find out it existed was to open a title and scroll past the
+            synopsis, the trailer and twelve rows of facts. The history itself
+            stays where it is - it is reference, not headline - but a reader is
+            told at the top that it is there, and how much of it, so scrolling
+            for it is a decision rather than an accident.
+
+            Only where there is something to point at, for the same reason the
+            section itself is conditional: the weekly run refetches the current
+            season alone, so most older titles have no history, and a pointer to
+            an empty section would promise what the page cannot show. */}
+        {changes.length > 0 && (
+          <p className="meta mt-2.5">
+            <a
+              href="#what-changed"
+              className="inline-block py-1 underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+            >
+              {changes.length === 1
+                ? `One change recorded, on ${changeDate(changes[0].run_date, changes[0].run_date)}`
+                : `${changes.length} changes recorded, the latest on ${changeDate(changes[0].run_date, changes[0].run_date)}`}
+            </a>
+          </p>
+        )}
+
         {anime.genres.length > 0 && (
           <ul className="mt-5 flex flex-wrap gap-2">
             {anime.genres.map((genre) => (
@@ -476,7 +500,7 @@ async function AnimeDetail({
             empty section would read as "nothing changed" rather than "not
             watched". */}
         {changes.length > 0 && (
-          <section className="mt-7 border-t border-rule pt-5">
+          <section id="what-changed" className="mt-7 border-t border-rule pt-5 scroll-mt-6">
             <h2 className="stamp mb-3">What changed</h2>
             <ol>
               {shownChanges.map((c, i) => (

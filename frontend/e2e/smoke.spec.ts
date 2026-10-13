@@ -71,6 +71,19 @@ test("a title page opens from the catalogue and carries its facts", async ({ pag
   await expect(page.locator("h1")).toBeVisible();
   // Every title page states a status, whatever else it lacks.
   await expect(page.getByText(/Status/i).first()).toBeVisible();
+
+  /* The per-source history is the one thing here no other anime site has, and
+     it sits below the synopsis, the trailer and the facts. A reader is told at
+     the top that it exists - but only where it does, since the weekly run
+     refetches the current season alone and most older titles have none.
+     Asserted as an implication rather than a fact about any particular title,
+     because which titles have history changes every week and a test that goes
+     red for that is a test that gets deleted. */
+  const history = page.locator("#what-changed");
+  if (await history.count()) {
+    await expect(page.locator('a[href="#what-changed"]')).toBeVisible();
+  }
+
   expect(errors, "title page console").toEqual([]);
 });
 
