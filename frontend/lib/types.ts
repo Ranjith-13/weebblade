@@ -8,9 +8,9 @@
  * Vercel's project settings, and in CI through the API_BASE_URL repository
  * variable - so the default is only what applies when nobody says otherwise.
  *
- * It was https://weebblade.duckdns.org, an EC2 instance that is being
- * terminated. The API runs as a container built from backend/Dockerfile now;
- * see render.yaml. Baked into the client bundle at build time, like every
+ * It was https://weebblade.duckdns.org, an EC2 instance deleted on 13 October
+ * 2026. The API runs as a container built from backend/Dockerfile now; see
+ * render.yaml. Baked into the client bundle at build time, like every
  * NEXT_PUBLIC_ variable, which is fine - it is a public read-only API. */
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://weebblade-api.onrender.com";
