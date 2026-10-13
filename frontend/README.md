@@ -1,7 +1,7 @@
 # WeebBlade — frontend
 
 Next.js 16 (App Router) reading the public WeebBlade API. Deployed separately from the backend:
-Vercel builds this directory, while the API stays self-hosted on EC2 behind Caddy.
+Vercel builds this directory, while the API runs as a container on Render (`weebblade-api.onrender.com`).
 
 Design intent lives in [`DESIGN.md`](./DESIGN.md) — read that before changing visual decisions;
 most of them are deliberate rather than defaults.

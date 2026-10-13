@@ -84,7 +84,7 @@ The stack includes Python, Airflow, PySpark, Parquet, DuckDB (including its vect
 
 ## What is complete, and what is not
 
-At the documented October 2026 milestone, the pipeline runs on GitHub Actions at no cost, with 6,356 catalogue entries across 22 seasons; its state travels between runs as a release asset. The API and frontend ran on an AWS EC2 box that is now stopped. The API has been rebuilt to run as a container on a free 512 MB instance, downloading the published warehouse at startup instead of sharing a disk with the pipeline, and the frontend goes to a free static host; neither is publicly served until the accounts are connected. Counts change as ingestion and matching improve.
+At the documented October 2026 milestone, the pipeline runs on GitHub Actions at no cost, with 6,356 catalogue entries across 22 seasons; its state travels between runs as a release asset. The API and frontend ran on an AWS EC2 box that was decommissioned in October 2026. The API is deployed as a container on Render's free tier (`weebblade-api.onrender.com`), downloading the published warehouse at startup instead of sharing a disk with the pipeline, and the frontend is live on Vercel (`weebblade.vercel.app`). Counts change as ingestion and matching improve.
 
 The main limitations are:
 
