@@ -4,9 +4,9 @@ Anime trend-tracking platform built as an end-to-end data engineering project �
 ingestion, orchestration, processing, storage, an API, a frontend, and two AI-assisted
 features on real pipeline infrastructure, not a one-off notebook.
 
-API: **[weebblade-api.onrender.com](https://weebblade-api.onrender.com)** — live, free, serving the
-warehouse the pipeline publishes. The frontend goes to Vercel next; see
-[Where it runs](#where-it-runs).
+Live: **[weebblade.vercel.app](https://weebblade.vercel.app)** · API:
+[weebblade-api.onrender.com](https://weebblade-api.onrender.com) — both free, serving the warehouse
+the pipeline publishes weekly. See [Where it runs](#where-it-runs).
 
 ## What it does
 
@@ -347,11 +347,11 @@ from three live sources, a franchise graph, and a weekly digest. A weekly run ta
 minutes and a daily about one, against 2,000 free minutes a month, and with no payment method on
 the account the workflows stop at the quota rather than billing anything.
 
-**The API is live, for nothing.** It ran on one EC2 box until 7 October 2026, stopped because
+**It is live, for nothing.** It ran on one EC2 box until 7 October 2026, stopped because
 $63/month to host a portfolio site was the wrong trade. It is now a container on a free 512 MB
 instance that downloads the published warehouse at startup — measured rather than assumed before
 being chosen, and measured again in the container: **199 MiB of 512**, searches in 150 ms, all
-6,359 titles and vectors and eight digests. The frontend goes to Vercel's free tier next.
+6,359 titles and vectors and eight digests. The frontend is on Vercel's free tier.
 
 With the API answering, CI's frontend build and Playwright smoke tests run again (they prerender
 against it, and had been gated off since the box stopped) — so a page that renders an empty shell
