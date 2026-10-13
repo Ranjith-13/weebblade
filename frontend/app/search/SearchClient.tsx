@@ -48,14 +48,20 @@ export function SearchClient({ total }: { total: number }) {
     setIsWaking(false);
     setState({ status: "loading", query: trimmed });
 
-    /* A warm search answers in about 150ms; one that has not come back in 3.5s
-     * is almost certainly waking the API rather than thinking hard, and a
-     * spinner with no explanation reads as broken. */
+    /* MEASURED AGAINST THE LIVE SERVICE, 13 October 2026, after 17 idle
+     * minutes: a cold /health took 32.4s, the first search after it 2.5s, a
+     * warm search 1.8s. So this has to straddle 2.5s against 32s.
+     *
+     * 5s, not the 3.5s it first shipped with. 3.5s sat barely a second above a
+     * normal warm search on a 0.1-CPU instance, so an ordinary slow query would
+     * have told the reader the service was asleep while it was wide awake, and
+     * a notice that cries wolf is worse than no notice. The 150ms it was set
+     * from was measured on a laptop and does not survive the plan this runs on. */
     const wakeTimer = setTimeout(() => {
       if (id === requestId.current) {
         setIsWaking(true);
       }
-    }, 3500);
+    }, 5000);
 
     try {
       const url = new URL("/search", API_BASE);
@@ -172,12 +178,14 @@ export function SearchClient({ total }: { total: number }) {
             {/* Said the way everything else on this site says it: what is
               * happening and why, in the reader's terms. Not "the container is
               * booting on Render" - a reader has no container and did not choose
-              * the host. "About a minute" is the provider's own published figure
-              * for a free instance waking, not a guess. */}
+              * the host. "About half a minute" is measured, not borrowed: 32.4s to
+              * the first response after 17 idle minutes. Render's published figure
+              * is "about a minute", which would have been the safe thing to print
+              * and the wrong thing to say. */}
             {isWaking && (
               <p className="mt-2.5 max-w-[50ch] text-[0.82rem] leading-relaxed text-ink-soft">
                 Waking the search service. It sleeps when nobody has searched for a quarter of
-                an hour, and takes about a minute to come back.
+                an hour, and takes about half a minute to come back.
               </p>
             )}
           </div>

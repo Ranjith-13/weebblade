@@ -46,7 +46,7 @@ only because the API is public, unauthenticated and read-only, so CORS guards a 
 container's bandwidth rather than anyone's data. If that ever stops being true, this rule
 is not the control to rely on.
 
-### 2. [~] Cold start is explained rather than suffered
+### 2. [x] Cold start is explained rather than suffered
 
 A free instance sleeps after 15 idle minutes. Two halves shipped:
 
@@ -60,24 +60,40 @@ A free instance sleeps after 15 idle minutes. Two halves shipped:
   host. Now: *"Waking the search service. It sleeps when nobody has searched for a quarter
   of an hour, and takes about a minute to come back."*
 
-*Why **[~]** and not **[x]**:* see item 3. The duration in that sentence is Render's
-published figure, not a measurement.
+*Corrected after item 3 measured it.* The notice first said "about a minute", borrowed
+from Render's docs, and fired after 3.5s. Both were wrong against the real service: it
+wakes in **32.4s**, and a warm search on an 0.1-CPU instance takes **1.8s**, so a 3.5s
+threshold sat barely a second above normal and would have told readers the service was
+asleep while it was awake. Now half a minute, after 5s.
 
 ---
 
 ## Open — measurement
 
-### 3. [ ] Time an actual cold start
+### 3. [x] Time an actual cold start
 
-Nobody has. "35–50s" and "~30s" were both asserted without a stopwatch, and one of them
-reached user-facing copy. The only honest number currently available is the provider's
-"about a minute".
+Done, 13 October 2026, after 17 minutes with nothing touching the API:
 
-Needs 15 minutes with no traffic (the warm-up ping defeats casual attempts), then a timed
-first request. Worth recording the breakdown too: container start, 41 MB warehouse
-download, ONNX model load. If the download dominates, item 9 becomes worth doing.
+| | |
+|---|---|
+| `/health`, cold | **32.4s** (connect 0.06s, so all of it server-side) |
+| First `/search` after the wake | 2.5s |
+| `/search`, warm | 1.8s |
+| `/health`, warm | 0.09s |
 
-*Cost:* none. *Next:* leave it idle, then time `/health` and a first `/search`.
+Three things this settled. The wake is **half a minute, not a minute** - Render's published
+figure is conservative, and printing it would have been safe and wrong. A warm search is
+**1.8s, not the 150ms measured on a laptop** - an 0.1-CPU instance is an order of magnitude
+slower at the ONNX embedding, which is what made the 3.5s threshold unsafe. And the first
+search after a wake is only 0.7s worse than a warm one, so the model and the warehouse are
+both ready by the time `/health` answers: the 32s is the whole cost, not a prelude to more.
+
+Not separable from outside: connect was 0.06s, so container start, the 41 MB download and
+the model load are one opaque 32s. Splitting them needs Render's own logs.
+
+*Note:* it took two attempts. The first used `bc`, which is not installed, so the timings
+were lost and the request woke the container - costing another 17 minutes. curl reports
+`%{time_total}` itself and needs nothing.
 
 ---
 
