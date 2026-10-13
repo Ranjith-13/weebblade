@@ -214,10 +214,26 @@ def ensure_warehouse(data_dir: Path, timeout: float = 60.0) -> str | None:
     try:
         newest = newest_warehouse(_fetch_releases(repo, timeout))
     except urllib.error.HTTPError as exc:
-        # 403/429 with no token is the shared-IP rate limit; worth naming,
-        # because the fix is a token rather than a retry.
-        hint = " (set GITHUB_TOKEN)" if exc.code in (403, 429) and not os.environ.get(
-            "GITHUB_TOKEN") else ""
+        # Name the two that have a specific fix, because a year from now the
+        # symptom is identical in both cases - a warehouse that stops updating
+        # and then, after a restart, 503s - and the fixes are opposites.
+        #
+        # 401 is the token: expired, revoked, or wrong. Fine-grained tokens last
+        # a year at most, so this one is not hypothetical, it is scheduled. It
+        # is not predicted here on purpose: GitHub does send a
+        # GitHub-Authentication-Token-Expiration header, but it is documented as
+        # unreliable for fine-grained tokens - returning server time, or a
+        # minute from now - and a warning that fires falsely is worse than none.
+        # So this says it plainly once it has actually happened.
+        #
+        # 403/429 with no token at all is the shared-IP rate limit, where the
+        # fix is a token rather than a retry.
+        if exc.code == 401:
+            hint = " - GITHUB_TOKEN is expired, revoked or wrong"
+        elif exc.code in (403, 429) and not os.environ.get("GITHUB_TOKEN"):
+            hint = " - rate limited with no GITHUB_TOKEN set (60/hour per IP, shared)"
+        else:
+            hint = ""
         logger.warning("Could not list releases of %s: HTTP %s%s", repo, exc.code, hint)
         return have
     except Exception:
