@@ -4,9 +4,9 @@ Anime trend-tracking platform built as an end-to-end data engineering project �
 ingestion, orchestration, processing, storage, an API, a frontend, and two AI-assisted
 features on real pipeline infrastructure, not a one-off notebook.
 
-The pipeline runs itself on GitHub Actions for nothing. The serving half is being
-pointed at a free container and a free static host; see
-[Where it runs](#where-it-runs). There is no live link yet.
+API: **[weebblade-api.onrender.com](https://weebblade-api.onrender.com)** — live, free, serving the
+warehouse the pipeline publishes. The frontend goes to Vercel next; see
+[Where it runs](#where-it-runs).
 
 ## What it does
 
@@ -347,12 +347,15 @@ from three live sources, a franchise graph, and a weekly digest. A weekly run ta
 minutes and a daily about one, against 2,000 free minutes a month, and with no payment method on
 the account the workflows stop at the quota rather than billing anything.
 
-**The serving half has somewhere to live.** The API and frontend only ever ran on one EC2 box,
-stopped since 7 October 2026 because $63/month to host a portfolio site was the wrong trade.
-The API is now a container on a free 512 MB instance that downloads the published warehouse at
-startup, and the frontend goes to Vercel's free tier — both measured rather than assumed before
-being chosen (382 MB peak against 512; searches answer in 130–180 ms). What remains is clicking
-through two dashboards, which needs an account holder rather than a commit.
+**The API is live, for nothing.** It ran on one EC2 box until 7 October 2026, stopped because
+$63/month to host a portfolio site was the wrong trade. It is now a container on a free 512 MB
+instance that downloads the published warehouse at startup — measured rather than assumed before
+being chosen, and measured again in the container: **199 MiB of 512**, searches in 150 ms, all
+6,359 titles and vectors and eight digests. The frontend goes to Vercel's free tier next.
+
+With the API answering, CI's frontend build and Playwright smoke tests run again (they prerender
+against it, and had been gated off since the box stopped) — so a page that renders an empty shell
+is caught on the push rather than by a reader.
 
 **Known gaps, stated plainly:**
 
