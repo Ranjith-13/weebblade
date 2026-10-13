@@ -3,13 +3,11 @@
 #
 # THIS USED TO DEPLOY. It shipped the whole repository to an EC2 instance over
 # SSH, punching a temporary security-group hole for the runner's own IP and
-# revoking it afterwards. That instance is being terminated - the pipeline moved
-# to Actions (.github/workflows/pipeline-*.yml) and the API to a free container
-# built from backend/Dockerfile - so there is nothing to SSH to, and the AWS
-# credentials, host and security-group secrets it needed are no longer used by
-# anything. Delete them from the repository's settings; infra/terraform stays
-# until the instance and its volume are actually gone, because it is what tears
-# them down.
+# revoking it afterwards. That instance was terminated on 13 October 2026 - the
+# pipeline moved to Actions (.github/workflows/pipeline-*.yml) and the API to a
+# free container built from backend/Dockerfile - so there is nothing to SSH to.
+# The AWS secrets it used are deleted, and so are the Terraform, Caddy and SSH
+# files that described the machine.
 name: Tests
 
 on:

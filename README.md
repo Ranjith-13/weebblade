@@ -57,9 +57,12 @@ back; a weekly run also publishes a materialised warehouse, one self-contained f
 catalogue and the vectors.
 
 <a id="where-it-runs"></a>
-The API and the Next.js frontend ran on a single AWS EC2 box behind Caddy. That box is stopped:
-it cost about $63/month to serve a portfolio site, and the pipeline was moved off it rather than
-paid for.
+The API and the Next.js frontend ran on a single AWS EC2 box behind Caddy, orchestrated by
+Airflow in a Docker Compose stack. It cost about $63/month to serve a portfolio site, so the
+pipeline was moved off it rather than paid for, and on 13 October 2026 the instance, its volume,
+its security group and its key pair were deleted — along with the Terraform, Caddyfile and SSH
+tooling that described them. `airflow/` stays: the DAGs are what GitHub Actions reimplements
+step for step, and its requirements file is the version pin everything else constrains against.
 
 The API is now a container built from [`backend/Dockerfile`](backend/Dockerfile), deployed from
 [`render.yaml`](render.yaml) on a free instance: 512 MB of memory, no persistent disk, and no way
@@ -214,7 +217,7 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 
 | Layer | Choice |
 |---|---|
-| Infra | GitHub Actions runs the pipeline; state in release assets. The API is a Docker container on a free 512 MB instance (`render.yaml`) that fetches the published warehouse at startup. An AWS EC2 box served the API until October 2026 and is stopped pending deletion (its Terraform state was lost, so it has to be torn down by hand) |
+| Infra | GitHub Actions runs the pipeline; state in release assets. The API is a Docker container on a free 512 MB instance (`render.yaml`) that fetches the published warehouse at startup; the frontend is on Vercel. An AWS EC2 box served it until October 2026 and is gone |
 | Orchestration | GitHub Actions on a schedule, calling `pipeline/run.py`. The Airflow 2.10.4 DAGs are the same steps in the same order and ran it on the server until October 2026 |
 | Ingestion | Python — AniList (GraphQL), Jikan / MAL / Kitsu (REST) |
 | Processing | PySpark (single-node) |
@@ -222,7 +225,7 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 | Backend | FastAPI + slowapi rate limiting |
 | AI | Groq (digest) + `all-MiniLM-L6-v2`; the vectors are a DuckDB table searched with `array_cosine_similarity`. The index is built with sentence-transformers, queries embedded through ONNX to fit 512 MB — a test asserts the two agree |
 | Frontend | Next.js 16 App Router, Tailwind v4, GSAP — Vercel free tier |
-| Reverse proxy / HTTPS | Caddy (Let's Encrypt, security headers, access logs) — on the stopped box; the free instance terminates TLS itself |
+| Reverse proxy / HTTPS | Terminated by the hosts. Caddy (Let's Encrypt, security headers, access logs) did this on the EC2 box until October 2026 |
 | CI/CD | GitHub Actions — pytest (including the Spark merge suite) and a frontend typecheck/lint on every push. The frontend build and smoke tests prerender against the live API, so they are gated behind the `API_IS_LIVE` repository variable |
 
 ## Repository layout
@@ -242,9 +245,7 @@ ai/           digest/ (Groq prompt + generation), search/ (embed, index, query)
 backend/      FastAPI app — routers, schemas, DuckDB access, rate limiter
 frontend/     Next.js app (see frontend/README.md and frontend/DESIGN.md)
 airflow/      the weekly DAG, the daily airing-schedule DAG, and their image
-infra/        Terraform for the EC2 host and security group
-caddy/        Caddyfile and image
-scripts/      per-session SSH, and the twice-weekly pull of published state to a
+scripts/      the twice-weekly pull of published state to a
               second machine
 pipeline/     run.py runs the DAGs' work without Airflow; state.py carries the lake
               between runs as release assets
@@ -253,15 +254,8 @@ tests/        pytest suite
 
 ## Running it
 
-The whole backend stack runs from Docker Compose:
-
-```bash
-cp .env.example .env   # fill in the values it names
-docker compose up -d
-```
-
-The pipeline also runs without Airflow — the same functions in the same order, started by a
-command, which is what a scheduler that isn't Airflow (or a laptop) can use:
+The pipeline is a command — the same functions in the same order the DAGs call them, which is
+what GitHub Actions runs and what a laptop can run:
 
 ```bash
 python -m pipeline.run daily
@@ -313,18 +307,12 @@ container from a current one once the warehouse is fetched rather than mounted.
 
 ## Operations
 
-- **SSH is closed by default.** No standing rule for a home address; both CI and
-  `scripts/weebblade-ssh.sh` authorize a single `/32` for the session and revoke it after,
-  using an IAM user scoped to ingress rules on one security group and nothing else.
 - **Backups.** The pipeline publishes its state as a release asset after every run, and
   `scripts/weebblade-backup.sh` pulls that to a second machine twice a week (Sunday after the
   weekly run, Wednesday for what the dailies added), keeping two weeks. The point is the same
   as it was when the state lived on an EBS volume: a year of ingested history should not sit
   in one company's account. The irreplaceable file is `identity/registry.parquet` - everything
   else can be rebuilt from the parquet, and that cannot.
-- **The Airflow UI sits behind HTTP basic auth** as well as its own login. It runs
-  arbitrary code by design, so its pre-authentication surface should not be reachable by
-  anything unauthenticated.
 - **Every run checks its own output before calling itself done.** Each DAG ends in a task that
   reads what the run produced, compares it with the run before and fails the run on a source
   that landed nothing or half as much, a title lost or split, a burst of merges, a warehouse
@@ -336,8 +324,9 @@ container from a current one once the warehouse is fetched rather than mounted.
 - **Schema validation runs at ingest** — see "Merging, not stacking". A failure isolates
   one source rather than the run: the others land, and consolidation carries the failed
   source's previous snapshot forward.
-- **fail2ban** watches Caddy's access log and `sshd`, pushing to ntfy on ban — a layer
-  below the app-level rate limiting.
+- **Rate limiting is per client IP** — 60/min, 20/min on `/search`, which runs a model on
+  every call. On the EC2 box fail2ban sat below this, watching Caddy's log and `sshd`; the
+  hosts handle that layer now.
 
 ## Status
 
@@ -364,9 +353,10 @@ is caught on the push rather than by a reader.
 - The frontend has never been deployed. It typechecks and lints in CI on every push; the build
   and smoke tests are gated behind `API_IS_LIVE`, because they prerender against a live API — so
   until the API answers, nothing proves a page still renders.
-- Terraform's state file for the EC2 box was lost, so `terraform destroy` cannot tear it down;
-  the instance and its volume have to be deleted from the AWS console. `infra/` stays as the
-  record of what exists there until they are gone.
+- Terraform's state file for the EC2 box was lost, so it was torn down through the API rather
+  than by `terraform destroy`. Nothing remains: instance, volume, security group and key pair
+  are deleted, and a sweep of all 18 enabled regions found no instance, volume, Elastic IP or
+  snapshot anywhere.
 - The catalogue's identity is rule-based and occasionally wrong in both directions — a title can
   split when a source renames it, or two rows can stay apart when no rule can see they are one
   show. Each run checks its own output and fails loudly when that happens, which is how the last

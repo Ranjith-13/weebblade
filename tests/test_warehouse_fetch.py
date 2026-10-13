@@ -60,9 +60,9 @@ def test_releases_that_are_not_pipeline_state_are_ignored():
 
 
 def test_nothing_is_fetched_unless_a_repository_is_named(tmp_path, monkeypatch):
-    """The docker-compose shape mounts the warehouse read-only from the machine
-    that built it. A serving process that tried to download over that mount
-    would fail for no reason, so fetching is opt-in."""
+    """A local run already has the warehouse the pipeline just built. Downloading
+    over it would at best waste a minute and at worst replace it, so fetching is
+    opt-in and only the deployed service asks for it."""
     monkeypatch.delenv("WAREHOUSE_REPO", raising=False)
     monkeypatch.setattr(warehouse, "_fetch_releases",
                         lambda *a, **k: pytest.fail("asked GitHub with no repo configured"))

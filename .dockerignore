@@ -1,16 +1,14 @@
 # The build context is the repository root (see backend/Dockerfile), so this is
 # what keeps the data lake, the frontend's node_modules and the git history out
 # of it. Most of these are gitignored too, so they are absent when the image is
-# built from a clone - but a local `docker compose build` runs against the real
-# working tree, where data/ alone is a quarter of a gigabyte.
+# built from a clone - but a local `docker build .` runs against the real working
+# tree, where data/ alone is a quarter of a gigabyte.
 .git
 .github
 data
 output
 frontend
-infra
 airflow
-caddy
 scripts
 tests
 **/__pycache__

@@ -80,7 +80,7 @@ The merge chooses populated fields using a defined source priority. It does not 
 | Next.js frontend and design system | Translating the data model into browsing, detail, search, and schedule surfaces. |
 | Tests, CI, containers, access controls, and backups | Operating the application beyond a local prototype. |
 
-The stack includes Python, Airflow, PySpark, Parquet, DuckDB (including its vector search), FastAPI, sentence-transformers and ONNX, Groq, Next.js, Tailwind, GSAP, Docker Compose, Caddy, AWS EC2, Terraform configuration, and GitHub Actions — which now runs the pipeline as well as the tests.
+The stack includes Python, Airflow, PySpark, Parquet, DuckDB (including its vector search), FastAPI, sentence-transformers and ONNX, Groq, Next.js, Tailwind, GSAP, Docker, and GitHub Actions — which now runs the pipeline as well as the tests. It ran on AWS EC2 behind Caddy, with Docker Compose and Terraform, until October 2026.
 
 ## What is complete, and what is not
 

@@ -1,10 +1,10 @@
 """Where the served warehouse comes from, on a box that has no lake.
 
-Until now the API read a file on a volume the pipeline also wrote to: one
-machine, one directory, `./data:/data` in docker-compose.yml. That machine is
-going away, and the thing replacing it - a free container that is rebuilt from
-its image on every wake and has no persistent disk at all - cannot work that
-way. So the API fetches what it serves.
+Until October 2026 the API read a file on a volume the pipeline also wrote to:
+one machine, one directory, both inside the same Docker Compose stack. That
+machine is gone, and the thing replacing it - a free container rebuilt from its
+image on every wake, with no persistent disk at all - cannot work that way. So
+the API fetches what it serves.
 
 What it fetches is processing/publish.materialise's output, published by the
 weekly run as a release asset (pipeline/state.publish_warehouse): one 37 MB
@@ -186,10 +186,11 @@ def current_tag(data_dir: Path) -> str | None:
 def ensure_warehouse(data_dir: Path, timeout: float = 60.0) -> str | None:
     """Make sure the newest published warehouse is on disk, and say which it is.
 
-    Does nothing at all unless WAREHOUSE_REPO is set, which is what keeps the
-    docker-compose shape working untouched: there the warehouse arrives on a
-    read-only mount, and a serving process that tried to write to it would fail
-    for no reason. Fetching is opt-in, and the service that needs it asks.
+    Does nothing at all unless WAREHOUSE_REPO is set, which is what keeps a
+    local run working untouched: there the warehouse is already on disk, built
+    by the pipeline that just ran, and downloading over it would at best waste a
+    minute and at worst replace it. Fetching is opt-in, and the service that
+    needs it asks.
 
     Never raises. Every failure here - GitHub down, rate limited, no weekly run
     yet, a corrupt asset - leaves whatever was already on disk in place and
