@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.main import DEFAULT_ORIGINS, app
@@ -15,14 +16,37 @@ def test_a_named_origin_is_allowed():
 
 
 def test_vercel_preview_origins_are_allowed():
-    """Vercel branches produce preview domains (e.g. weebblade-git-feat-user.vercel.app).
-    These must be allowed by CORS regex so client-side /search functions in preview builds."""
+    """Vercel builds a preview per branch at a URL nobody can list in advance.
+    Search is fetched from the browser, so without this a preview's search box
+    fails while production's works - the worst way for it to fail, since
+    previews are where changes get looked at."""
     preview_origin = "https://weebblade-git-feature-branch-ranjith-13.vercel.app"
     with TestClient(app) as client:
         response = client.get("/health", headers={"Origin": preview_origin})
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == preview_origin
+
+
+@pytest.mark.parametrize("origin", [
+    "https://weebblade-malware.vercel.app",
+    "https://weebblade-.vercel.app",
+    "https://weebblade-anything-at-all.vercel.app",
+])
+def test_a_vercel_project_anyone_could_register_is_not_allowed(origin):
+    """The first version of the preview rule was ^https://weebblade(-.*)?\\.vercel\\.app$,
+    which admitted every one of these - verified against the live service, which
+    returned access-control-allow-origin for weebblade-malware.vercel.app.
+
+    vercel.app is a shared suffix and project names are free-form, so no pattern
+    written here is squat-proof and this test does not pretend otherwise. It
+    pins the rule to the -git- preview shape, which is the difference between a
+    surface anyone can reach for and one they have to aim at."""
+    with TestClient(app) as client:
+        response = client.get("/health", headers={"Origin": origin})
+
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
 
 
 def test_an_unnamed_origin_gets_no_cors_header():

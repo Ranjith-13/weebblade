@@ -12,7 +12,7 @@ This roadmap tracks engineering enhancements across the data pipeline, backend A
 | Improvement | Mechanism | Monthly Cost | Risk / Safeguards |
 |---|---|---|---|
 | **1. Cold-Start UX & Early Wake-Up** | Client-side fetch on page load + UI countdown in search | **₹0 / $0** | Server only runs when active visitors arrive; preserves Render's 750 free instance hours. |
-| **2. Vercel Preview CORS Regex** | FastAPI regex matching `*.vercel.app` preview URLs | **₹0 / $0** | Pure code change in `backend/app/main.py`. |
+| **2. Vercel Preview CORS Regex** | FastAPI regex matching the `-git-` preview shape | **₹0 / $0** | Pure code change. Narrowed after the first version admitted `weebblade-malware.vercel.app` - verified live. No regex over `vercel.app` is squat-proof; see the note in `main.py`. |
 | **3. AniList Ingestion & Jikan Retirement** | Switch pipeline task from Jikan (504s) to AniList GraphQL | **₹0 / $0** | Both APIs are free; saves GitHub Actions compute minutes by eliminating Jikan retry timeouts. |
 | **4. Dynamic OpenGraph Cards** | Next.js `@vercel/og` ImageResponse for anime detail routes | **₹0 / $0** | Free within Vercel Hobby tier's 1M monthly execution allowance. |
 | **5. Token Expiry Alert (ntfy.sh)** | Weekly pipeline date check against `2027-10-13` | **₹0 / $0** | Uses existing free ntfy.sh topic. |
@@ -36,10 +36,10 @@ This roadmap tracks engineering enhancements across the data pipeline, backend A
 
 ### Item 2: Search Cold-Start UX & Early Wake-Up (Frontend) — *Implemented*
 * **Target:** `frontend/components/WarmupPing.tsx`, `frontend/app/layout.tsx` & `frontend/app/search/SearchClient.tsx`
-* **Problem:** Render free containers take ~30–45s to wake from sleep. If a user ran a search during a cold start, the UI showed a static loading state without explaining that the free container was booting.
+* **Problem:** a free instance sleeps after 15 idle minutes and takes about a minute to wake (Render's own published figure; this project has not measured a real wake yet, and should). A search during that window showed a spinner with no explanation, which reads as broken.
 * **Fix:**
   1. Root layout mounts `<WarmupPing />` which fires a low-priority background ping (`/health`) on initial page load to start container wake-up before the user navigates to `/search`.
-  2. Search UI detects responses taking >3.5s and shows a helpful status: *"Waking up server container on Render... initial query after idle takes ~30 seconds while the container boots."*
+  2. Search UI detects responses taking >3.5s (a warm search answers in ~150ms) and says so in the reader's terms: *"Waking the search service. It sleeps when nobody has searched for a quarter of an hour, and takes about a minute to come back."*
 * **Verification:** Validated route types with `next typegen` and confirmed zero errors with `tsc --noEmit`.
 * **Status:** **Complete**.
 
@@ -56,7 +56,7 @@ This roadmap tracks engineering enhancements across the data pipeline, backend A
 ### Item 4: Dynamic Editorial OpenGraph (OG) Images (Frontend)
 * **Target:** `frontend/app/anime/[key]/opengraph-image.tsx`
 * **Problem:** Social shares currently display a generic static card.
-* **Fix:** Generate dynamic 1200x630 cards with the anime poster, Newsreader serif title, season badge, and score indicator.
+* **Fix:** Generate dynamic 1200x630 cards with the anime poster, the title in Bodoni Moda, season badge, and score indicator. (The face is Bodoni Moda with Archivo for text, per `frontend/DESIGN.md` - Newsreader is not used anywhere in this project.)
 * **Status:** Queued.
 
 ---

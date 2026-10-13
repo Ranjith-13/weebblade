@@ -48,6 +48,9 @@ export function SearchClient({ total }: { total: number }) {
     setIsWaking(false);
     setState({ status: "loading", query: trimmed });
 
+    /* A warm search answers in about 150ms; one that has not come back in 3.5s
+     * is almost certainly waking the API rather than thinking hard, and a
+     * spinner with no explanation reads as broken. */
     const wakeTimer = setTimeout(() => {
       if (id === requestId.current) {
         setIsWaking(true);
@@ -166,9 +169,15 @@ export function SearchClient({ total }: { total: number }) {
         {state.status === "loading" && (
           <div>
             <p className="meta">Embedding &ldquo;{state.query}&rdquo;&hellip;</p>
+            {/* Said the way everything else on this site says it: what is
+              * happening and why, in the reader's terms. Not "the container is
+              * booting on Render" - a reader has no container and did not choose
+              * the host. "About a minute" is the provider's own published figure
+              * for a free instance waking, not a guess. */}
             {isWaking && (
               <p className="mt-2.5 max-w-[50ch] text-[0.82rem] leading-relaxed text-ink-soft">
-                Waking up the server container on Render&hellip; The free tier sleeps after 15 minutes of inactivity; initial query after idle takes ~30 seconds while the container boots.
+                Waking the search service. It sleeps when nobody has searched for a quarter of
+                an hour, and takes about a minute to come back.
               </p>
             )}
           </div>

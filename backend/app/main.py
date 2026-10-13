@@ -74,11 +74,38 @@ DEFAULT_ORIGINS = (
 )
 
 
+# Vercel builds a preview deployment per branch, at a URL nobody can list in
+# advance: <project>-git-<branch>-<scope>.vercel.app. Search is fetched from the
+# browser, so without this a preview's search box fails while production's works
+# - which is the worst way for it to fail, since previews are where changes get
+# looked at.
+#
+# WHAT THIS CANNOT DO, said plainly: vercel.app is a shared suffix and project
+# names are free-form, so anyone can register a name that matches any pattern
+# written here. There is no squat-proof regex over somebody else's domain. It is
+# narrowed to the -git- preview shape rather than "anything starting with
+# weebblade" - which admitted weebblade-malware.vercel.app, verified against the
+# live service - but narrowing reduces the surface, it does not close it.
+#
+# That is acceptable HERE for the same reason the allowlist exists at all: this
+# API is public, unauthenticated and read-only, so CORS is protecting a free
+# container's bandwidth, not anyone's data. Override with ALLOWED_ORIGIN_REGEX,
+# and set it empty to turn previews off entirely.
+DEFAULT_ORIGIN_REGEX = r"^https://weebblade-git-[a-z0-9-]+\.vercel\.app$"
+
+
 def _allowed_origins() -> list[str]:
     configured = os.environ.get("ALLOWED_ORIGINS", "").strip()
     if not configured:
         return list(DEFAULT_ORIGINS)
     return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+
+def _allowed_origin_regex() -> str | None:
+    configured = os.environ.get("ALLOWED_ORIGIN_REGEX")
+    if configured is None:
+        return DEFAULT_ORIGIN_REGEX
+    return configured.strip() or None
 
 
 def _warm_up_search_model() -> None:
@@ -136,7 +163,7 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins(),
-    allow_origin_regex=r"^https://weebblade(-.*)?\.vercel\.app$",
+    allow_origin_regex=_allowed_origin_regex(),
     allow_methods=["GET"],
     allow_headers=["*"],
 )
