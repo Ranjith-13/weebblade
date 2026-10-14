@@ -137,6 +137,20 @@ class Anime(BaseModel):
     # What its sources have said differently from one fetch to the next, newest
     # first. Filled on a single title only; empty in lists.
     changes: list[Change] = []
+    """Every reading of this title's score, oldest first; empty on list rows.
+
+    ONLY WORTH RENDERING WHERE IT MOVED, and usually it has not. Measured
+    2026-10-14 over 3,653 titles with two or more readings: 283 moved at all and
+    only 121 moved enough to be visible at the one decimal the site prints. A
+    flat line is not a history.
+
+    The exception is where people actually look. Movement tracks how recently a
+    show aired, because a score is an average over tens of thousands of votes
+    and settles once the votes stop arriving - of TV titles with a series, 51%
+    of the airing season and 71% of the season just ended had visibly moved,
+    against 2% of a year ago and 0% of Fall 2025.
+    """
+    score_history: list[ScorePoint] = []
     # `status` above is checked against AniList: where the sources call a title
     # airing and AniList's daily check says it has finished or not yet aired,
     # status says so. merged_status is what the sources said. The rest is
@@ -269,6 +283,13 @@ class Schedule(BaseModel):
     end: str
     fetched_on: str | None = None
     episodes: list[ScheduledEpisode] = []
+
+
+class ScorePoint(BaseModel):
+    """One run's reading of a title's score."""
+
+    run_date: str
+    score_100: float
 
 
 class SearchResult(BaseModel):

@@ -107,6 +107,10 @@ export type Anime = {
   /** What its sources have said differently from one fetch to the next, newest
    *  first. Only a single title carries them; lists leave it empty. */
   changes: Change[];
+  /** Every run's reading of this title's score, oldest first. Same rule as
+   *  `changes`: only a single title carries it. Usually flat - see scoreArc,
+   *  which is the only thing that should render it. */
+  score_history: ScorePoint[];
 };
 
 /** Mirrors backend/app/schemas.py:Change - something a source reports
@@ -397,6 +401,43 @@ export function startedSeason<T extends { upcoming: boolean }>(seasons: T[]): T 
 }
 
 export const SCORE_MAX = 10;
+
+export type ScorePoint = { run_date: string; score_100: number };
+
+/** What a title's score has done, in one clause, or null where it has done
+ *  nothing worth printing.
+ *
+ *  COMPARED AT THE PRECISION THE SITE SHOWS, which is the whole of the design
+ *  here. Scores are averages over tens of thousands of votes and they crawl: of
+ *  3,653 titles with two or more readings, 283 moved at all and only 121 moved
+ *  enough to be visible at one decimal (measured 2026-10-14). Printing "8.41 to
+ *  8.36" on a page that elsewhere says 8.4 would be inventing precision the
+ *  product does not use anywhere else.
+ *
+ *  It is still worth having where people look, because movement tracks how
+ *  recently a show aired - the votes stop arriving and the average sets. Of TV
+ *  titles with a series: 51% of the airing season had visibly moved and 71% of
+ *  the season just ended, against 2% of a year before and none of Fall 2025. So
+ *  this fires about half the time on a current title and essentially never on an
+ *  old one, which is the same rule the rest of the page follows: say it where
+ *  there is something to say. */
+export function scoreArc(points: ScorePoint[] | null | undefined): string | null {
+  if (!points || points.length < 2) return null;
+
+  const shown = points.map((p) => Number(scoreOutOfTen(p.score_100)));
+  const low = Math.min(...shown);
+  const high = Math.max(...shown);
+  if (low === high) return null;
+
+  const first = shown[0];
+  const last = shown[shown.length - 1];
+  const since = calendarDate(points[0].run_date);
+
+  if (last > first) return `up from ${first.toFixed(1)} since ${since}`;
+  if (last < first) return `down from ${first.toFixed(1)} since ${since}`;
+  // Ends level, middle did not: the arc is the fact, so name its range.
+  return `between ${low.toFixed(1)} and ${high.toFixed(1)} since ${since}`;
+}
 
 export function scoreOutOfTen(score100: number | null | undefined): string | null {
   if (score100 === null || score100 === undefined) return null;

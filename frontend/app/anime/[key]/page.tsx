@@ -27,6 +27,7 @@ import {
   sourceMaterialLabel,
   statusLabel,
   SCORE_MAX,
+  scoreArc,
   scoreOutOfTen,
   sourceLinks,
   streamingLinks,
@@ -147,6 +148,7 @@ async function AnimeDetail({
   const title = displayTitle(anime);
   const secondary = secondaryTitle(anime);
   const known = isKnown(anime);
+  const arc = scoreArc(anime.score_history);
 
   /* Every link out of this page stays in the title's own season. They used to
      drop it, and /browse without a season is the newest one - so on any title
@@ -351,13 +353,26 @@ async function AnimeDetail({
             score is a fact about the pipeline, not a blank to skip past. */}
         <div className="mt-4 border-t-2 border-ink pt-3">
           {known ? (
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="stamp">Score</span>
-              <span className="tnum font-display text-[2.4rem] font-black leading-none text-flag">
-                {scoreOutOfTen(anime.score_100)}
-                <span className="text-[1.1rem] font-bold text-ink-soft"> / {SCORE_MAX}</span>
-              </span>
-            </div>
+            <>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="stamp">Score</span>
+                <span className="tnum font-display text-[2.4rem] font-black leading-none text-flag">
+                  {scoreOutOfTen(anime.score_100)}
+                  <span className="text-[1.1rem] font-bold text-ink-soft"> / {SCORE_MAX}</span>
+                </span>
+              </div>
+              {/* What the number has been doing. The warehouse has kept every
+                  run's reading since June and nothing has ever read them as a
+                  series - anime_media_latest is the top slice of 66,098 rows
+                  across 16 dates.
+
+                  Only where it moved at the precision this page prints. A score
+                  is an average over tens of thousands of votes and crawls: 283
+                  of 3,653 titles with a series moved at all, 121 visibly. The
+                  ones that do are the ones still airing, which is where readers
+                  are - about half of a current season, none of Fall 2025. */}
+              {arc && <p className="meta mt-2 text-right">{arc}</p>}
+            </>
           ) : (
             <p className="text-[0.8rem] leading-relaxed text-ink-soft">
               <span className="meta block mb-1.5">Not scored</span>

@@ -84,6 +84,20 @@ test("a title page opens from the catalogue and carries its facts", async ({ pag
     await expect(page.locator('a[href="#what-changed"]')).toBeVisible();
   }
 
+  /* The score's arc, where it has one. Shown only when the score moved at the
+     one decimal this page prints, which is about half of a current season and
+     none of a year ago - so this is an implication, like the history link
+     above, rather than a fact about whichever title the catalogue happens to
+     lead with today. The shape is asserted because the failure mode is a
+     sentence that reads "up from 8.41 since 2026-10-04": right numbers, wrong
+     product. */
+  const arc = page.getByText(/(up from|down from|between) \d+\.\d/);
+  if (await arc.count()) {
+    await expect(arc.first()).toHaveText(
+      /^(up from \d\.\d|down from \d\.\d|between \d\.\d and \d\.\d) since \d{1,2} [A-Z][a-z]+$/,
+    );
+  }
+
   /* The card a shared link unfurls into. Rendered by Satori, which fails at
      runtime in ways neither tsc nor the build can see - an unsupported CSS
      property, a font that will not parse, a poster that 404s at the origin (six

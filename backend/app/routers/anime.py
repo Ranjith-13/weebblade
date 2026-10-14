@@ -4,7 +4,7 @@ import duckdb
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..db import get_db, run_query
-from ..schemas import Anime, AnimeListResponse, Franchise, FranchiseEntry
+from ..schemas import Anime, AnimeListResponse, Franchise, FranchiseEntry, ScorePoint
 from .changes import title_changes
 from .schedule import upcoming_episodes
 
@@ -144,13 +144,41 @@ def get_anime_by_identity(
 
 
 def _with_airing(con: duckdb.DuckDBPyConnection, row: dict) -> Anime:
-    """One title, with its next episodes from AniList's schedule and what its
-    sources have changed about it."""
+    """One title, with its next episodes from AniList's schedule, what its
+    sources have changed about it, and what its score has done over time."""
     title = Anime(**row)
     if title.wb_id:
         title.upcoming_episodes = upcoming_episodes(con, title.wb_id)
         title.changes = title_changes(con, title.wb_id)
+        title.score_history = _score_history(con, title.wb_id)
     return title
+
+
+def _score_history(con: duckdb.DuckDBPyConnection, wb_id: str) -> list[ScorePoint]:
+    """Every reading of this title's score, oldest first.
+
+    THE LONGITUDINAL HALF OF A WAREHOUSE THAT WAS ONLY READ CROSS-SECTIONALLY.
+    anime_media already holds every dated snapshot the pipeline has written -
+    66,098 rows over 16 run dates when this was added - and anime_media_latest
+    is its top slice. Nothing new is fetched, stored or published for this.
+
+    Attached here rather than served from its own endpoint so a title page costs
+    the same number of upstream requests it did before. The API rate-limits per
+    IP and every visitor of the site shares its egress addresses, so a second
+    call per title view is a real cost; this is free.
+
+    One row per run date: a title can be several source rows in one run and the
+    merge picks a winner, so MAX takes that winner's score rather than averaging
+    a title against itself.
+    """
+    rows = _optional(
+        con,
+        "SELECT run_date, MAX(score_100) AS score_100 FROM anime_media "
+        "WHERE wb_id = ? AND score_100 IS NOT NULL "
+        "GROUP BY run_date ORDER BY run_date",
+        [wb_id],
+    )
+    return [ScorePoint(run_date=r["run_date"], score_100=r["score_100"]) for r in rows]
 
 
 # A link recorded on only one side reads the other way from the other side.
