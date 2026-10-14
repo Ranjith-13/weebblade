@@ -235,11 +235,28 @@ The idea still earns its keep one format chip away (over half of ONAs, films and
 videos are unscored). This is not a bug and not a reason to fake the state; it is a
 question about whether the default view still shows what the design was built to show.
 
-### 9. [ ] Grid plates could say when the next episode is
+### 9. [x] Grid plates say which episode lands this week
 
-They carry title, airing status and format. The airing data is already in the warehouse and
-already renders on title pages and `/schedule`. "Ep 3, Thursday" on a plate is the single
-most useful thing a seasonal almanac can tell someone scanning.
+They carried the word "Airing", which is true and answers nothing. Where the week's
+schedule knows, a plate now reads **Ep 3 · 15 Oct JST · TV** - same slot, same line, so a
+grid of a hundred keeps its rhythm. Measured: every caption 18px at 390 and at 1440, no
+wrapping, no uneven rows. 30 of 30 plates on the first page of the current season carry an
+episode; a finished season shows just the format, exactly as before.
+
+**No API change, which was the thing worth checking first.** `/anime` does carry an
+`upcoming_episodes` field - and leaves it empty on list rows, filled only for a single
+title. So the obvious route was a backend join across every row of every season. `/schedule`
+already returns the week keyed by `wb_id` (118 of 124 episodes have one) in one small
+request that is cached for hours, which is the pattern the whole data layer is built on:
+fetch once, derive locally.
+
+The date is Japan's and says so. A bare weekday would be read as the reader's own, and
+these broadcast late enough at night in Tokyo to be the previous evening across the
+Americas - the distinction `/schedule` spends a paragraph on. The earliest entry per title
+is this week's episode rather than strictly the next: the window opens at midnight in
+Tokyo, so for a few hours after a broadcast it names one that has just aired. "Ep 3, 15
+Oct" is true either way; only the word "next" would not be, which is why the plate does not
+use it.
 
 ---
 

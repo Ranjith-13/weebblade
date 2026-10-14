@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import Markdown from "react-markdown";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
 import { ProvenanceLines } from "@/components/Provenance";
-import { getLatestDigest, getSeason, getSeasons } from "@/lib/api";
+import { getLatestDigest, getSeason, getSeasons, getWeekEpisodes } from "@/lib/api";
 import { MastheadScroll } from "@/components/motion/MastheadScroll";
 import { PinnedAside } from "@/components/motion/PinnedAside";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
@@ -44,10 +44,11 @@ function HomeSkeleton() {
 }
 
 async function Home() {
-  const [digest, season, seasons] = await Promise.all([
+  const [digest, season, seasons, week] = await Promise.all([
     getLatestDigest(),
     getSeason(),
     getSeasons(),
+    getWeekEpisodes(),
   ]);
 
   /* TV only, matching what /browse defaults to. Ranking the whole season put
@@ -220,7 +221,7 @@ async function Home() {
           </PinnedAside>
 
           <ScrollReveal selector=":scope > div > a" stagger={0.05}>
-            <PlateGrid items={featured} columns="lg:grid-cols-3 xl:grid-cols-4" />
+            <PlateGrid items={featured} columns="lg:grid-cols-3 xl:grid-cols-4" week={week} />
           </ScrollReveal>
         </div>
       </section>

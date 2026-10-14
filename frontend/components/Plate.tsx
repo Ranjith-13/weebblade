@@ -1,6 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
-import { displayTitle, formatLabel, isAiring, isKnown, SCORE_MAX, scoreOutOfTen, titleHref, type Anime } from "@/lib/types";
+import {
+  dayKeyLabel,
+  displayTitle,
+  formatLabel,
+  isAiring,
+  isKnown,
+  jstDayKey,
+  SCORE_MAX,
+  scoreOutOfTen,
+  titleHref,
+  type Anime,
+} from "@/lib/types";
 
 /* A "plate" in the printing sense. This component is where the design's one
  * idea lives, so it is worth stating plainly:
@@ -19,13 +30,17 @@ import { displayTitle, formatLabel, isAiring, isKnown, SCORE_MAX, scoreOutOfTen,
 export function Plate({
   anime,
   priority = false,
+  week,
 }: {
   anime: Anime;
   priority?: boolean;
+  /** This week's episode for this title, where the schedule has one. */
+  week?: { episode: number | null; airing_at: string };
 }) {
   const title = displayTitle(anime);
   const known = isKnown(anime);
   const airing = isAiring(anime);
+  const episode = week?.episode != null ? week : null;
 
   return (
     <Link
@@ -75,9 +90,29 @@ export function Plate({
         <h3 className="line-clamp-2 text-[0.78rem] font-medium leading-[1.3] transition-colors duration-150 group-hover:text-flag group-focus-visible:text-flag">
           {title}
         </h3>
-        {/* Separation by weight and colour, not by a middot. */}
+        {/* Separation by weight and colour, not by a middot.
+            "Airing" is a true word that answers nothing a reader scanning a
+            season actually wants. Where the week's schedule knows which episode
+            lands and when, it says that instead - same slot, same line, so a
+            grid of a hundred plates keeps its rhythm and nothing shifts.
+            The date is Japan's, labelled, exactly as the schedule's own columns
+            are: a bare weekday would be read as the reader's, and these
+            broadcast late enough at night in Tokyo to be the previous evening
+            across the Americas. */}
         <p className="meta mt-1 flex flex-wrap items-baseline gap-x-2">
-          {airing && <span className="font-bold text-data">Airing</span>}
+          {episode ? (
+            <>
+              <span className="font-bold text-data">Ep {episode.episode}</span>
+              <span>
+                {dayKeyLabel(jstDayKey(episode.airing_at)).date} JST
+                <span className="sr-only">
+                  , episode {episode.episode} airs that day in Japan
+                </span>
+              </span>
+            </>
+          ) : (
+            airing && <span className="font-bold text-data">Airing</span>
+          )}
           <span>{formatLabel(anime.format)}</span>
         </p>
       </div>
@@ -90,9 +125,13 @@ export function PlateGrid({
   /** Column tracks above `sm`. Overridable because the home page runs this grid
    *  alongside a 15rem pinned key, where six columns would crush each plate. */
   columns = "lg:grid-cols-5 xl:grid-cols-6",
+  week,
 }: {
   items: Anime[];
   columns?: string;
+  /** This week's episodes by wb_id; see getWeekEpisodes. Absent is fine - the
+   *  plates fall back to the word they carried before. */
+  week?: Record<string, { episode: number | null; airing_at: string }>;
 }) {
   return (
     <div className={`grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 ${columns}`}>
@@ -103,6 +142,7 @@ export function PlateGrid({
           // Only the first row is above the fold; priority-loading the whole
           // grid makes it compete with itself and slows the LCP it should help.
           priority={i < 6}
+          week={anime.wb_id ? week?.[anime.wb_id] : undefined}
         />
       ))}
     </div>

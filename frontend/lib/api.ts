@@ -249,6 +249,41 @@ export async function getSchedule(): Promise<{
   return { days, episodes: schedule.episodes.length, shows, fetchedOn: schedule.fetched_on };
 }
 
+/** The episode each title has this week, by identity.
+ *
+ *  Derived from the schedule rather than fetched per title, and that is the
+ *  whole reason this is cheap enough to put on a grid. /anime carries an
+ *  `upcoming_episodes` field but leaves it empty on list rows - it is filled
+ *  only on a single title - so a plate showing an airdate would otherwise mean
+ *  an API change and a join across every row of every season. /schedule already
+ *  returns the week keyed by wb_id (118 of 124 episodes carry one), costs one
+ *  small request, and is cached for hours like everything else here.
+ *
+ *  The earliest entry per title, which is this week's episode rather than
+ *  strictly the next one: the window opens at midnight today in Tokyo, so for a
+ *  few hours after a broadcast the episode it names has just aired. Saying "ep
+ *  3, 15 Oct" is true either way; it is only the word "next" that would not be,
+ *  which is why the plate does not use it. */
+export type WeekEpisode = { episode: number | null; airing_at: string };
+
+export async function getWeekEpisodes(): Promise<Record<string, WeekEpisode>> {
+  "use cache";
+  cacheLife("hours");
+
+  const { days } = await getSchedule();
+  const out: Record<string, WeekEpisode> = {};
+  for (const day of days) {
+    for (const episode of day.items) {
+      if (!episode.wb_id || episode.episode === null) continue;
+      const held = out[episode.wb_id];
+      if (!held || episode.airing_at < held.airing_at) {
+        out[episode.wb_id] = { episode: episode.episode, airing_at: episode.airing_at };
+      }
+    }
+  }
+  return out;
+}
+
 /** Which sources actually reached the warehouse, and how many the pipeline runs.
  *
  *  Derived rather than stated, for the same reason the genre facets are: a

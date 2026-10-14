@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
-import { facetsOf, getFacets, getSeason, getSeasons, getStudio } from "@/lib/api";
+import { facetsOf, getFacets, getSeason, getSeasons, getStudio, getWeekEpisodes } from "@/lib/api";
 import {
   DEFAULT_FORMAT,
   FORMAT_ALL,
@@ -115,6 +115,9 @@ async function BrowseResults({
   ]);
   const pool = studioItems ?? season?.items ?? [];
   const facets = seasonFacets ?? facetsOf(pool);
+  /* One small cached request for the whole grid, so a plate can say which
+     episode lands this week instead of the word "Airing". See getWeekEpisodes. */
+  const week = await getWeekEpisodes();
 
   const sortKey: SortKey = (["score", "popularity", "title"] as const).includes(
     read("sort") as SortKey,
@@ -507,7 +510,7 @@ async function BrowseResults({
         </div>
       ) : (
         <ScrollReveal className="mt-9" selector=":scope > div > a" stagger={0.035}>
-          <PlateGrid items={visible} />
+          <PlateGrid items={visible} week={week} />
         </ScrollReveal>
       )}
 
