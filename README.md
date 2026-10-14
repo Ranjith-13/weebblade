@@ -334,7 +334,7 @@ container from a current one once the warehouse is fetched rather than mounted.
 ## Status
 
 **The pipeline runs itself, for nothing.** Ingestion → merge → warehouse → digest → search
-index all run on GitHub Actions, verified end to end on real data: 22 seasons and 6,356 titles
+index all run on GitHub Actions, verified end to end on real data: 22 seasons and 6,359 titles
 from three live sources, a franchise graph, and a weekly digest. A weekly run takes about 13
 minutes and a daily about one, against 2,000 free minutes a month, and with no payment method on
 the account the workflows stop at the quota rather than billing anything.

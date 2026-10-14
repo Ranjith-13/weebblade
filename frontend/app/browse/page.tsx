@@ -107,17 +107,21 @@ async function BrowseResults({
      counts all come from the studio's own titles. It used to fetch the newest
      season regardless and offer that season's chips over MAPPA's titles from
      2024 - counts describing something that was not on screen. */
-  const [seasons, season, seasonFacets, studioItems] = await Promise.all([
+  /* All of it at once. The week's episodes were added to this page awaiting
+     separately below the Promise.all, which cost its own round trip in series
+     for no reason - every one of these depends on the request, not on each
+     other. */
+  const [seasons, season, seasonFacets, studioItems, week] = await Promise.all([
     getSeasons(),
     studioParam ? null : getSeason(seasonParam),
     studioParam ? null : getFacets(seasonParam),
     studioParam ? getStudio(studioParam) : null,
+    // One small cached request for the whole grid, so a plate can say which
+    // episode lands this week instead of the word "Airing".
+    getWeekEpisodes(),
   ]);
   const pool = studioItems ?? season?.items ?? [];
   const facets = seasonFacets ?? facetsOf(pool);
-  /* One small cached request for the whole grid, so a plate can say which
-     episode lands this week instead of the word "Airing". See getWeekEpisodes. */
-  const week = await getWeekEpisodes();
 
   const sortKey: SortKey = (["score", "popularity", "title"] as const).includes(
     read("sort") as SortKey,

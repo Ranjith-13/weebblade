@@ -23,9 +23,11 @@ Measured against the live API, not assumed. Everything below drove a design deci
 | `mal_id` | **0** | Do not render |
 | `favourites` | 142, range 0–25 | Noise dressed as a metric. Do not render |
 
-This table is from when the warehouse held one season. It now holds twenty (Fall 2021 to Summer
-2026, 6,136 titles from Kitsu, MAL and AniList), reached from the season index in the header; see
-frontend/CLAUDE.md, "Getting to a season". Measured again on 2026-09-14 over all 6,136: score
+This table is from when the warehouse held one season. It now holds twenty-two (Fall 2021 to
+Winter 2027, 6,359 titles from Kitsu, MAL and AniList on 2026-10-14), reached from the season
+index in the header; see frontend/CLAUDE.md, "Getting to a season". The coverage figures below
+were measured on 2026-09-14 over the 6,136 the warehouse held then, and are kept at that date
+rather than refreshed, because what they are evidence for is the shape of the gaps: score
 58% (88% of a season's TV), poster 99.9%, popularity 98.6%, studios 57%, trailer 48%, a streaming
 link 46%, cover art 30%. A season runs 233 to 370 titles, 57 to 88 of them TV.
 

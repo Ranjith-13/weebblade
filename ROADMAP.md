@@ -318,8 +318,9 @@ use it.
 - **Romaji search recall is 24/40** — typing a title's other name finds it first 24 times
   out of 40. Adding native titles to the indexed document, or blending keyword matching
   with vectors, would lift it.
-- **529 titles have no synopsis anywhere** (26 are fillable). Upstream gap.
-- **39 titles are `airing_unconfirmed`** — nothing can confirm them.
+- **533 titles have no synopsis anywhere** (2026-10-14; 26 were fillable when checked).
+  Upstream gap.
+- **40 titles are `airing_unconfirmed`** (2026-10-14) — nothing upstream can confirm them.
 - **State lives in two places**, GitHub releases and one laptop. No third copy.
 - **The repo is private**, so the API needs a token to read its own warehouse. Making it
   public removes that dependency and the 2027 expiry with it. The history scan was clean.
