@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 SOURCE_DIR_NAMES = {
     "anilist": "anilist_media",
-    "jikan": "jikan_media",
     "mal": "mal_media",
     "kitsu": "kitsu_media",
 }
@@ -43,7 +42,7 @@ SOURCE_DIR_NAMES = {
 # This is a field-level merge, not a row-level pick: for every column the first
 # non-null value in this order wins, so a title takes its streaming links from
 # Kitsu and its studios from MAL in the same row.
-_SOURCE_PRIORITY = ["kitsu", "mal", "anilist", "jikan"]
+_SOURCE_PRIORITY = ["kitsu", "mal", "anilist"]
 
 # Carried through every merge pass as the union of its members, never as a winner.
 _SOURCE_KEYS = "source_keys"

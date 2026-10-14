@@ -99,18 +99,34 @@ were lost and the request woke the container - costing another 17 minutes. curl 
 
 ## Open — pipeline
 
-### 4. [ ] Promote AniList, retire Jikan
+### 4. [x] Retire Jikan
 
-Jikan is a third-party MyAnimeList mirror that has been down for this project's whole life
-and still gets fetched every run. The official MAL v2 API now covers what it was for, and
-AniList is healthy.
+Verified before acting, because the premise came from an audit rather than from here, and
+the verification changed the reason. Jikan is not flaky and not down: **its public API was
+[discontinued on 1 October 2026](https://github.com/jikan-me/jikan-rest/issues/613)**,
+announced in June, maintenance mode from then, brownout from 1 September. It is not coming
+back, and MyAnimeList's own API already covers what the mirror was for.
 
-*Unverified:* the claim that AniList "responded with 99 titles for Fall 2026" came from the
-audit, not from me. Re-run `ingestion/anilist/fetch_season.py` and check before acting.
+Checked directly first: `api.jikan.moe` resolves on both A and AAAA records, and IPv4,
+IPv6 and a raw TCP connect to 443 all time out. The runner's logs say `Network is
+unreachable`. It never landed a single row in this project's life - the warehouse logs
+"No files yet for view anime_media_jikan" on every run.
 
-*Cost:* saves GitHub Actions minutes rather than spending them. *Care:* the catalogue's
-source priority and the `3 of 4 sources live` copy both move if a source is removed, and
-`processing/consolidate.py` has opinions about which source wins a merge.
+Removed from 29 files: the ingestion module and its tests, the pipeline step, the Airflow
+task, the merge priority, the catalogue view, the change feed, the run checks, the API's
+source list, and the frontend's.
+
+The cost was 30s of a 464s weekly run and an ERROR traceback in every log. **The reason to
+do it was not the 30 seconds.** `ALL_SOURCES` had four entries and three were live, so the
+masthead read "3 of 4 sources live" - which tells a reader one source is temporarily
+missing. Nothing was missing. On a site whose whole claim is that it is honest about where
+its data came from, that was the actual defect.
+
+Two things deliberately kept. The duration regex in `normalize.py` still casts to string
+before extracting digits, because Jikan sent free text and a future source doing the same
+should widen a column rather than break a run - it costs nothing on an int. And the
+historical comments stay: they explain why the code is shaped as it is, which is still
+true even though the source is gone.
 
 ### 4b. [x] Social cards per title
 

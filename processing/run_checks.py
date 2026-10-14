@@ -18,8 +18,10 @@ and it is the catalogue that gets served.
 WHAT FAILS A WEEKLY RUN
 
 - A source that landed rows in its previous fetch and none now, or under half
-  as many. Nothing is compared for a source with no fetch on record - Jikan has
-  never answered, and saying so every week is not news.
+  as many. Nothing is compared for a source with no fetch on record - Jikan
+  never answered once before its API was discontinued, and saying so every week
+  was not news. The rule outlives it: a source added tomorrow is not a
+  regression on the day it is added.
 - No complete catalogue snapshot for the run, or a warehouse serving an older
   one than it.
 - A title from the previous catalogue gone: neither in this one nor merged into
@@ -60,7 +62,7 @@ logger = logging.getLogger(__name__)
 
 WEEKLY = "anime_seasonal_pipeline"
 DAILY = "anilist_airing"
-SOURCES = ("anilist", "jikan", "kitsu", "mal")
+SOURCES = ("anilist", "kitsu", "mal")
 
 MERGED_LIMIT = 25
 

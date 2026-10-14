@@ -10,7 +10,8 @@ from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StringType
 # user_count instead. Ranks from different sources still rank different user bases,
 # so comparing them across sources would be meaningless. Only average_score gets
 # normalized here, into score_100, since "rating out of 100" is a well-defined
-# comparable scale once Jikan's 0-10 is rescaled.
+# comparable scale. Every source now stores out of 100; Jikan stored out of 10
+# and was rescaled here until its API was discontinued on 2026-10-01.
 _DOUBLE_COLUMNS = ["popularity", "favourites"]
 _INT_COLUMNS = [
     "season_year",
@@ -118,19 +119,21 @@ def standardize_schema(df: DataFrame) -> DataFrame:
 
     df = df.withColumn("mal_id", F.col("mal_id").cast(IntegerType()))
 
-    # duration arrives as an int (minutes) from AniList/Kitsu but a free-text string
-    # from Jikan (e.g. "24 min per ep") - cast to string first so every row can be
-    # parsed the same way regardless of source, then pull the leading number out.
+    # duration arrives as an int (minutes) from every source this project still
+    # fetches. The cast-to-string and the regex stay because Jikan used to send
+    # free text ("24 min per ep") and a source doing that again should widen a
+    # column rather than break a run - it costs nothing on an int.
     df = df.withColumn(
         "duration_minutes",
         F.regexp_extract(F.col("duration").cast(StringType()), r"(\d+)", 1).cast(IntegerType()),
     ).drop("duration")
 
+    # Every remaining source scores out of 100. Jikan scored out of 10 and was
+    # multiplied here; its public API was discontinued on 1 October 2026, so the
+    # branch went with it. A new source on a different scale converts HERE, where
+    # one column means one thing, rather than at each place that reads it.
     df = df.withColumn(
-        "score_100",
-        F.when(
-            F.col("source") == "jikan", F.col("average_score").cast(DoubleType()) * 10
-        ).otherwise(F.col("average_score").cast(DoubleType())),
+        "score_100", F.col("average_score").cast(DoubleType())
     ).drop("average_score")
 
     return df

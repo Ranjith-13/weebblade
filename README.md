@@ -11,13 +11,17 @@ the pipeline publishes weekly. See [Where it runs](#where-it-runs).
 ## What it does
 
 Tracks seasonal anime — releases, genre shifts, studio output, scores — pulled weekly from
-four independent sources and reconciled into one queryable warehouse:
+three independent sources and reconciled into one queryable warehouse:
 
 - [AniList](https://anilist.co/graphiql) (GraphQL)
-- [Jikan](https://docs.api.jikan.moe/) (REST, the community MyAnimeList mirror)
-- [MyAnimeList API v2](https://myanimelist.net/apiconfig) (REST, the official one — a
-  separate source from Jikan, and the only one carrying studios and source material)
+- [MyAnimeList API v2](https://myanimelist.net/apiconfig) (REST, the official one, and the
+  only source carrying studios and source material)
 - [Kitsu](https://kitsu.docs.apiary.io/) (JSON:API)
+
+A fourth, [Jikan](https://docs.api.jikan.moe/) — the community MyAnimeList mirror — was
+fetched until October 2026. Its public API was discontinued on the 1st after a brownout
+from September, and it had never once landed a row here. MAL's own API covers what it
+was for.
 
 Two AI features sit on top:
 
@@ -29,7 +33,6 @@ Two AI features sit on top:
 
 ```
 AniList ──┐
-Jikan  ───┤
 MAL    ───┼──► ingestion tasks ──► raw JSON + per-source Parquet snapshots
 Kitsu  ───┘         │
                     ▼
@@ -83,12 +86,12 @@ visitor after a quiet spell waits. The frontend goes to Vercel's free tier.
 Each ingestion source runs as an independent task — one API being down doesn't
 block the others from landing data, and the downstream merge/digest/search tasks run over
 whatever actually arrived rather than requiring every source to succeed. That isn't
-theoretical: Jikan has been down upstream for this project's whole life, and AniList was
-until September 2026, and the catalogue kept publishing on Kitsu and MAL throughout.
+theoretical: AniList was down upstream until September 2026 and Jikan for its whole life
+here, and the catalogue kept publishing on Kitsu and MAL throughout.
 
 ### Merging, not stacking
 
-The four sources describe the same shows in different vocabularies, on different scales,
+The sources describe the same shows in different vocabularies, on different scales,
 under different transliterations, and don't agree which season a title starts in.
 Consolidation is a **field-level** merge over the whole catalogue, not a union of rows:
 
@@ -219,7 +222,7 @@ Read-only, public, unauthenticated. Rate-limited per client IP: 60/min by defaul
 |---|---|
 | Infra | GitHub Actions runs the pipeline; state in release assets. The API is a Docker container on a free 512 MB instance (`render.yaml`) that fetches the published warehouse at startup; the frontend is on Vercel. An AWS EC2 box served it until October 2026 and is gone |
 | Orchestration | GitHub Actions on a schedule, calling `pipeline/run.py`. The Airflow 2.10.4 DAGs are the same steps in the same order and ran it on the server until October 2026 |
-| Ingestion | Python — AniList (GraphQL), Jikan / MAL / Kitsu (REST) |
+| Ingestion | Python — AniList (GraphQL), MAL / Kitsu (REST) |
 | Processing | PySpark (single-node) |
 | Storage | DuckDB views over Parquet |
 | Backend | FastAPI + slowapi rate limiting |
@@ -348,8 +351,10 @@ is caught on the push rather than by a reader.
 
 **Known gaps, stated plainly:**
 
-- Jikan has been down upstream for this project's whole life; the pipeline degrades rather than
-  fails, and the catalogue is built from Kitsu, MAL and AniList.
+- Jikan, the fourth source, was never once reachable here, and its public API was
+  discontinued on 1 October 2026; it has been removed. The pipeline degrading rather than
+  failing is why that cost nothing: the catalogue was built from Kitsu, MAL and AniList
+  throughout.
 - The frontend has never been deployed. It typechecks and lints in CI on every push; the build
   and smoke tests are gated behind `API_IS_LIVE`, because they prerender against a live API — so
   until the API answers, nothing proves a page still renders.

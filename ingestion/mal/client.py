@@ -28,8 +28,10 @@ class MissingClientId(RuntimeError):
 class MalClient:
     """Minimal REST client for the OFFICIAL MyAnimeList API v2.
 
-    Not to be confused with ingestion/jikan, which wraps the community Jikan
-    mirror. Jikan has been returning 504 ("MyAnimeList may be down") for the
+    Not to be confused with the community Jikan mirror, which this project
+    used to fetch as a fourth source and no longer does: its public API was
+    discontinued on 1 October 2026. Jikan had been returning 504
+    ("MyAnimeList may be down") for the
     whole life of this project, but myanimelist.net itself answers 200 and
     api.myanimelist.net answers a well-formed "Invalid client id" - checked, not
     assumed. MAL was never the thing that was broken; Jikan was.

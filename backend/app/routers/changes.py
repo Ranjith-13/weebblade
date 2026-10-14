@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # The merge's source priority, which is also the order a change's sources are
 # listed in; and the order a title's changes on one date are listed in.
-_SOURCES = ["kitsu", "mal", "anilist", "jikan"]
+_SOURCES = ["kitsu", "mal", "anilist"]
 _FIELDS = ["status", "episodes", "premiere", "season", "broadcast", "score", "trailer", "streaming", "listed"]
 
 # One change reported by several sources in the same fetch is one change. Kitsu

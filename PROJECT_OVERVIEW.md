@@ -63,7 +63,7 @@ Catalogue queries + semantic search index + generated digest
 FastAPI serves the data → Next.js presents it to the user
 ```
 
-Four source integrations are implemented: Kitsu, official MyAnimeList, AniList, and Jikan. Jikan also exposes MyAnimeList data, so these are not four independent underlying datasets. Kitsu and official MAL supplied the catalogue in recent project runs; source reachability can change.
+Three source integrations are implemented: Kitsu, official MyAnimeList, and AniList. A fourth, Jikan, was a community mirror of MyAnimeList rather than an independent dataset; it was never reachable during this project and its public API was discontinued on 1 October 2026, so it has been removed. Kitsu and official MAL supplied most of the catalogue in recent runs; source reachability can change.
 
 The merge chooses populated fields using a defined source priority. It does not average provider scores into a new rating. Dated snapshots support inspection and reprocessing, while prior source data can remain available when a fresh collection fails. That improves continuity but also means some displayed fields may be older than others.
 

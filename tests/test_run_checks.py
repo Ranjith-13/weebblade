@@ -95,12 +95,16 @@ def test_a_source_landing_under_half_of_last_week_fails(tmp_path):
 
 
 def test_a_source_that_has_never_answered_is_not_news(tmp_path):
+    """A source with nothing landed and nothing before it is not a regression,
+    it is a source that has not worked yet. Jikan was the live example for this
+    project's whole life until its API was discontinued; AniList stands in here,
+    since _week seeds only kitsu and mal."""
     _week(tmp_path, TWO, TWO)
 
-    record = check_weekly(tmp_path, "2026-09-13", failed_tasks=["fetch_jikan"])
+    record = check_weekly(tmp_path, "2026-09-13", failed_tasks=["fetch_anilist"])
 
     assert record.passed
-    assert record.numbers["sources"]["jikan"] == {"rows": 0, "previous": None, "previous_date": None}
+    assert record.numbers["sources"]["anilist"] == {"rows": 0, "previous": None, "previous_date": None}
 
 
 def test_a_source_is_compared_with_its_last_fetch_of_the_same_season(tmp_path):

@@ -12,7 +12,8 @@ const nextConfig: NextConfig = {
   images: {
     // Poster hosts, one per ingestion source. Configured before AniList and MAL
     // were serving data, so that their rows would not arrive as silently broken
-    // images. Jikan, still down upstream, serves MAL's images.
+    // images. cdn.myanimelist.net is MAL's own, reached through its official
+    // API; the Jikan mirror that also served it was discontinued 1 Oct 2026.
     remotePatterns: [
       { protocol: "https", hostname: "media.kitsu.app" },
       { protocol: "https", hostname: "s4.anilist.co" },

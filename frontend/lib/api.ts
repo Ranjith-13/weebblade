@@ -287,9 +287,10 @@ export async function getWeekEpisodes(): Promise<Record<string, WeekEpisode>> {
 /** Which sources actually reached the warehouse, and how many the pipeline runs.
  *
  *  Derived rather than stated, for the same reason the genre facets are: a
- *  hardcoded answer drifts silently. AniList and Jikan have been down upstream
- *  for this project's whole life and MAL joined later, so any number written into
- *  the copy was wrong within weeks — and was, in two places, for days. */
+ *  hardcoded answer drifts silently. AniList was down upstream for most of this
+ *  project's life, MAL joined later, and Jikan stopped existing - its public API
+ *  was discontinued on 1 October 2026 - so any number written into the copy was
+ *  wrong within weeks, and was, in two places, for days. */
 export async function getSources(): Promise<{ live: string[]; configured: number }> {
   "use cache";
   cacheLife("hours");

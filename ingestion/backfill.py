@@ -93,7 +93,9 @@ def _live_sources() -> dict[str, tuple[Fetcher, Flattener]]:
     without network clients, and so a missing MAL client id fails only when MAL
     is asked for.
 
-    Jikan is deliberately absent: it has failed upstream for this project's
+    Jikan is gone, not absent: its public API was discontinued on 1 October
+    2026 after a brownout from September, and it had failed upstream for this
+    project's
     whole life, and a backfill that spends an hour retrying it to land nothing
     is worse than one that does not try. AniList was absent for the same reason
     until it came back on 2026-09-13.

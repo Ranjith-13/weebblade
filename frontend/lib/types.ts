@@ -459,11 +459,16 @@ export function streamingLinks(a: Anime): { service: string; url: string }[] {
  * A UI that misreports its own provenance is worse than one that says nothing,
  * and this is a project whose entire point is reconciling several sources.
  */
-export const ALL_SOURCES = ["anilist", "jikan", "kitsu", "mal"] as const;
+/* Three, not four. Jikan - the community MyAnimeList mirror this project
+ * fetched as a fourth source - had its public API discontinued on 1 October
+ * 2026, after a brownout from September. It never landed a row here in the
+ * project's whole life. Leaving it in this list made the masthead say "3 of 4
+ * sources live", which reads as one being temporarily down rather than gone,
+ * and MyAnimeList's own API now covers what the mirror was for. */
+export const ALL_SOURCES = ["anilist", "kitsu", "mal"] as const;
 
 const SOURCE_LABELS: Record<string, string> = {
   anilist: "AniList",
-  jikan: "Jikan",
   kitsu: "Kitsu",
   mal: "MyAnimeList",
 };

@@ -73,8 +73,15 @@ def test_a_score_counts_only_when_the_page_would_print_it_differently(tmp_path):
     assert _brief(_changes(tmp_path, "2026-09-13")) == [("2", "score", "7.2", "7.3")]
 
 
-def test_jikan_scores_out_of_ten_read_as_the_page_prints_them():
-    assert _score({"source": "jikan", "average_score": 7.84}) == _score({"source": "kitsu", "average_score": 78.4}) == "7.8"
+def test_a_score_reads_as_the_page_prints_it():
+    """Stored out of 100, shown out of 10, one decimal - whichever source it
+    came from. Jikan stored out of 10 and was scaled here; its public API was
+    discontinued on 1 October 2026 and the special case went with it, so the
+    thing worth pinning now is that every source reads the same way."""
+    assert _score({"source": "kitsu", "average_score": 78.4}) == "7.8"
+    assert _score({"source": "mal", "average_score": 78.4}) == "7.8"
+    assert _score({"source": "anilist", "average_score": 78.4}) == "7.8"
+    assert _score({"source": "kitsu", "average_score": None}) is None
 
 
 def test_an_entry_the_source_created_is_listed_but_an_old_one_a_better_fetch_found_is_not(tmp_path):

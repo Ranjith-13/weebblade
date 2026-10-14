@@ -26,8 +26,9 @@ DATA_DIR = Path("/data")
     tags=["ingestion", "processing", "anime"],
 )
 def anime_seasonal_pipeline():
-    # One task per source, deliberately not chained together: if one API is down (as
-    # Jikan has been throughout, and AniList was until 2026-09) the others should
+    # One task per source, deliberately not chained together: if one API is down
+    # (as AniList was until 2026-09, and as Jikan was for its whole life here
+    # before its public API was discontinued on 2026-10-01) the others should
     # still land data rather than the whole DAG run blocking on it.
     #
     # The work itself is ingestion/land.py, which these four and the Airflow-free
@@ -42,16 +43,10 @@ def anime_seasonal_pipeline():
         land_season("anilist", data_interval_end, DATA_DIR)
 
     @task
-    def fetch_jikan(data_interval_end=None):
-        from ingestion.land import land_season
-
-        land_season("jikan", data_interval_end, DATA_DIR)
-
-    @task
     def fetch_mal(data_interval_end=None):
         """The OFFICIAL MyAnimeList API v2, not the Jikan mirror.
 
-        Jikan has returned 504 ("MyAnimeList may be down") for this project's
+        Jikan returned 504 ("MyAnimeList may be down") for this project's
         whole life, but MAL itself answers 200 and api.myanimelist.net returns a
         well-formed "Invalid client id" - verified, not assumed. MAL was never
         the broken part; Jikan was. This source exists because MAL carries the
@@ -213,7 +208,7 @@ def anime_seasonal_pipeline():
             notify(record)
             raise AirflowFailException(record.summary())
 
-    fetches = [fetch_anilist(), fetch_jikan(), fetch_mal(), fetch_kitsu()]
+    fetches = [fetch_anilist(), fetch_mal(), fetch_kitsu()]
     # In a line, not in parallel: each of these opens the warehouse file, and
     # DuckDB allows one writer. The digest and the index read it after.
     catalog = (fetches >> fetch_bridge_ids() >> build_bridge() >> consolidate()

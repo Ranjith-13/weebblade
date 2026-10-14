@@ -70,7 +70,7 @@ def test_the_weekly_run_does_the_dags_work_in_the_dags_order(steps, checks, tmp_
 
     assert runner.run("weekly", tmp_path, AT) == 0
     assert called == [
-        "fetch_anilist", "fetch_jikan", "fetch_mal", "fetch_kitsu",
+        "fetch_anilist", "fetch_mal", "fetch_kitsu",
         "fetch_bridge_ids", "build_bridge", "consolidate", "record_changes",
         "refresh_catalog", "fetch_mal_relations", "build_franchises",
         "generate_digest", "build_search_index",
@@ -88,23 +88,23 @@ def test_the_daily_run_does_the_same(steps, checks, tmp_path):
 def test_a_failed_step_does_not_stop_the_run(steps, checks, tmp_path):
     """Every task after the fetches is ALL_DONE in the DAG: consolidating
     whatever landed beats blocking the whole pipeline on one sick API."""
-    called = steps(fail={"fetch_jikan"})
+    called = steps(fail={"fetch_mal"})
     seen = checks()
 
     runner.run("weekly", tmp_path, AT)
 
     assert "build_search_index" in called  # the run reached the end
-    assert seen["failed"] == ["fetch_jikan"]
+    assert seen["failed"] == ["fetch_mal"]
 
 
 def test_what_failed_is_judged_by_the_check_not_instead_of_it(steps, checks, tmp_path):
     """A step dying is not the verdict - the check reads what the run actually
     produced, and gets the failures as one more input."""
-    steps(fail={"fetch_jikan", "consolidate"})
+    steps(fail={"fetch_mal", "consolidate"})
     seen = checks(passed=True)
 
     assert runner.run("weekly", tmp_path, AT) == 0
-    assert seen["failed"] == ["fetch_jikan", "consolidate"]
+    assert seen["failed"] == ["fetch_mal", "consolidate"]
 
 
 def test_a_failing_check_exits_non_zero_and_tells_someone(steps, checks, tmp_path):

@@ -162,7 +162,6 @@ def _fetch_status(data_dir: Path, at: Any, run_date: str) -> None:
 
 WEEKLY = [
     Step("fetch_anilist", _fetch("anilist")),
-    Step("fetch_jikan", _fetch("jikan")),
     Step("fetch_mal", _fetch("mal")),
     Step("fetch_kitsu", _fetch("kitsu")),
     Step("fetch_bridge_ids", _fetch_bridge_ids),

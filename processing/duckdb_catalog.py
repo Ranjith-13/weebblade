@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 _VIEWS = {
     "anime_media": "processed/anime_media_consolidated/*/*/*.parquet",
     "anime_media_anilist": "processed/anilist_media/*/*.parquet",
-    "anime_media_jikan": "processed/jikan_media/*/*.parquet",
     "anime_media_kitsu": "processed/kitsu_media/*/*.parquet",
     "anime_media_mal": "processed/mal_media/*/*.parquet",
 }

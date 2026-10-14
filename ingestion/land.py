@@ -40,7 +40,6 @@ class Source:
 
 SOURCES: dict[str, Source] = {
     "anilist": Source("ingestion.anilist", "AniList"),
-    "jikan": Source("ingestion.jikan", "Jikan"),
     "mal": Source("ingestion.mal", "MAL"),
     "kitsu": Source("ingestion.kitsu", "Kitsu"),
 }

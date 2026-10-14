@@ -6,10 +6,16 @@ import { joinSources } from "@/lib/types";
  * Both places this replaces were hardcoded and both were wrong: the sitewide
  * footer said "Assembled weekly from Kitsu. AniList and Jikan are down upstream."
  * and the masthead said "1 of 3 sources live" — written when Kitsu was the only
- * live source, and left untouched when MyAnimeList joined as a fourth and became
- * the sole supplier of studios, source material and broadcast slots. A project
- * whose whole point is reconciling several sources was telling every visitor it
- * used one.
+ * live source, and left untouched when MyAnimeList joined and became the sole
+ * supplier of studios, source material and broadcast slots. A project whose
+ * whole point is reconciling several sources was telling every visitor it used
+ * one.
+ *
+ * It counts three now. Jikan is not a source that is down, it is a source that
+ * stopped existing: its public API was discontinued on 1 October 2026. While it
+ * was still in ALL_SOURCES the masthead read "3 of 4 sources live", which is the
+ * same class of wrong this component was written to end — a number that says
+ * something is temporarily missing when nothing is.
  *
  * Async so it reads the catalogue, which is already cached; render it inside a
  * <Suspense> so the surrounding shell stays static under PPR. The fallback names

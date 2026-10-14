@@ -61,7 +61,7 @@ from . import identity
 
 logger = logging.getLogger(__name__)
 
-SOURCES = ("kitsu", "mal", "anilist", "jikan")
+SOURCES = ("kitsu", "mal", "anilist")
 
 SCHEMA = pa.schema([
     ("wb_id", pa.string()),
@@ -82,13 +82,15 @@ SCHEMA = pa.schema([
 
 
 def _score(row: dict[str, Any]) -> str | None:
-    """As the page prints it: out of 10, one decimal. Jikan's average_score is
-    out of 10 and normalize.py scales it; every other source's is out of 100."""
+    """As the page prints it: out of 10, one decimal.
+
+    Every source stores out of 100. Jikan stored out of 10 and was scaled here
+    and in normalize.py; it was discontinued on 1 October 2026 and the special
+    case went with it."""
     value = row.get("average_score")
     if value is None:
         return None
-    score_100 = value * 10 if row.get("source") == "jikan" else value
-    return f"{score_100 / 10:.1f}"
+    return f"{value / 10:.1f}"
 
 
 def _premiere(row: dict[str, Any]) -> str | None:

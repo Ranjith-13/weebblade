@@ -1,7 +1,7 @@
 def season_for_month(month: int) -> str:
     """Map a calendar month to the anime industry's quarterly season (WINTER = Jan-Mar).
 
-    Shared across sources — AniList, Jikan/MAL, and Kitsu all use this same quarterly
+    Shared across sources — AniList, MAL and Kitsu all use this same quarterly
     convention, just with different casing in their own APIs.
     """
     if month in (1, 2, 3):
