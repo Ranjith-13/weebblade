@@ -14,11 +14,29 @@
 # the API ever stops fitting, this goes red instead of the deployment.
 name: API image
 
+# WHAT GOES INTO THE IMAGE IS STATED TWICE, HERE AND IN render.yaml, and the
+# two cannot share a constant because they are read by different systems. The
+# source of truth is backend/Dockerfile, which COPYs exactly backend/
+# requirements.txt, backend/app and ai; .dockerignore keeps the rest of the
+# repository out of the build context.
+#
+# They are also inverses. This is an allowlist, so a new input the image needs
+# must be ADDED here; render.yaml's buildFilter is a denylist, so the same
+# change means making sure the path is NOT in its ignoredPaths. Change one
+# without the other and the symptoms differ: a missed build here is an image
+# nobody proved, a missed deploy there is a live API running old code.
+#
+# .dockerignore was the one they already disagreed about, found by writing this
+# comment and walking the two lists against each other. It decides what the
+# build context contains, so a pattern that caught ai/ would break the image -
+# and it was not listed here, while Render would deploy on it. That is exactly
+# the "an image nobody proved" half, so it is listed now.
 on:
   push:
     paths:
       - backend/**
       - ai/**
+      - .dockerignore
       - render.yaml
       - .github/workflows/api-image.yml
   workflow_dispatch:

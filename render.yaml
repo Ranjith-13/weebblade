@@ -55,6 +55,12 @@ services:
     # triggers a deploy. render.yaml itself is absent on purpose: a change to
     # this file should reach the service.
     #
+    # The same fact is stated in .github/workflows/api-image.yml, which gates the
+    # image build on backend/**, ai/** and this file. They cannot share a
+    # constant, and they are inverses: that one is an allowlist to add to, this
+    # one is a denylist to keep a path out of. If the image gains an input,
+    # both need looking at.
+    #
     # If the API ever looks like it is running old code, this is the first thing
     # to suspect, and Manual Deploy > Deploy latest commit is the way out.
     buildFilter:
