@@ -31,6 +31,46 @@ services:
     # Nearest to both the readers this is for and the sources it mirrors.
     region: singapore
     healthCheckPath: /health
+    # WHAT ACTUALLY GOES INTO THIS IMAGE, and nothing else should restart it.
+    #
+    # Auto-deploy fires on every push to main, and on 14 October 2026 four of
+    # the API's six deploys were for commits that never touched the API: three
+    # frontend-only, and the daily pipeline writing one line to RUNS.md. Each
+    # rebuilt the image and restarted the container, and every restart refetches
+    # the 39 MB warehouse. The cost is not really the bandwidth - it is that a
+    # restart is exactly when a failed fetch leaves the service answering 503
+    # (backend/app/warehouse.ensure_warehouse), so a needless redeploy is a
+    # needless roll of that dice, once a day guaranteed.
+    #
+    # The list is derived, not guessed. backend/Dockerfile COPYs exactly three
+    # things - backend/requirements.txt, backend/app and ai - and .dockerignore
+    # keeps the rest of the repository out of the build context entirely. Every
+    # import under backend/app and ai/ resolves within those two trees or to a
+    # third-party package; nothing reaches into processing/, pipeline/ or
+    # ingestion/, which is why they are listed here despite being Python.
+    #
+    # ignoredPaths rather than paths, deliberately. An allowlist silently stops
+    # deploying when someone adds a directory the image needs, and a stale API
+    # is far worse than a spare rebuild - so anything not named below still
+    # triggers a deploy. render.yaml itself is absent on purpose: a change to
+    # this file should reach the service.
+    #
+    # If the API ever looks like it is running old code, this is the first thing
+    # to suspect, and Manual Deploy > Deploy latest commit is the way out.
+    buildFilter:
+      ignoredPaths:
+        - frontend/**
+        - airflow/**
+        - ingestion/**
+        - processing/**
+        - pipeline/**
+        - tests/**
+        - scripts/**
+        - .github/**
+        - data/**
+        - output/**
+        - "*.md"
+        - "**/*.md"
     envVars:
       # Where to find the published warehouse. Setting this is what switches the
       # API from "read a mounted file" to "fetch the newest release asset".
