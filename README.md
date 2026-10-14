@@ -203,6 +203,12 @@ Seeded from every snapshot on file: 98 changes back to 30 August 2026, each on i
   title; one change told by several sources is one entry naming them all.
 - `GET /anime/{wb_id}/franchise` — the title's franchise, oldest first, each entry with its
   relation to the title; entries older than the catalogue come from MAL, with no `wb_id`.
+- `GET /anime/{wb_id}/similar?limit=6` — titles nearest this one by what they are about,
+  nearest first, each decorated enough to draw. A lookup rather than a search: the neighbours
+  are computed when the warehouse is built, from a document of genres and synopsis with the
+  names deliberately left out. The search index cannot answer this — it leads with every name
+  a title has, which is what makes searching by the other name work and what makes it match
+  "Blue Box Season 2" to "Pacific Rim: The Black Season 2". See `ai/search/similar.py`.
 - `GET /anime/{source}/{source_id}` — a title by any source key it was ever made of.
 - `GET /schedule?days=7` — every episode airing from midnight today in Japan, for up to 14 days,
   from AniList's schedule. Shows the catalogue does not hold come as AniList describes them.

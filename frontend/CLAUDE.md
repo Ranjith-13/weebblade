@@ -218,6 +218,37 @@ What joins a franchise, and why shared characters and MAL's "other" do not, is i
 - **It never takes the page down.** The section streams in its own `<Suspense>` after the title,
   a failed franchise request renders nothing, and a title in no franchise gets no section.
 
+## More like this
+
+The last block on a title page (`components/Similar.tsx`), from
+`GET /anime/{wb_id}/similar`. **Below the franchise, deliberately**: the franchise is the rest
+of *this* story and is a fact; this is a guess about what else to watch, and the order says
+which is which.
+
+**It is not the search index, and that is the whole feature.** It was logged as free - one
+`array_cosine_similarity` against a vector already built and published - and on the live
+catalogue that returns puns. The search document leads with every name a title has, because
+that is what took "type the other name and find it" from 10/40 to 22/40, so the vector matches
+on names: *Blue Box Season 2* came back beside *The Blue Orchestra Season 2*, *The Fire Hunter
+Season 2* and *Pacific Rim: The Black Season 2*. A second document, of genres and synopsis with
+no names at all, takes the mean genre overlap of the five nearest neighbours from 0.290 to
+0.402 and makes the examples sane: Blue Box finds school romances, SPY x FAMILY finds Buddy
+Daddies, BOCCHI THE ROCK! finds BanG Dream. All of the reasoning, and the three filters it
+needs to be usable, are in `ai/search/similar.py`.
+
+- **A title with no synopsis gets no block**, and is nobody else's neighbour. 533 titles have
+  none; giving them a shape line instead made two blanks identical and served each to the other
+  as a perfect match.
+- **Its own franchise is excluded** at build time. The section directly above lists it in full.
+- **The caption has to keep matching what it does.** It says "nearest by genre and synopsis,
+  not by popularity, rating, or what anyone else watched next", because a block headed "More
+  like this" otherwise reads as a recommendation engine, and nothing here knows what is good.
+- **Quality is uneven and that is honest.** Tight clusters work (romance, slice-of-life, music);
+  broad fantasy does not - Frieren's nearest are generic isekai. A sequel's neighbours are 69%
+  sequels against a 15% base rate, because sequel synopses say "the second season of".
+- Streams in its own Suspense with the footer guard, renders nothing on failure, and is empty
+  rather than broken on a warehouse published before the table existed.
+
 ## The catalogue defaults to TV
 
 `/browse` with no `format` param shows **TV only**, not everything. `resolveFormat()` in

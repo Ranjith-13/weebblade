@@ -142,6 +142,16 @@ def _build_search_index(data_dir: Path, at: Any, run_date: str) -> None:
     logger.info("Indexed %s titles", build_index(data_dir / "warehouse.duckdb"))
 
 
+def _build_similar(data_dir: Path, at: Any, run_date: str) -> None:
+    """Neighbours for "More like this". A step of its own, not part of the index
+    build, for the two reasons they are separate things: it embeds a different
+    document (ai/search/similar explains why the search one cannot be reused),
+    and either can fail without taking the other's table down."""
+    from ai.search.similar import build_similar
+
+    logger.info("Related %s titles", build_similar(data_dir / "warehouse.duckdb"))
+
+
 def _fetch_airing(data_dir: Path, at: Any, run_date: str) -> None:
     from ingestion.anilist.fetch_airing import land_airing
 
@@ -173,6 +183,10 @@ WEEKLY = [
     Step("build_franchises", _build_franchises),
     Step("generate_digest", _generate_digest),
     Step("build_search_index", _build_search_index),
+    # After build_franchises, and that ordering is load-bearing: the neighbours
+    # exclude a title's own franchise while they are computed, because a title
+    # page already lists its franchise in full above this block.
+    Step("build_similar", _build_similar),
 ]
 
 DAILY = [

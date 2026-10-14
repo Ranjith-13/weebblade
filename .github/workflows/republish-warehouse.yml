@@ -15,7 +15,8 @@
 # wrote about one week (see pipeline/state.py), and asking again would overwrite
 # it with different prose about the same week.
 #
-# It DOES rebuild the search index, and must. warehouse.duckdb is not state -
+# It DOES rebuild the search index and the similar-titles table, and must.
+# warehouse.duckdb is not state -
 # it is rebuilt from the lake every run - so this starts from no warehouse at
 # all, and refresh_catalog builds views over parquet and nothing else. The
 # vectors are a table that build_search_index writes. Publishing without this
@@ -100,6 +101,20 @@ jobs:
           from pathlib import Path
           from ai.search.build_index import build_index
           print('indexed', build_index(Path('data/warehouse.duckdb')), 'titles')
+          "
+
+      # The neighbours behind "More like this", a table for the same reason and
+      # missing from a republished artifact for the same reason. Not a 503 if it
+      # is absent - the endpoint answers with an empty list - which makes it the
+      # quieter version of the same mistake: every title page simply loses the
+      # block and nothing says why. It reads franchise_member, which
+      # refresh_catalog has already built as a view over the lake.
+      - name: Rebuild the similar-titles index
+        run: |
+          python -c "
+          from pathlib import Path
+          from ai.search.similar import build_similar
+          print('related', build_similar(Path('data/warehouse.duckdb')), 'titles')
           "
 
       # What a reader would get, checked before anyone can get it. Before the

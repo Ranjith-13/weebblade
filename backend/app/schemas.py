@@ -370,6 +370,31 @@ class ScoreSettling(BaseModel):
     arrival: ScoreArrival | None = None
 
 
+class SimilarTitle(BaseModel):
+    """One neighbour of a title, with enough on it to draw a plate.
+
+    Decorated here rather than looked up by the client for the same reason a
+    search result is: the vectors and the catalogue are one file, so the join
+    cannot miss.
+    """
+
+    wb_id: str
+    title: str | None = None
+    poster_url: str | None = None
+    score_100: float | None = None
+    format: str | None = None
+    season: str | None = None
+    season_year: int | None = None
+    # Cosine distance from the title being viewed: 0 is the same text, 2 its
+    # opposite. In practice a good neighbour sits between 0.2 and 0.6.
+    distance: float
+
+
+class SimilarTitles(BaseModel):
+    wb_id: str
+    results: list[SimilarTitle] = []
+
+
 class SearchResult(BaseModel):
     title: str
     source: str

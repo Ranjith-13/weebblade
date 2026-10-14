@@ -155,6 +155,18 @@ def anime_seasonal_pipeline():
         logger.info("Indexed %s titles", count)
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
+    def build_similar():
+        """Neighbours for "More like this". After build_franchises in the chain
+        below, which is what lets a title's own franchise be excluded while they
+        are computed. Separate from build_search_index because it embeds a
+        different document - see ai/search/similar.py for why the search vectors
+        cannot answer this."""
+        from ai.search.similar import build_similar as _build_similar
+
+        count = _build_similar(DATA_DIR / "warehouse.duckdb")
+        logger.info("Related %s titles", count)
+
+    @task(trigger_rule=TriggerRule.ALL_DONE)
     def fetch_mal_relations(data_interval_end=None):
         """MAL's related titles, for the franchise graph. See
         ingestion/mal/fetch_relations.py.
@@ -214,7 +226,7 @@ def anime_seasonal_pipeline():
     catalog = (fetches >> fetch_bridge_ids() >> build_bridge() >> consolidate()
                >> record_changes() >> refresh_catalog()
                >> fetch_mal_relations() >> build_franchises())
-    catalog >> generate_digest() >> build_search_index() >> check_run()
+    catalog >> generate_digest() >> build_search_index() >> build_similar() >> check_run()
 
 
 anime_seasonal_pipeline()

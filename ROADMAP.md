@@ -353,6 +353,38 @@ the argument for it being a page rather than a paragraph.
 the score arc on a title page, where a reader who sees a number move asks whether that is
 normal, and from `/changes`, which is the same history one week at a time.
 
+### 11. [x] "More like this", and the index that could not answer it
+
+6,359 embeddings sat in the published warehouse and one page used them. A similar-titles block
+was logged as the cheapest feature left: one `array_cosine_similarity` against the row's own
+vector, over data already built and published.
+
+**It returns puns.** The search document leads with every name a title has, which is what makes
+"type the other name and find it" work (10/40 to 22/40, measured when it was chosen). A vector
+that leads with names matches on names, so Blue Box Season 2 came back beside The Blue
+Orchestra Season 2, The Fire Hunter Season 2 and Pacific Rim: The Black Season 2, and SPY x
+FAMILY beside Spy Classroom and Spy x Sect. **Search and similarity are different retrieval
+tasks and cannot share an index.**
+
+A second document - genres and synopsis, no names - lifts the mean genre overlap of the five
+nearest non-franchise neighbours from 0.290 to 0.402, and the examples become sane: SPY x
+FAMILY finds Buddy Daddies, BOCCHI THE ROCK! finds BanG Dream. Re-ranking the old index by
+genre overlap instead scores 0.541, which is higher and meaningless, because that is the
+measure being optimised; its results still lead with Spy Classroom and with BOCCHI's own recap.
+A re-rank reorders a candidate pool and cannot repair one.
+
+Three filters, each found by reading the output rather than by design: **no synopsis, no
+neighbours** (533 titles had none, and the shape line the search index gives them made two
+blanks identical, so each was served to the other as a perfect match); **the title's own
+franchise excluded**, since the section above lists it in full; and a **0.10 distance floor**,
+below which it is the same work under another name that MAL's relations do not cover.
+
+Precomputed as rows rather than a second vector column: 0.8 MB instead of 9.8 on a file the API
+downloads whole on every wake, and a 47 ms join instead of a scan. It costs ~60s of CPU a week.
+
+Live when the next weekly run publishes a warehouse carrying the table; until then the endpoint
+answers with an empty list and the block does not render.
+
 ---
 
 ## Open — carried over, not urgent

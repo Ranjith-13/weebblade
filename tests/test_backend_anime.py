@@ -384,3 +384,86 @@ def test_studio_filter_spans_every_season_and_ignores_case(tmp_path):
 
     assert body["total"] == 2
     assert sorted(i["source_id"] for i in body["items"]) == ["1", "2"]
+
+
+# GET /anime/{wb_id}/similar - "More like this". The neighbours themselves are
+# built in the pipeline and tested in test_similar.py; what matters here is that
+# the endpoint is a lookup, and that every way of having nothing to show is an
+# empty list rather than an error.
+
+
+def _with_similar(tmp_path, pairs: list[tuple[str, str, float, int]]):
+    import duckdb
+    import pyarrow as pa
+    from backend.app.db import get_db
+    from backend.app.main import app
+
+    db = tmp_path / "warehouse.duckdb"
+    con = duckdb.connect(str(db))
+    con.register("_m", pa.Table.from_pylist([
+        {"wb_id": "wb_a", "title_english": "A Show", "title_romaji": "A Show",
+         "poster_url": "p.jpg", "score_100": 80.0, "format": "TV",
+         "season": "FALL", "season_year": 2026},
+        {"wb_id": "wb_b", "title_english": None, "title_romaji": "Betsu no Show",
+         "poster_url": None, "score_100": None, "format": "movie",
+         "season": "SPRING", "season_year": 2025},
+    ]))
+    con.execute("CREATE TABLE anime_media_latest AS SELECT * FROM _m")
+    if pairs is not None:
+        con.register("_s", pa.Table.from_pylist([
+            {"wb_id": a, "similar_wb_id": b, "distance": d, "rank": r} for a, b, d, r in pairs]))
+        con.execute("CREATE TABLE anime_similar AS SELECT * FROM _s")
+    con.close()
+
+    def override():
+        c = duckdb.connect(str(db), read_only=True)
+        try:
+            yield c
+        finally:
+            c.close()
+
+    app.dependency_overrides[get_db] = override
+    return TestClient(app)
+
+
+def test_similar_titles_come_back_decorated_and_in_rank_order(tmp_path):
+    """Decorated by the API, like a search result, because the vectors and the
+    catalogue are one file so the join cannot miss - and six rows a client has
+    to look up itself is six round trips or a copy of the catalogue."""
+    client = _with_similar(tmp_path, [("wb_a", "wb_b", 0.31, 1)])
+    try:
+        body = client.get("/anime/wb_a/similar").json()
+    finally:
+        app.dependency_overrides.clear()
+
+    assert body["wb_id"] == "wb_a"
+    [first] = body["results"]
+    # The romaji name where there is no English one, the same fallback the rest
+    # of the API uses, so a client never has to pick.
+    assert first["title"] == "Betsu no Show"
+    assert (first["score_100"], first["poster_url"]) == (None, None)
+    assert first["distance"] == pytest.approx(0.31)
+
+
+def test_a_title_with_no_neighbours_is_an_empty_list(tmp_path):
+    """A title with no synopsis gets none by design (see ai/search/similar.py),
+    which is a fact about the catalogue and not a 404."""
+    client = _with_similar(tmp_path, [("wb_b", "wb_a", 0.4, 1)])
+    try:
+        assert client.get("/anime/wb_a/similar").json()["results"] == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_a_warehouse_built_before_the_table_existed_still_answers(tmp_path):
+    """The weeks between this shipping and the next weekly run, when the
+    published warehouse has every other table and not this one. The block
+    renders nothing and the title page is untouched."""
+    client = _with_similar(tmp_path, None)
+    try:
+        response = client.get("/anime/wb_a/similar")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["results"] == []

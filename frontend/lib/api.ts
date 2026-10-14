@@ -18,6 +18,7 @@ import {
   type Schedule,
   type ScheduledEpisode,
   type ScoreSettling,
+  type SimilarTitle,
 } from "./types";
 
 /* Server-only data layer. The client-safe pieces (types, API_BASE, pure
@@ -466,6 +467,25 @@ export async function getTitle(wbId: string): Promise<Anime | null> {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
   }
+}
+
+/** Titles nearest this one by what they are about (GET /anime/{wb_id}/similar).
+ *
+ *  A second request for a title page, like the franchise, and for the same
+ *  reason: it is a block at the bottom that the page is complete without, so it
+ *  streams in its own boundary rather than holding up the title.
+ *
+ *  Cheap at the far end - the neighbours are computed when the warehouse is
+ *  built and stored as rows, so the API joins rather than scanning 6,359
+ *  vectors (47 ms measured). Empty is an ordinary answer: a title with no
+ *  synopsis has no neighbours by design. */
+export async function getSimilar(wbId: string): Promise<SimilarTitle[]> {
+  "use cache";
+  cacheLife("hours");
+  const body = await getJson<{ results: SimilarTitle[] }>(
+    buildUrl(`/anime/${encodeURIComponent(wbId)}/similar`),
+  );
+  return body.results;
 }
 
 /** A title's franchise, oldest first: see GET /anime/{wb_id}/franchise. Empty

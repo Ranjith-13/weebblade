@@ -99,6 +99,25 @@ test("a title page opens from the catalogue and carries its facts", async ({ pag
     );
   }
 
+  /* "More like this", which is the one block here that is a guess rather than a
+     fact. Asserted as an implication, like the history link above: a title with
+     no synopsis gets no neighbours by design, and a warehouse published before
+     ai/search/similar.py existed has none at all, so its absence is a state
+     rather than a failure. What must hold where it does appear is that it links
+     to real title pages and never to the franchise listed right above it. */
+  const similar = page.locator("#similar-title");
+  if (await similar.count()) {
+    const links = page.locator('section[aria-labelledby="similar-title"] a[href^="/anime/"]');
+    expect(await links.count(), "similar titles").toBeGreaterThan(0);
+    const franchise = await page
+      .locator('section[aria-labelledby="franchise-title"] a[href^="/anime/"]')
+      .evaluateAll((nodes) => nodes.map((n) => n.getAttribute("href")));
+    const suggested = await links.evaluateAll((nodes) =>
+      nodes.map((n) => n.getAttribute("href")),
+    );
+    expect(suggested.filter((href) => franchise.includes(href)), "franchise in similar").toEqual([]);
+  }
+
   /* The card a shared link unfurls into. Rendered by Satori, which fails at
      runtime in ways neither tsc nor the build can see - an unsupported CSS
      property, a font that will not parse, a poster that 404s at the origin (six

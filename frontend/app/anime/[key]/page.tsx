@@ -4,6 +4,7 @@ import { notFound, permanentRedirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { EpisodeCountdown } from "@/components/Airing";
 import { FranchiseSection } from "@/components/Franchise";
+import { SimilarSection } from "@/components/Similar";
 import { ParallaxPoster } from "@/components/motion/ParallaxPoster";
 import { NextAiring } from "@/components/NextAiring";
 import { Trailer } from "@/components/Trailer";
@@ -594,6 +595,16 @@ async function AnimeDetail({
     {anime.wb_id && (
       <Suspense fallback={<span data-footer-waits hidden />}>
         <FranchiseSection wbId={anime.wb_id} />
+      </Suspense>
+    )}
+
+    {/* Below the franchise, deliberately. The franchise is the rest of THIS
+        story and is a fact; this is a guess about what else to watch, and the
+        order says which is which. Its own boundary, so neither request waits on
+        the other, and the same footer guard for the same reason. */}
+    {anime.wb_id && (
+      <Suspense fallback={<span data-footer-waits hidden />}>
+        <SimilarSection wbId={anime.wb_id} />
       </Suspense>
     )}
     </>

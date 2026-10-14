@@ -477,6 +477,22 @@ function repunctuate(sentence: string): string {
   return rewritten.replace(/ +([.,;:!?)])/g, "$1").replace(/\( +/g, "(");
 }
 
+/** Mirrors backend/app/schemas.py:SimilarTitle - a neighbour of a title by what
+ *  it is about. Trimmed rather than a whole Anime, like a SearchResult: enough
+ *  to draw a plate, and nothing a block of six needs to carry six times. */
+export type SimilarTitle = {
+  wb_id: string;
+  title: string | null;
+  poster_url: string | null;
+  score_100: number | null;
+  format: string | null;
+  season: string | null;
+  season_year: number | null;
+  /** Cosine distance from the title being viewed. A good neighbour sits between
+   *  0.2 and 0.6; see ai/search/similar.py for what lives below that. */
+  distance: number;
+};
+
 export const SCORE_MAX = 10;
 
 export type ScorePoint = { run_date: string; score_100: number };

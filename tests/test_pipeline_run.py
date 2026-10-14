@@ -73,7 +73,7 @@ def test_the_weekly_run_does_the_dags_work_in_the_dags_order(steps, checks, tmp_
         "fetch_anilist", "fetch_mal", "fetch_kitsu",
         "fetch_bridge_ids", "build_bridge", "consolidate", "record_changes",
         "refresh_catalog", "fetch_mal_relations", "build_franchises",
-        "generate_digest", "build_search_index",
+        "generate_digest", "build_search_index", "build_similar",
     ]
 
 

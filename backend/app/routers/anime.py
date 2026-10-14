@@ -4,7 +4,15 @@ import duckdb
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..db import get_db, run_query
-from ..schemas import Anime, AnimeListResponse, Franchise, FranchiseEntry, ScorePoint
+from ..schemas import (
+    Anime,
+    AnimeListResponse,
+    Franchise,
+    FranchiseEntry,
+    ScorePoint,
+    SimilarTitle,
+    SimilarTitles,
+)
 from .changes import title_changes
 from .schedule import upcoming_episodes
 
@@ -203,6 +211,44 @@ def _date(row: dict) -> str | None:
             break
         parts.append(f"{int(row[key]):02d}")
     return "-".join(parts)
+
+
+# Same reason as /franchise below: declared before /{source}/{source_id}.
+@router.get("/{wb_id}/similar", response_model=SimilarTitles)
+def get_similar(
+    wb_id: str,
+    limit: int = Query(6, ge=1, le=20),
+    con: duckdb.DuckDBPyConnection = Depends(get_db),
+) -> SimilarTitles:
+    """Titles nearest this one by what they are about, nearest first.
+
+    A lookup, not a search: the neighbours are computed when the warehouse is
+    built (ai/search/similar.py) and stored as rows, so this costs a join rather
+    than a scan of 6,359 vectors. That module is also where the reasoning lives
+    for why they are not the search index's vectors, why a title's own franchise
+    is absent, and why a title with no synopsis gets nothing.
+
+    An endpoint rather than a field on the detail response, which is the
+    opposite call from score_history. The series was attached because it is
+    small, always wanted, and already in hand; this is six decorated rows that
+    the page shows at the bottom and can live without, so it streams in its own
+    boundary and a failure here costs the block rather than the title.
+
+    An empty list where there is nothing, never a 404: a title with no synopsis,
+    a warehouse built before this table existed, and a title nobody resembles
+    are all ordinary states of a catalogue rather than errors.
+    """
+    rows = _optional(
+        con,
+        "SELECT s.similar_wb_id AS wb_id, s.distance, "
+        "  COALESCE(m.title_english, m.title_romaji) AS title, "
+        "  m.poster_url, m.score_100, m.format, m.season, m.season_year "
+        "FROM anime_similar s "
+        "JOIN anime_media_latest m ON m.wb_id = s.similar_wb_id "
+        "WHERE s.wb_id = ? ORDER BY s.rank LIMIT ?",
+        [wb_id, limit],
+    )
+    return SimilarTitles(wb_id=wb_id, results=[SimilarTitle(**row) for row in rows])
 
 
 # Declared before /{source}/{source_id}, which would otherwise take
