@@ -56,12 +56,23 @@ export async function generateMetadata(props: PageProps<"/anime/[key]">) {
   const { key } = await props.params;
   try {
     const anime = await load(key);
+    const description = anime.synopsis?.slice(0, 200) ?? undefined;
     return {
       title: displayTitle(anime),
-      description: anime.synopsis?.slice(0, 200) ?? undefined,
+      description,
       // An identity that merged into another still answers here, with the
       // surviving title; the canonical address is the survivor's.
       alternates: anime.wb_id ? { canonical: `/anime/${anime.wb_id}` } : undefined,
+      /* Without this the layout's openGraph is inherited whole, so every title
+       * shared anywhere announced itself as "WeebBlade: a seasonal anime
+       * almanac" with the site's own blurb - the same card for 6,359 different
+       * shows. The image beside it comes from opengraph-image.tsx in this
+       * directory, which the file convention wires up on its own. */
+      openGraph: {
+        title: displayTitle(anime),
+        description,
+        type: "article",
+      },
     };
   } catch (err) {
     // A missing title is Next's own not-found signal, not a failure: let it

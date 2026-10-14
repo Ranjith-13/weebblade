@@ -45,6 +45,15 @@ export const metadata: Metadata = {
       "A weekly almanac of the current anime season, assembled by a real data pipeline.",
     type: "website",
   },
+  /* summary_large_image, not the default summary. A title page renders its own
+   * card now (app/anime/[key]/opengraph-image.tsx) - the show's artwork, its
+   * name, and whether there is a score - and at `summary` that card unfurls as
+   * a thumbnail beside a line of text, which is the one shape it was not drawn
+   * for. X falls back to og:image when no twitter:image is given, so declaring
+   * the card shape is the whole of what is needed here. */
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export default function RootLayout({

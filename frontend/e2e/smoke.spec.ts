@@ -84,6 +84,19 @@ test("a title page opens from the catalogue and carries its facts", async ({ pag
     await expect(page.locator('a[href="#what-changed"]')).toBeVisible();
   }
 
+  /* The card a shared link unfurls into. Rendered by Satori, which fails at
+     runtime in ways neither tsc nor the build can see - an unsupported CSS
+     property, a font that will not parse, a poster that 404s at the origin (six
+     already do). Asserted as a real PNG of the right size rather than as a 200,
+     because an error page is also a 200. */
+  const card = await page.request.get(`${href}/opengraph-image`);
+  expect(card.status(), "opengraph-image status").toBe(200);
+  expect(card.headers()["content-type"]).toContain("image/png");
+  const png = await card.body();
+  expect(png.subarray(0, 8).toString("binary")).toBe("\x89PNG\r\n\x1a\n");
+  expect(png.readUInt32BE(16), "card width").toBe(1200);
+  expect(png.readUInt32BE(20), "card height").toBe(630);
+
   expect(errors, "title page console").toEqual([]);
 });
 

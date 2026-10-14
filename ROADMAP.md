@@ -112,6 +112,34 @@ audit, not from me. Re-run `ingestion/anilist/fetch_season.py` and check before 
 source priority and the `3 of 4 sources live` copy both move if a source is removed, and
 `processing/consolidate.py` has opinions about which source wins a merge.
 
+### 4b. [x] Social cards per title
+
+Every title page sent the site's own card — the same picture and the same
+sentence whichever of 6,359 shows you posted — so a shared link said nothing
+about the show. Each title now renders its own: artwork, name, the facts, and
+the certainty treatment, which is the one idea the design runs on (DESIGN.md §2)
+applied in the place strangers see it first. A scored title prints a flag-pink
+number; an unscored one gets the em-dash null marker and says "no score
+upstream".
+
+The constraint flagged before starting turned out not to bind: Bodoni Moda 900
+is 43.8 KB and Archivo 500 is 109.5 KB, **153 KB of the 500 KB** `ImageResponse`
+budget. Posters are fetched per request rather than bundled, so a cover never
+counts against it.
+
+Two things the first draft got wrong, both caught by rendering a card and
+looking at it. It joined the facts with `·`, which DESIGN.md bans by name, and
+it drew the null marker in the rule colour, where a 78px Bodoni em-dash is one
+hairline and reads as a rendering artefact rather than a decision.
+
+The palette is read out of `app/globals.css` at module load rather than typed
+into the card, because Satori has no stylesheet and DESIGN.md allows no literal
+hex in `app/`. A renamed token fails the build with a message saying so.
+
+*Verified:* a real 1200x630 PNG for both certainty states, and the smoke suite
+now asserts the magic bytes and dimensions rather than a 200 - an error page is
+also a 200.
+
 ### 5. [ ] Warn before the GitHub token expires
 
 The token expires **2027-10-13**. The API already names the failure once it happens — a 401
@@ -203,7 +231,7 @@ file anywhere, and all three suspend at the quota rather than charging.
 | 4. Retire Jikan | fewer ingest calls | GitHub Actions: 2,000 min/month, using ~20 | reduces usage |
 | 5. Token warning | date check in the weekly | existing ntfy topic | none |
 | 6–9. Interface | code only | Vercel Hobby: 100 GB bandwidth, **1M function invocations**, 4h active CPU | hard caps that stop serving, not bill |
-| OG images (if revisited) | `ImageResponse` per title | same | **500 KB bundle limit including fonts** — Bodoni Moda would have to be embedded and may not fit. Measure before committing to it |
+| Social cards | `ImageResponse` per title | same | Measured: the two fonts are **153 KB of the 500 KB** budget, so it fits with room. Posters are fetched at request time rather than bundled, which keeps it there whatever a cover weighs |
 
 One real constraint worth knowing: Vercel's Hobby terms prohibit commercial use. A
 portfolio project is fine; anything that starts earning is not.
