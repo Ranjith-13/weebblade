@@ -162,19 +162,27 @@ then the real one is muted too. Hardcode the date; it is in `README.md`.
 
 Found by reading the live site at 1440 and 375, against `frontend/DESIGN.md`.
 
-### 6. [ ] The best thing on the site is invisible
+### 6. [~] The best thing on the site is invisible
 
 A title page carries a per-source changelog — *"Score 8.2 to 8.1, per AniList"*, *"Premiere
 moved from 1 October to 2 October, per MyAnimeList"*, *"Now on Netflix, per Kitsu and
 AniList"* — and an airing block that states its own provenance and freshness. No other
-anime site has this. It is the pipeline made visible, and it sits below a facts table,
+anime site has this. It is the pipeline made visible, and it sat below a facts table,
 below the fold, reachable only by opening a title and scrolling.
 
-Nothing on the home page or in the grid suggests it exists. `/changes` exists but is a
-separate section a reader has to already want.
+**Done on the title page:** a line under the title says *"6 changes recorded, the latest on
+11 October"* and links to the section, so scrolling for it is a decision rather than an
+accident. Conditional, because the weekly run refetches only the current season and most
+older titles have no history — a pointer to an empty section would promise what the page
+cannot show. The smoke suite asserts it as an implication: where the section exists, so
+does a link to it.
 
-*Cost:* none. *Care:* the section only renders where a title has history, which most older
-titles do not — surfacing it must not promise what a given title cannot show.
+**Still open:** nothing on the home page or in the grid suggests any of it exists. A reader
+who never opens a title never learns the site tracks this. `/changes` is in the nav but is
+a separate section someone has to already want.
+
+*Care, if this is taken further:* the grid would need change data the list endpoint does
+not return, so a marker on a plate is an API change, not a frontend one.
 
 ### 7. [x] `/browse` opens with a wall of controls
 
