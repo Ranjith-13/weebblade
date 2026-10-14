@@ -8,6 +8,7 @@ import {
   isAiring,
   isTv,
   jstDayKey,
+  startedSeason,
   type ChangeFeed,
   type Anime,
   type AnimeListResponse,
@@ -304,7 +305,7 @@ export async function getSeason(key?: string): Promise<Season> {
   cacheLife("hours");
 
   const seasons = await getSeasons();
-  const started = seasons.find((s) => !s.upcoming) ?? seasons[0];
+  const started = startedSeason(seasons);
   const target = seasons.find((s) => s.key === key) ?? started;
   const rows = target ? await getSeasonRows(target.season, target.year) : [];
   const items = dedupeAnime(rows);

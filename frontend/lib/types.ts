@@ -382,6 +382,20 @@ export function byTitle(a: Anime, b: Anime): number {
  * One place, three call sites: the browse plate, the detail page and the search
  * result plate all render this. Dividing by 10 at each of them is how they drift.
  */
+/** Which season a bare URL means: the newest that has STARTED, not the newest
+ *  on file. The pipeline fetches the next season months ahead, so seasons[0] is
+ *  routinely one nobody can watch yet.
+ *
+ *  Here rather than in api.ts because this was being decided in three places
+ *  and two of them were wrong: /browse's generateMetadata took seasons[0], so
+ *  the heading read "Fall 2026" while the tab, the bookmark and the search
+ *  result read "Winter 2027"; and the season index marked that same unstarted
+ *  season as the current one, under a comment claiming it mirrored getSeason().
+ *  A client component needs it, so it cannot live in the server-only module. */
+export function startedSeason<T extends { upcoming: boolean }>(seasons: T[]): T | undefined {
+  return seasons.find((s) => !s.upcoming) ?? seasons[0];
+}
+
 export const SCORE_MAX = 10;
 
 export function scoreOutOfTen(score100: number | null | undefined): string | null {

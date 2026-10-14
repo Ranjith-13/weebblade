@@ -15,6 +15,7 @@ import {
   SORTS,
   sourceMaterialLabel,
   type SortKey,
+  startedSeason,
 } from "@/lib/types";
 
 /* The tab names what the page shows: "Fall 2025", "Iyashikei, Spring 2024",
@@ -32,7 +33,13 @@ export async function generateMetadata(props: PageProps<"/browse">): Promise<Met
   if (studio) return { title: `${studio}, every season` };
 
   const seasons = await getSeasons();
-  const label = (seasons.find((s) => s.key === read("season")) ?? seasons[0])?.label ?? "Seasons";
+  /* startedSeason, not seasons[0]. The page body has always resolved a bare
+     /browse to the newest season that has STARTED; this resolved it to the
+     newest on file, so the heading read "Fall 2026" while the tab, the
+     bookmark and the search result all read "Winter 2027" - a season with
+     nothing aired. Same function as the body now. */
+  const label =
+    (seasons.find((s) => s.key === read("season")) ?? startedSeason(seasons))?.label ?? "Seasons";
   const genre = read("genre");
   return { title: genre ? `${genre}, ${label}` : label };
 }

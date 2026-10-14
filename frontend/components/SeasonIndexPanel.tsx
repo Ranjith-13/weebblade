@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { SEASON_INDEX_ID } from "@/lib/types";
+import { SEASON_INDEX_ID, startedSeason } from "@/lib/types";
 
 /* Mirrors SeasonRef in lib/api.ts. Declared here because that module is
  * server-only, and a client component must not import from it. */
@@ -151,9 +151,14 @@ export function SeasonIndexLive({ seasons }: { seasons: SeasonEntry[] }) {
   const panel = useRef<HTMLDivElement>(null);
 
   const requested = searchParams.get("season");
-  const newest = seasons[0]?.key ?? null;
-  // Mirrors getSeason(): an unknown key falls back to the newest season, and
-  // the front page and the schedule are always the newest.
+  /* The newest season that has STARTED, which is what getSeason() resolves a
+     bare URL to. This read seasons[0] under a comment claiming it mirrored
+     getSeason(), and it did not: the pipeline lists the next season months
+     ahead, so the index marked Winter 2027 as the season in view while every
+     page was showing Fall 2026. */
+  const newest = startedSeason(seasons)?.key ?? null;
+  // An unknown key falls back to that season, and the front page and the
+  // schedule are always on it.
   const activeKey =
     pathname === "/browse"
       ? seasons.some((s) => s.key === requested)
