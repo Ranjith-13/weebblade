@@ -140,19 +140,30 @@ hex in `app/`. A renamed token fails the build with a message saying so.
 now asserts the magic bytes and dimensions rather than a 200 - an error page is
 also a 200.
 
-### 5. [ ] Warn before the GitHub token expires
+### 5. [x] Warn before the GitHub token expires
 
 The token expires **2027-10-13**. The API already names the failure once it happens — a 401
 logs `GITHUB_TOKEN is expired, revoked or wrong` — but nothing warns beforehand, and the
 symptom (a warehouse that stops updating, then 503s after a restart) is easy to misread.
 
-A date check in the weekly run, pushing to the existing ntfy topic inside 30 days, is a few
-lines.
+Done: `pipeline/token_expiry.py`, called by the weekly run with `if: always()` - a run that
+failed its checks is not a reason to skip telling somebody their credentials are lapsing,
+and is probably the week they are least likely to notice on their own.
+
+Thirty days, because the weekly is what carries it: four or five reminders is enough to be
+heard and few enough not to become furniture. It counts down, says "expires today" on the
+day, and says "expired 3 days ago" after - "expires in -3 days" is the kind of line that
+makes a reader doubt the alert rather than the token. Every message carries the
+instructions, because whoever reads it will be a year from having thought about any of this.
 
 *Deliberately not* built on GitHub's `GitHub-Authentication-Token-Expiration` header, which
 is [documented as unreliable for fine-grained tokens](https://github.com/orgs/community/discussions/172213),
 returning server time or a minute from now. A warning that fires falsely gets muted, and
-then the real one is muted too. Hardcode the date; it is in `README.md`.
+then the real one is muted with it. A date somebody typed is worse engineering and better
+behaviour.
+
+11 tests, including one asserting the date in the module matches the one in `README.md` -
+two places name it and a regenerated token has to update both.
 
 *Cost:* none.
 

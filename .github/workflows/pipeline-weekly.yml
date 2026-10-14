@@ -98,6 +98,23 @@ jobs:
           s.publish_warehouse(Path('data'), datetime.now(timezone.utc).strftime('%Y-%m-%d'))
           "
 
+      # The one failure in this project with a date on it. The repository is
+      # private, so the live API cannot read its own warehouse without a token,
+      # and GitHub caps a fine-grained one at a year - after which the catalogue
+      # quietly stops advancing and the site 503s on its next restart, with the
+      # pipeline and the deploy both green. The API says so once it has happened
+      # (backend/app/warehouse.py logs it on a 401); this says so a month before.
+      #
+      # if: always(), because a run that failed its checks is not a reason to
+      # skip telling somebody their credentials are about to lapse - if
+      # anything it is the week they are least likely to notice on their own.
+      # The step cannot fail the run: warn() swallows everything.
+      - name: Warn if the API's token is running out
+        if: always()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python -m pipeline.token_expiry
+
       - name: Write the run to RUNS.md
         if: always()
         run: |
