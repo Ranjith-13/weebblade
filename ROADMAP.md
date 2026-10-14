@@ -252,15 +252,38 @@ block said both "Open" and "Close" at once. `group-[[open]]:` uses the attribute
 element actually carries. Caught by reading computed styles, not by the typecheck or the
 build.
 
-### 8. [ ] The certainty system has quietly lost its job
+### 8. [x] The certainty system has NOT lost its job - I was wrong
 
-The halftone treatment was drawn when 73% of a season had no score. TV is now 88% scored,
-so the default view is a near-uniform grid of full-colour plates — which is the thing
-`DESIGN.md` bans in its own words: "one uniform grid where every item carries equal weight".
+Closed by measuring rather than by deciding, because the premise was false.
 
-The idea still earns its keep one format chip away (over half of ONAs, films and music
-videos are unscored). This is not a bug and not a reason to fake the state; it is a
-question about whether the default view still shows what the design was built to show.
+I wrote that the halftone had stopped doing anything on the default view, reasoning from a
+figure in `CLAUDE.md`: "88% of a season's TV is scored now". That number is real and it is
+the wrong one to reason from. It was measured on 2026-09-14, when the default view was a
+Summer season well into its run. **The default is never a settled season** - `startedSeason`
+picks the newest that has STARTED, which is always the one whose titles have had the least
+time to be scored.
+
+Measured live, 2026-10-14:
+
+| Season | TV screened back | All formats |
+|---|---|---|
+| Fall 2025 | 25% | 45% |
+| Winter 2026 | 12% | 40% |
+| Spring 2026 | 12% | 44% |
+| Summer 2026 | 10% | 54% |
+| **Fall 2026** (what a visitor sees) | **27%** | **56%** |
+
+A quarter of the default grid is screened back, and 56% of it one format chip away. That is
+not "a uniform grid where every item carries equal weight"; it is the system working on the
+majority condition it was drawn for.
+
+The structural point is the useful one, and it is now in `DESIGN.md`: because the default
+tracks the newest started season, this view regenerates its own unknowns every quarter. The
+design cannot age out of a job while that is true.
+
+*What was actually wrong* was the documentation, which quoted one season's number as if it
+were the catalogue's. Both files now give the range and say which end the reader is looking
+at.
 
 ### 9. [x] Grid plates say which episode lands this week
 

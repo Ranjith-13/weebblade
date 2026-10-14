@@ -56,8 +56,21 @@ link 46%, cover art 30%. A season runs 233 to 370 titles, 57 to 88 of them TV.
 
 When this was drawn, 73% of the season was in the screened-back state: not an edge case being
 styled but the majority condition, so the page had to look composed when most of it was unknown.
-With MAL and AniList it is 12% of a season's TV (2026-09-14), and still over half of the ONAs,
-films and music videos a format chip away. The page has to look composed either way.
+With MAL and AniList it is far less, but it never goes away, and the reason is structural:
+the default view is the newest season that has STARTED, which is always the one whose titles
+have had the least time to be scored. Measured across five seasons on 2026-10-14:
+
+| Season | TV screened back | All formats |
+|---|---|---|
+| Fall 2025 | 25% | 45% |
+| Winter 2026 | 12% | 40% |
+| Spring 2026 | 12% | 44% |
+| Summer 2026 | 10% | 54% |
+| **Fall 2026** (the default today) | **27%** | **56%** |
+
+A season settles to about 10-12% once it has run; the one on screen by default sits at a
+quarter, and more than half of it is screened back a format chip away. The page has to look
+composed either way, and the design has not run out of work to do.
 
 This lives in two utilities in `globals.css` (`.plate-known` / `.plate-unknown`) and is applied
 from `isKnown(anime)` — a real predicate over real data. **It must never be applied

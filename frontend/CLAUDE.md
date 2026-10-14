@@ -9,9 +9,13 @@ Read `DESIGN.md` before changing anything visual. Most choices here are measured
 **Halftone Almanac — colour as certainty.** The design spends its one colour on whether a title
 has a score: scored titles print in full colour with a flag-pink tab, unscored ones drain to
 greyscale and screen back to visible halftone. It was drawn when 39 of 142 titles had one. With
-MAL and AniList beside Kitsu, 88% of a season's TV is scored now, but not the rest: in Summer 2026,
-17 of 62 ONAs and 8 of 59 music videos (measured 2026-09-14). So the screened-back state is the
-exception on the TV default and the rule one format chip away. A third state, diagonal rule fill,
+MAL and AniList beside Kitsu, a settled season's TV is ~88-90% scored - but the default view is
+never a settled season. It is the newest that has started, which is always the least scored:
+Fall 2026 is 27% screened back against Summer 2026's 10% (measured 2026-10-14). And not the
+rest regardless: in Summer 2026,
+17 of 62 ONAs and 8 of 59 music videos (measured 2026-09-14). So the screened-back state is a
+quarter of the TV default and the majority one format chip away - 56% of Fall 2026 across all
+formats. A third state, diagonal rule fill,
 is for a title with no artwork - a *separate* gap from a missing score, and it must stay
 separate, though posters now cover 99.9% of the catalogue.
 
