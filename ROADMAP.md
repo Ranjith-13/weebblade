@@ -176,14 +176,35 @@ separate section a reader has to already want.
 *Cost:* none. *Care:* the section only renders where a title has history, which most older
 titles do not — surfacing it must not promise what a given title cannot show.
 
-### 7. [ ] `/browse` opens with a wall of controls
+### 7. [x] `/browse` opens with a wall of controls
 
-At 1440 the first poster sits below five filter rows, genre alone running three lines. On
-the page whose job is "show me this season", the season starts after the apparatus.
+Measured first, and the measurement moved the argument. At 1440 the first plate sat at
+611px against a 1000px fold - survivable, and my earlier "below the fold at 1440" was
+overstated. **The phone was the real case**: at 390x844 the first plate sat at **1,259px**
+with the fold at 844, the genre chips alone running 358 of those pixels. A screen and a
+half of controls before a single poster.
 
-`DESIGN.md` already made this trade once in the other direction, moving the season chips
-out of the filter block. Worth measuring where the first plate lands at both widths before
-changing anything.
+That is the number DESIGN.md already fixed the home page *from*: the full digest put
+posters at ~2,400px, the one-paragraph lead brought them to ~1,270. /browse had quietly
+arrived back there.
+
+Folded into a native `<details>`, so filtering still ships no JS and every view is still a
+real URL - the rule the block is built on. It opens whenever anything is filtering, because
+a reader who cannot see what is narrowing their results cannot clear it either, and the
+summary names the active filters so a filtered view says so while closed.
+
+| | before | after |
+|---|---|---|
+| First plate, 390x844 | 1,259px | **405px** |
+| Plates on the first screen, phone | 0 | 4 |
+| First plate, 1440x1000 | 611px | **302px** |
+| Plates on the first screen, desktop | 0 | 12 |
+
+*One thing worth keeping:* Tailwind's `group-open:` compiles to the `:open` pseudo-class,
+which this browser applied to one of the two state labels and not the other, so an opened
+block said both "Open" and "Close" at once. `group-[[open]]:` uses the attribute the
+element actually carries. Caught by reading computed styles, not by the typecheck or the
+build.
 
 ### 8. [ ] The certainty system has quietly lost its job
 

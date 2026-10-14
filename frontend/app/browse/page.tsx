@@ -190,6 +190,22 @@ async function BrowseResults({
       current.studio ||
       (current.format && current.format !== DEFAULT_FORMAT),
   );
+  /* What the summary says while it is shut. A filtered view has to announce
+     itself even folded away, or the reader is looking at 12 titles of 81 with
+     nothing on screen explaining why. Sort is named only when it is not the
+     default, for the same reason the default format is not counted a filter. */
+  const activeLabels = [
+    current.genre,
+    current.material,
+    current.service,
+    current.studio,
+    current.format && current.format !== DEFAULT_FORMAT
+      ? formatLabel(resolveFormat(current.format) ?? current.format)
+      : null,
+    current.rated ? "Rated only" : null,
+    sortKey !== "score" ? SORTS.find((s) => s.key === sortKey)?.label ?? null : null,
+  ].filter(Boolean) as string[];
+
   const scoredHere = items.filter(isKnown).length;
 
   /* Earlier and later are neighbours in the list, which is newest first. A season
@@ -281,11 +297,47 @@ async function BrowseResults({
         )}
       </p>
 
-      {/* Season is not in this block any more. It was the first of six chip rows
-          here, which is exactly where nobody looked for it: the heading above now
-          names the season and steps to its neighbours, and the header's index
-          reaches any of them from any page. */}
-      <div className="mt-7 space-y-4 border-y border-rule py-5">
+      {/* FOLDED AWAY, BECAUSE IT WAS A SCREEN AND A HALF OF CONTROLS BEFORE A
+          SINGLE POSTER. Measured on the live site: at 390x844 the first plate
+          sat at 1,259px with the fold at 844, and the genre chips alone ran 358
+          of those pixels. At 1440x1000 it is 611px, which is survivable; the
+          phone is not.
+
+          This is the same trade DESIGN.md already made for the home page, where
+          the full digest put posters at ~2,400px and the one-paragraph lead
+          brought them to ~1,270. /browse had quietly arrived at the number that
+          build was fixed FROM.
+
+          A native <details>, so filtering still ships no JS and every view is
+          still a real URL - the rule this block is built on. Open whenever
+          anything is filtering, because a reader who cannot see what is
+          narrowing their results cannot clear it either; the summary names them
+          besides, so a filtered view says so while closed.
+
+          Season is not in here. It was the first of six chip rows, which is
+          exactly where nobody looked for it: the heading above names the season
+          and steps to its neighbours, and the header's index reaches any of them
+          from any page. */}
+      <details open={hasFilters} className="group mt-7 border-y border-rule">
+        <summary className="flex cursor-pointer list-none items-baseline justify-between gap-4 py-3.5 transition-colors hover:text-flag">
+          <span className="stamp">Filter and sort</span>
+          <span className="meta text-right">
+            {activeLabels.length > 0 ? activeLabels.join(", ") : "All of the season"}
+            {/* The attribute selector, not the :open pseudo-class. Tailwind's
+                group-open: compiles to :open, which this browser applied to one
+                of these spans and not the other, so an opened block said both
+                "Open" and "Close" at once. [open] is the state the element
+                actually carries and every browser has matched it for years. */}
+            <span className="ml-3 text-ink-soft group-[[open]]:hidden" aria-hidden>
+              Open
+            </span>
+            <span className="ml-3 hidden text-ink-soft group-[[open]]:inline" aria-hidden>
+              Close
+            </span>
+          </span>
+        </summary>
+
+        <div className="space-y-4 pb-5">
         <FilterRow label="Genre">
           <Chip href={buildHref(current, { genre: undefined, page: undefined })} active={!current.genre}>
             All
@@ -414,7 +466,8 @@ async function BrowseResults({
             Rated only
           </Chip>
         </FilterRow>
-      </div>
+        </div>
+      </details>
 
       {visible.length === 0 ? (
         <div className="mt-14 max-w-prose">
