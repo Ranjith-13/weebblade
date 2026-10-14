@@ -400,6 +400,83 @@ export function startedSeason<T extends { upcoming: boolean }>(seasons: T[]): T 
   return seasons.find((s) => !s.upcoming) ?? seasons[0];
 }
 
+/** The em-dash, and the ONLY place this site is allowed to print one.
+ *
+ *  DESIGN.md bans em-dashes in visible copy because it is the single most
+ *  reliable tell of generated prose, with one carve-out: the marker for "no
+ *  value" in tabular data, which is a typographic convention rather than a
+ *  flourish. Naming it means the lint rule in eslint.config.mjs can reject
+ *  every other em-dash in app/, components/ and lib/ without an allowlist, and
+ *  a reader of a plate, a search result or a social card can see that the dash
+ *  there is the same deliberate one. */
+// Written as an escape so that it reads as deliberate rather than typed.
+// eslint-disable-next-line no-restricted-syntax -- the one em-dash this site prints
+export const NULL_MARKER = "\u2014";
+
+// What an LLM reaches for and a keyboard does not. The narrow no-break space
+// and the non-breaking hyphen are invisible as characters and obvious as
+// provenance; the digest of 2026-10-12 carried 26 of the hyphen and 13 of the
+// space.
+const NARROW_NBSP = "\u202f";
+const NB_HYPHEN = "\u2011";
+const EM_DASH = /\s*\u2014\s*/g;
+const SENTENCE_END = /(?<=[.!?])\s+/;
+
+/** Generated prose, repunctuated as this site punctuates.
+ *
+ *  THE DIGEST IS THE ONE BLOCK OF TEXT HERE NOBODY WROTE, and it is also the
+ *  largest: the home page prints its lead paragraph. The run of 2026-10-12
+ *  carried five em-dashes, one of them in that lead, against a design rule that
+ *  bans them by name. Fixing it in the prompt would only reach digests not yet
+ *  written, and models follow negative formatting instructions unevenly; this
+ *  reaches the ones already stored, on the next render, deterministically.
+ *
+ *  It changes punctuation and never words, which is the line that keeps "written
+ *  by an LLM from this week's ingested data" an honest caption. ageRatingLabel()
+ *  normalises a vocabulary for display on the same principle.
+ *
+ *  WHAT AN EM-DASH BECOMES, decided by reading the output rather than by taste:
+ *  - Two in one sentence are a parenthesis, so they become brackets. "hit the
+ *    schedule (including Aoashi Season 2, Blue Box Season 2 and Firefly
+ *    Wedding) while several series shifted premiere dates".
+ *  - One is almost always introducing an elaboration, which is a colon's job.
+ *    A comma was tried first and makes run-ons of the cases that matter: "a
+ *    slew of streaming deals landed, Aoashi Season 2 now streams on iQIYI"
+ *    joins two independent clauses, where "landed: Aoashi Season 2 now
+ *    streams" does not.
+ *  - Except straight after a figure, where a colon reads as a ratio or a label
+ *    rather than an introduction: "an average score of 69.6, slightly under
+ *    Summer's 71.0", not "69.6: slightly under".
+ *
+ *  Three em-dashes in one sentence is past deterministic repair and they all
+ *  become colons. No digest has yet done it. */
+export function plainPunctuation(text: string): string {
+  return text
+    .replaceAll(NB_HYPHEN, "-")
+    .replaceAll(NARROW_NBSP, " ")
+    .split("\n")
+    .map((line) => line.split(SENTENCE_END).map(repunctuate).join(" "))
+    .join("\n");
+}
+
+function repunctuate(sentence: string): string {
+  const dashes = sentence.match(/\u2014/g)?.length ?? 0;
+  if (dashes === 0) return sentence;
+
+  const rewritten =
+    dashes % 2 === 0
+      ? (() => {
+          let inside = false;
+          return sentence.replace(EM_DASH, () => ((inside = !inside) ? " (" : ") "));
+        })()
+      : sentence.replace(EM_DASH, (_match: string, at: number) =>
+          /\d$/.test(sentence.slice(0, at)) ? ", " : ": ",
+        );
+
+  // A dash that closed a clause at the end of a sentence leaves " )." behind.
+  return rewritten.replace(/ +([.,;:!?)])/g, "$1").replace(/\( +/g, "(");
+}
+
 export const SCORE_MAX = 10;
 
 export type ScorePoint = { run_date: string; score_100: number };
@@ -503,7 +580,7 @@ export const PHASE_LABEL: Record<SeasonPhase, string> = {
  *  The null marker rather than 0% where there is no total: a season nothing was
  *  asked about has no rate, and 0% would state the opposite of that. */
 export function shareOf(part: number, whole: number): string {
-  return whole === 0 ? "\u2014" : `${Math.round((part / whole) * 100)}%`;
+  return whole === 0 ? NULL_MARKER : `${Math.round((part / whole) * 100)}%`;
 }
 
 export function scoreOutOfTen(score100: number | null | undefined): string | null {

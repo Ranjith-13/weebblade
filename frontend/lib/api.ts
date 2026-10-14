@@ -8,6 +8,7 @@ import {
   isAiring,
   isTv,
   jstDayKey,
+  plainPunctuation,
   startedSeason,
   type ChangeFeed,
   type Anime,
@@ -475,17 +476,31 @@ export async function getFranchise(wbId: string): Promise<Franchise> {
   return getJson<Franchise>(buildUrl(`/anime/${encodeURIComponent(wbId)}/franchise`));
 }
 
+/* THE DIGEST IS REPUNCTUATED ON THE WAY OUT, in both getters, which is the only
+ * place it passes through. See plainPunctuation in ./types: it is the one block
+ * of text on this site nobody wrote, and the run of 2026-10-12 carried five
+ * em-dashes, 26 non-breaking hyphens and 13 narrow no-break spaces - against a
+ * design rule that bans the first by name. Punctuation only, never words, so
+ * "written by an LLM from this week's ingested data" stays true.
+ *
+ * Here rather than at the two <Markdown> call sites because the home page
+ * splits the content into paragraphs before rendering it, so a fix at the
+ * component would have to be applied twice and would miss the next consumer. */
 export async function getLatestDigest(): Promise<Digest | null> {
   "use cache";
   cacheLife("hours");
   try {
-    return await getJson<Digest>(buildUrl("/digest/latest"));
+    return readable(await getJson<Digest>(buildUrl("/digest/latest")));
   } catch (err) {
     // 503 is the documented "no digest generated yet" state, not a failure —
     // the home page renders an honest empty state rather than an error.
     if (err instanceof ApiError && err.status === 503) return null;
     throw err;
   }
+}
+
+function readable(digest: Digest): Digest {
+  return { ...digest, content: plainPunctuation(digest.content) };
 }
 
 export async function getDigestDates(): Promise<string[]> {
@@ -502,7 +517,7 @@ export async function getDigest(runDate: string): Promise<Digest | null> {
   "use cache";
   cacheLife("hours");
   try {
-    return await getJson<Digest>(buildUrl(`/digest/${encodeURIComponent(runDate)}`));
+    return readable(await getJson<Digest>(buildUrl(`/digest/${encodeURIComponent(runDate)}`)));
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;

@@ -4,7 +4,14 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 
 import { getTitle } from "@/lib/api";
-import { displayTitle, isKnown, scoreOutOfTen, SCORE_MAX, secondaryTitle } from "@/lib/types";
+import {
+  displayTitle,
+  isKnown,
+  NULL_MARKER,
+  scoreOutOfTen,
+  SCORE_MAX,
+  secondaryTitle,
+} from "@/lib/types";
 
 /* The card a shared title link unfurls into.
  *
@@ -234,7 +241,7 @@ export default async function Image({ params }: { params: Promise<{ key: string 
                   color: known ? palette.flag : palette["ink-soft"],
                 }}
               >
-                {known ? score : "—"}
+                {known ? score : NULL_MARKER}
                 {known && (
                   <span style={{ fontFamily: "Archivo", fontSize: 24, color: palette["ink-soft"], marginLeft: 8 }}>
                     / {SCORE_MAX}

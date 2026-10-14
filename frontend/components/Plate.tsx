@@ -7,6 +7,7 @@ import {
   isAiring,
   isKnown,
   jstDayKey,
+  NULL_MARKER,
   SCORE_MAX,
   scoreOutOfTen,
   titleHref,
@@ -79,7 +80,7 @@ export function Plate({
               : "border-b border-r border-ink bg-paper text-[0.8rem] text-ink-soft",
           ].join(" ")}
         >
-          {known ? scoreOutOfTen(anime.score_100) : "—"}
+          {known ? scoreOutOfTen(anime.score_100) : NULL_MARKER}
           <span className="sr-only">
             {known ? ` out of ${SCORE_MAX}` : "no score available for this title"}
           </span>

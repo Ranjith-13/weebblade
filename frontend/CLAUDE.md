@@ -58,6 +58,19 @@ Decorative dots or squares before labels. `01 / 02` numbering on a countable lis
 metadata and `→` appended to link text. Uniform card grids where every item
 carries equal weight regardless of what is known about it.
 
+**The em-dash ban is enforced by `eslint.config.mjs`**, not by remembering it: it was broken three
+times after being written into DESIGN.md, once as `&mdash;` where grepping for the character found
+nothing. Any em-dash in JSX text, a string or a template under `app/`, `components/` or `lib/` is a
+lint error. The one legitimate use, the null marker in tabular data, is `NULL_MARKER` from
+`lib/types.ts`. Comments are not matched. The en-dash in `A–Z` is a range and is fine.
+
+**The digest is repunctuated on the way out of `lib/api.ts`** (`plainPunctuation`), because it is
+the one block of prose here nobody wrote and the home page prints its lead. Punctuation only, never
+words. The e2e suite asserts the rendered `.digest-prose` carries no em-dash, non-breaking hyphen
+or narrow no-break space, and that assertion was checked by disabling the normaliser and watching
+it go red. If you change what it does, `/digest`'s intro paragraph describes it to readers and has
+to keep matching.
+
 If a change would fit three other products, it is wrong.
 
 ## Data layer — three upstream bugs it works around

@@ -27,11 +27,18 @@ export default function DigestIndexPage() {
         <h1 className="font-display text-[clamp(2.2rem,6vw,3.4rem)] font-black leading-none">
           Digest archive
         </h1>
+        {/* "They are kept unedited" was true until the digest started being
+            repunctuated on its way to the page (plainPunctuation in lib/types.ts),
+            and then it was the kind of sentence this site keeps catching itself
+            in: copy that was accurate when it was written and quietly was not
+            any more. The claim worth making is the narrow one, so it can stay
+            true. */}
         <p className="mt-4 leading-[1.7] text-ink-soft">
           Each week the pipeline hands that run&rsquo;s aggregates to an LLM and asks for a
-          written read on the season. They are kept unedited, including where a week&rsquo;s
-          figures differ from today&rsquo;s. Each one is a record of what the pipeline knew
-          at the time.
+          written read on the season. The words are kept as it wrote them, including where a
+          week&rsquo;s figures differ from today&rsquo;s; only the punctuation is normalised to
+          the house style on the way to this page. Each one is a record of what the pipeline
+          knew at the time.
         </p>
       </div>
       <Suspense fallback={<div className="mt-11 h-40 border-t border-rule" />}>

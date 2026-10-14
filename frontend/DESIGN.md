@@ -255,6 +255,21 @@ and the first pass shipped 13 of them, including in the page title. The one carv
 used as a *null marker* on an unscored plate: that is standard typographic convention for "no
 value" in tabular data, not a stylistic flourish.
 
+**This is now a lint rule, because saying it here was not enough.** It was broken three more times
+after being written down: twice in prose, and once as `&mdash;` on `/search`, which no search for
+the character would ever have found. `eslint.config.mjs` rejects an em-dash in any JSX text, string
+or template under `app/`, `components/` and `lib/`; the carve-out is exported as `NULL_MARKER` from
+`lib/types.ts`, so the four places entitled to print one need no allowlist and declare themselves.
+Comments are not matched, which is why this paragraph can exist.
+
+**The digest is repunctuated, and it is the only text here that is.** It is written by an LLM, and
+the run of 2026-10-12 carried five em-dashes, one of them in the lead paragraph the home page
+prints, plus 26 non-breaking hyphens and 13 narrow no-break spaces. `plainPunctuation()` rewrites
+them on the way out of the data layer: two em-dashes in a sentence become brackets, one becomes a
+colon, and one straight after a figure becomes a comma. Punctuation only, never words, which is
+what keeps the caption on `/digest` honest, and that caption was corrected in the same change
+because it used to say the digests were kept unedited.
+
 **No decorative markers.** No coloured dot or square before a label, no `01 / 02` numbering on a
 list the reader can count, no `·` joining metadata.
 

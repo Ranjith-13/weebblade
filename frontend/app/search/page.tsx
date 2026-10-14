@@ -27,8 +27,8 @@ export default async function SearchPage() {
         <p className="mt-4 leading-[1.7] text-ink-soft">
           Your words are turned into a vector by a sentence-transformers model and matched
           against vectors built from each title&rsquo;s name, genres and synopsis. Describe what
-          you want rather than naming it &mdash; &ldquo;quiet show about cooking&rdquo; works
-          here in a way it would not in a keyword search.
+          you want rather than naming it: &ldquo;quiet show about cooking&rdquo; works here
+          in a way it would not in a keyword search.
         </p>
       </div>
 

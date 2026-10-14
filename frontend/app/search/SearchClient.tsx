@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import {
   API_BASE,
   formatLabel,
+  NULL_MARKER,
   SCORE_MAX,
   scoreOutOfTen,
   titleHref,
@@ -257,7 +258,7 @@ export function SearchClient({ total }: { total: number }) {
                               : "border-b border-r border-ink bg-paper text-[0.8rem] text-ink-soft",
                           ].join(" ")}
                         >
-                          {known ? scoreOutOfTen(score) : "—"}
+                          {known ? scoreOutOfTen(score) : NULL_MARKER}
                           <span className="sr-only">
                             {known ? ` out of ${SCORE_MAX}` : "no score available for this title"}
                           </span>
@@ -276,7 +277,7 @@ export function SearchClient({ total }: { total: number }) {
                         />
                       </div>
                       <p className="meta mt-1 flex justify-between gap-2">
-                        <span>{result.format ? formatLabel(result.format) : "—"}</span>
+                        <span>{result.format ? formatLabel(result.format) : NULL_MARKER}</span>
                         <span className="tnum">{result.distance.toFixed(2)}</span>
                       </p>
                     </Link>

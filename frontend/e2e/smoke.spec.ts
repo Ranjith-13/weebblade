@@ -115,6 +115,36 @@ test("a title page opens from the catalogue and carries its facts", async ({ pag
   expect(errors, "title page console").toEqual([]);
 });
 
+/* The digest is the one block of prose here that nobody wrote, and the home page
+ * prints its lead paragraph. The run of 2026-10-12 carried five em-dashes - one
+ * of them in that lead - plus 26 non-breaking hyphens and 13 narrow no-break
+ * spaces, against a design rule that bans the first by name. plainPunctuation()
+ * in lib/types.ts repunctuates it on the way out of the data layer.
+ *
+ * Asserted on the rendered page rather than on the function, because what has to
+ * be true is that none of it reaches a reader, and the next digest will be
+ * written by a model that has never read DESIGN.md. An absence assertion, so it
+ * cannot be flaky: a week whose digest is already clean passes for the right
+ * reason, and a week whose digest is missing skips. */
+const GENERATED = { "em-dash": "\u2014", "non-breaking hyphen": "\u2011", "narrow no-break space": "\u202f" };
+
+test("the digest reaches the page with none of the typography a model reaches for", async ({ page }) => {
+  await page.goto("/");
+
+  const lead = page.locator(".digest-prose");
+  if (!(await lead.count())) test.skip(true, "no digest on file yet");
+
+  const dated = await page.locator('a[href^="/digest/"]').first().getAttribute("href");
+  for (const path of ["/", dated].filter(Boolean)) {
+    await page.goto(path!);
+    const prose = await page.locator(".digest-prose").first().innerText();
+    expect(prose.length, `${path} digest prose`).toBeGreaterThan(0);
+    for (const [name, char] of Object.entries(GENERATED)) {
+      expect(prose.includes(char), `${path} digest contains a ${name}`).toBe(false);
+    }
+  }
+});
+
 /* The streamed pages, which send their layout before their content: the footer
  * waits for the content (data-footer-waits in globals.css) so it cannot be
  * pushed down when it arrives. That guard is invisible until it breaks, so it
