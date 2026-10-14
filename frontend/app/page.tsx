@@ -195,7 +195,13 @@ async function Home() {
                 The sources changed their minds{" "}
                 <span className="tnum">{changed.total}</span> times this week
               </Link>
-              {" — "}
+              {/* A colon, not the em-dash this shipped with. DESIGN.md bans
+                  em-dashes in visible copy by name, and the one carve-out is
+                  the null marker on an unscored plate - this was neither, and
+                  it was on the page every visitor lands on. A colon is also
+                  what the sentence actually wants: a count, then the
+                  itemisation of that count. */}
+              {": "}
               {changed.kinds.map((kind, i) => (
                 <span key={kind.label}>
                   {i > 0 && (i === changed.kinds.length - 1 ? " and " : ", ")}

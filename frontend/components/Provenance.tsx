@@ -32,7 +32,11 @@ export async function Provenance({ className }: { className?: string }) {
   return (
     <p className={className}>
       Assembled weekly from {joinSources(live)}
-      {live.length < configured && ` — ${live.length} of ${configured} sources live`}.
+      {/* Parenthesised rather than joined with an em-dash, which DESIGN.md
+          bans in visible copy. Not a comma either: joinSources() produces a
+          comma-separated list, so ", 2 of 3 sources live" reads as one more
+          source in it. */}
+      {live.length < configured && ` (${live.length} of ${configured} sources live)`}.
     </p>
   );
 }
