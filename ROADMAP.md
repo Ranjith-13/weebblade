@@ -204,12 +204,23 @@ older titles have no history — a pointer to an empty section would promise wha
 cannot show. The smoke suite asserts it as an implication: where the section exists, so
 does a link to it.
 
-**Still open:** nothing on the home page or in the grid suggests any of it exists. A reader
-who never opens a title never learns the site tracks this. `/changes` is in the nav but is
-a separate section someone has to already want.
+**Done on the home page:** a line under the digest says what the week held and links to
+`/changes` — *"The sources changed their minds 361 times this week — 147 scores, 80
+streaming links and 55 starts and finishes, each with the source that reported it."*
+Counted from the feed, never written down.
 
-*Care, if this is taken further:* the grid would need change data the list endpoint does
-not return, so a marker on a plate is an API change, not a frontend one.
+**That needed no API change**, which this file previously said it would. `/changes` already
+returns every entry with its `wb_id` in one small cached request — the same shape that made
+the plate airdates free. The note was written before that was noticed; a marker on an
+individual plate would still need the backend, because `changes` is empty on list rows.
+
+*The cost, measured on a phone:* the first poster moved from **1,418px to 1,491px**, 73px.
+A first draft of the sentence cost 142px and was cut in half, because this is the page
+`DESIGN.md` already trimmed the digest on to lift the posters up, and spending that back on
+a teaser would have been the same mistake from the other direction.
+
+**Still open:** the grid itself says nothing. A plate whose title changed this week looks
+exactly like one that did not.
 
 ### 7. [x] `/browse` opens with a wall of controls
 

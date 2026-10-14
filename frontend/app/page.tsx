@@ -3,12 +3,12 @@ import { Suspense } from "react";
 import Markdown from "react-markdown";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
 import { ProvenanceLines } from "@/components/Provenance";
-import { getLatestDigest, getSeason, getSeasons, getWeekEpisodes } from "@/lib/api";
+import { getChanges, getLatestDigest, getSeason, getSeasons, getWeekEpisodes } from "@/lib/api";
 import { MastheadScroll } from "@/components/motion/MastheadScroll";
 import { PinnedAside } from "@/components/motion/PinnedAside";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
 import { halftone } from "@/lib/design-tokens";
-import { byScoreThenPopularity, isTv, SEASON_INDEX_ID } from "@/lib/types";
+import { byScoreThenPopularity, changeSummary, isTv, SEASON_INDEX_ID } from "@/lib/types";
 
 function dateline(runDate: string): string {
   const parsed = new Date(`${runDate}T00:00:00Z`);
@@ -44,12 +44,14 @@ function HomeSkeleton() {
 }
 
 async function Home() {
-  const [digest, season, seasons, week] = await Promise.all([
+  const [digest, season, seasons, week, changes] = await Promise.all([
     getLatestDigest(),
     getSeason(),
     getSeasons(),
     getWeekEpisodes(),
+    getChanges(),
   ]);
+  const changed = changeSummary(changes.changes);
 
   /* TV only, matching what /browse defaults to. Ranking the whole season put
      music videos and shorts in a list headed "rated highest", which they can
@@ -170,6 +172,38 @@ async function Home() {
                 catalogue below is live in the meantime.
               </p>
             </div>
+          )}
+
+          {/* WHAT THE PIPELINE ACTUALLY DOES, SAID ON THE PAGE PEOPLE LAND ON.
+              Every title keeps a per-source history - a score moving 8.2 to 8.1
+              per AniList, a premiere sliding a day per MyAnimeList - and until
+              now the only way to find out was to open a title and scroll, or to
+              already know /changes was in the nav. It is the one thing here no
+              other anime site has, and it was invisible.
+
+              A sentence rather than a section: the home page is a digest and a
+              catalogue, and a third block would push the posters back down the
+              page the digest was already trimmed to lift them up. Counted from
+              the feed, never written down - a number in the copy is wrong within
+              a week, which is the mistake the provenance line exists to end. */}
+          {changed && (
+            <p className="meta mt-4 max-w-[54ch] !leading-[1.6]">
+              <Link
+                href="/changes"
+                className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+              >
+                The sources changed their minds{" "}
+                <span className="tnum">{changed.total}</span> times this week
+              </Link>
+              {" — "}
+              {changed.kinds.map((kind, i) => (
+                <span key={kind.label}>
+                  {i > 0 && (i === changed.kinds.length - 1 ? " and " : ", ")}
+                  <span className="tnum">{kind.count}</span> {kind.label}
+                </span>
+              ))}
+              , each with the source that reported it
+            </p>
           )}
         </div>
 

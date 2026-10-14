@@ -787,6 +787,51 @@ export const CHANGE_SECTIONS = [
   { key: "listed", title: "Newly listed", fields: ["listed"] },
 ] as const;
 
+/** The week's changes said in one line: how many, and the three kinds there
+ *  were most of.
+ *
+ *  Three because the tail is long and uninformative - a week carries eight
+ *  kinds and the smallest are a handful each, so listing them all turns a
+ *  sentence into a table nobody reads. Derived from the feed rather than
+ *  written down, for the same reason every other count on this site is: a
+ *  number in the copy is wrong within a week.
+ *
+ *  Returns null under a threshold, because "the sources reported 2 changes
+ *  this week" is not an invitation, it is an apology. */
+export function changeSummary(
+  changes: { field: string }[],
+  least = 20,
+): { total: number; kinds: { label: string; count: number }[] } | null {
+  if (changes.length < least) return null;
+
+  const counts = new Map<string, number>();
+  for (const change of changes) {
+    counts.set(change.field, (counts.get(change.field) ?? 0) + 1);
+  }
+
+  /* Short, because this renders in one sentence on the page people land on and
+     every word of it is vertical space in front of the catalogue. "scores", not
+     "scores moved": the sentence already says they changed. */
+  const LABELS: Record<string, string> = {
+    score: "scores",
+    streaming: "streaming links",
+    status: "starts and finishes",
+    episodes: "episode counts",
+    trailer: "trailers",
+    listed: "newly listed",
+    premiere: "premieres",
+    season: "refiled seasons",
+    broadcast: "broadcast slots",
+  };
+
+  const kinds = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3)
+    .map(([field, count]) => ({ label: LABELS[field] ?? field, count }));
+
+  return { total: changes.length, kinds };
+}
+
 /** "13 September", with the year only where it is not the newest change's. */
 export function changeDate(runDate: string, newest: string): string {
   const year = runDate.slice(0, 4);
