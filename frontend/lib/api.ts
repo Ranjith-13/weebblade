@@ -16,6 +16,7 @@ import {
   type Franchise,
   type Schedule,
   type ScheduledEpisode,
+  type ScoreSettling,
 } from "./types";
 
 /* Server-only data layer. The client-safe pieces (types, API_BASE, pure
@@ -204,6 +205,36 @@ export async function getChanges(): Promise<ChangeFeed> {
   "use cache";
   cacheLife("hours");
   return getJson<ChangeFeed>(buildUrl("/changes"));
+}
+
+/** What a score does over its life (GET /scores/settling).
+ *
+ *  The one read on this site that is longitudinal rather than cross-sectional,
+ *  and the one that could not be derived here at any price: the answer is drawn
+ *  from every dated snapshot the warehouse holds - 66,098 rows on 2026-10-14 -
+ *  and this app is built never to fetch more than a season. So the API answers
+ *  the question, the way /catalogue and studio= do.
+ *
+ *  One request for the whole page, cached for hours like everything else. It is
+ *  the most expensive query the API runs (about 150 ms warm, three passes over
+ *  the history), which is another reason not to split it across sections.
+ *
+ *  null rather than a throw, for two states that are not failures. 503 is the
+ *  documented "no warehouse yet". 404 is an API older than this page, and that
+ *  one is new: the site and the API became separately deployed artifacts in
+ *  October 2026, so a build of this app can reach a container that has not
+ *  restarted on the commit that added the endpoint. Throwing took the whole
+ *  production build down when /scores was first added, which is a silly way to
+ *  lose a deploy over one page. */
+export async function getScoreSettling(): Promise<ScoreSettling | null> {
+  "use cache";
+  cacheLife("hours");
+  try {
+    return await getJson<ScoreSettling>(buildUrl("/scores/settling"));
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 503)) return null;
+    throw err;
+  }
 }
 
 export type ScheduleDay = { key: string; items: ScheduledEpisode[] };

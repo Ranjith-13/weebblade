@@ -365,6 +365,42 @@ runs rather than a shrinking one. The nav carries it as the fifth section; at 39
 still sit on one line (measured, 352px of 390). Layout shift 0 at 1440x1000 and 390x844, cold and
 warm, on a production build (2026-09-21), with /schedule measured alongside as a control.
 
+## How a score settles
+
+`/scores` is the only page here that reads the warehouse **down the dates** rather than across
+the titles, from one request to `GET /scores/settling`. Everything else answers "what is true
+now" out of `anime_media_latest`, which is the top slice of `anime_media`'s 66,098 dated rows.
+
+**The unit is a re-ask, and that is the whole page.** A snapshot is not an observation: the
+weekly run refetches the season it covers and writes every other title's row again unchanged.
+The 68 Fall 2021 TV titles carry a row on all ten dated snapshots with their `user_count` summing
+to exactly 592,705 on every one of them, so "no old score moves" is a statement about what was
+asked. A pair of consecutive readings therefore counts only where `user_count` moved, which no
+copy can fake, and the detector is deliberately not the score itself - a test that looks at the
+answer throws away every reading that came back the same and reports movement near 100% by
+construction.
+
+The first pass at this measurement did count snapshots, and produced a clean, wrong table saying
+a score settles within about two seasons. It was measuring the refetch schedule. Anything that
+revisits this should re-read `backend/app/routers/scores.py` before trusting a figure.
+
+What the honest version says, over 544 re-asked readings to 2026-10-12: **35% of readings of a
+season still on air changed the printed score, against 1% of a season already over** - but 35% of
+the finished seasons' readings still came back *different*, two decimal places below anything the
+site prints. A score is never finished being revised; it stops being revised visibly. Direction
+is balanced both ways (122 up / 113 down while airing), so there is no decay story to tell.
+
+- **No numbers live in the page.** Every figure is read from the response, because the window
+  grows by a run a week.
+- **Seasons that were never re-asked are absent, not shown as flat.** Ten of the twenty-two were.
+- **It is the one route with no GSAP chunk.** A stagger holds its targets at opacity 0 until a
+  scroll trigger fires, and here the targets are the argument, not decoration.
+- `getScoreSettling()` returns **null** on a 404 or 503 rather than throwing. The site and the
+  API are separately deployed, so a frontend build can reach a container running an older commit;
+  throwing took the whole production build down the first time this page was added.
+- It is reached from the score arc on a title page and from `/changes`, **not from the nav**: the
+  five sections already fill 352px of a 390px line.
+
 ## Motion
 
 GSAP + ScrollTrigger via `@gsap/react`'s `useGSAP`, in `components/motion/`. **Do not add a second

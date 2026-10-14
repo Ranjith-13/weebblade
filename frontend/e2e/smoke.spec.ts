@@ -11,6 +11,7 @@ const ROUTES = [
   { path: "/changes", heading: /What changed/i },
   { path: "/search", heading: /Search/i },
   { path: "/digest", heading: /Digest/i },
+  { path: "/scores", heading: /score/i },
 ];
 
 /** Console errors, minus the ones a browser emits for reasons of its own. */
@@ -118,7 +119,7 @@ test("a title page opens from the catalogue and carries its facts", async ({ pag
  * waits for the content (data-footer-waits in globals.css) so it cannot be
  * pushed down when it arrives. That guard is invisible until it breaks, so it
  * is measured rather than assumed. */
-for (const path of ["/schedule", "/changes"]) {
+for (const path of ["/schedule", "/changes", "/scores"]) {
   test(`${path} does not shift as it fills in`, async ({ page }) => {
     await page.addInitScript(() => {
       (window as unknown as { __cls: number }).__cls = 0;

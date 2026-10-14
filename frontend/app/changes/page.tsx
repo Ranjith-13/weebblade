@@ -76,7 +76,14 @@ async function Week() {
       </p>
       <p className="meta mt-2 max-w-[60ch] !leading-[1.6]">
         Recorded weekly, and only for the season being fetched. A title&apos;s own history, however
-        far back it goes, is on its page.
+        far back it goes, is on its page, and what a score does over a whole life is on{" "}
+        <Link
+          href="/scores"
+          className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+        >
+          how a score settles
+        </Link>
+        .
       </p>
 
       {/* Columns for the same reason as the schedule: the sections are uneven,

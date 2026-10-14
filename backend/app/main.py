@@ -14,7 +14,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from . import warehouse
 from .db import DATA_DIR
 from .limiter import limiter
-from .routers import anime, catalogue, changes, digest, runs, schedule, search
+from .routers import anime, catalogue, changes, digest, runs, schedule, scores, search
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +174,7 @@ app.include_router(changes.router)
 app.include_router(digest.router)
 app.include_router(runs.router)
 app.include_router(schedule.router)
+app.include_router(scores.router)
 app.include_router(search.router)
 
 

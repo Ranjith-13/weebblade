@@ -292,6 +292,84 @@ class ScorePoint(BaseModel):
     score_100: float
 
 
+class SeasonSettling(BaseModel):
+    """One season's worth of re-asked readings. See routers/scores.py."""
+
+    season: str
+    season_year: int
+    # Titles with at least one re-asked reading, not the size of the season.
+    titles: int
+    reasks: int
+    # The number came back different at all, and different at the one decimal
+    # the site prints. The gap between the two is the point of the endpoint.
+    revised: int
+    visible: int
+    # Points out of 100, as the warehouse stores a score.
+    median_change: float
+    largest_change: float
+    up: int
+    down: int
+    # Where the season's own quarter sits against the window: "airing" while
+    # the pipeline was watching, "over" before it began, or "upcoming". Not a
+    # boolean, because a season that has not started is not a season that has
+    # settled, and the warehouse holds one of those at all times.
+    phase: str
+
+
+class SettlingBand(BaseModel):
+    """Every season in one phase, summed."""
+
+    phase: str
+    seasons: int
+    titles: int
+    reasks: int
+    revised: int
+    visible: int
+    median_change: float
+    up: int
+    down: int
+
+
+class ArrivalPoint(BaseModel):
+    """What the catalogue held about one season on one run date."""
+
+    run_date: str
+    listed: int
+    scored: int
+
+
+class ScoreArrival(BaseModel):
+    """A season appearing in the catalogue, then acquiring its scores."""
+
+    season: str
+    season_year: int
+    points: list[ArrivalPoint] = []
+
+
+class SourceReasks(BaseModel):
+    source: str
+    reasks: int
+
+
+class ScoreSettling(BaseModel):
+    """What a score does over its life, read down the warehouse's time axis.
+
+    Every figure is for TV titles, which is what the catalogue shows by default.
+    """
+
+    first_run: str | None = None
+    last_run: str | None = None
+    snapshots: int = 0
+    # Seasons the catalogue holds, against the ones that were re-asked at all
+    # inside the window. The difference is seasons this cannot speak for.
+    seasons_held: int = 0
+    reasks: int = 0
+    sources: list[SourceReasks] = []
+    seasons: list[SeasonSettling] = []
+    bands: list[SettlingBand] = []
+    arrival: ScoreArrival | None = None
+
+
 class SearchResult(BaseModel):
     title: str
     source: str

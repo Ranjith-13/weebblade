@@ -308,6 +308,51 @@ Tokyo, so for a few hours after a broadcast it names one that has just aired. "E
 Oct" is true either way; only the word "next" would not be, which is why the plate does not
 use it.
 
+### 10. [x] The warehouse was only ever read across, never down
+
+Twenty-two seasons of weekly snapshots sat in `anime_media` - 66,098 dated rows - and every
+view on the site read `anime_media_latest`, its top slice. The time axis was being
+accumulated and never read. `/scores`, "How a score settles", is the page that reads it,
+from one new endpoint, `GET /scores/settling`.
+
+**The first measurement was clean, quotable and wrong, and that is the item.** Counting
+snapshots per season produced a table saying a score is alive while its show airs and
+settles within about two seasons: 100% of the airing season moved, 7% of a year before,
+none of Fall 2021. What it was actually measuring is the pipeline's own refetch schedule.
+The weekly run fetches the season it covers and writes every other title's row again
+unchanged - the 68 Fall 2021 TV titles carry a row on all ten snapshots with their
+`user_count` summing to exactly **592,705 on every one of them**. Those rows were never
+asked about, so a flat score says nothing at all.
+
+The fix is to count a *re-ask*: a pair of consecutive readings where the source's own vote
+count had also moved, which no copy can fake. The detector is deliberately not the score,
+because a test that looks at the answer discards every reading that came back the same and
+reports movement near 100% by construction. Over 544 re-asked readings of TV titles:
+
+| | re-asks | answer differed | enough to print | median change |
+|---|---|---|---|---|
+| Season on air during the window | 297 | 235 (79%) | **103 (35%)** | 0.19 |
+| Season already over | 245 | 86 (35%) | **2 (1%)** | 0.00 |
+
+So the honest finding is better than the one it replaced: **a score is never finished being
+revised, it stops being revised visibly.** A third of the readings of a season two years old
+still come back different, two decimal places below anything this site prints. And direction
+is balanced both ways (122 up, 113 down while airing), so the obvious story - hype decaying
+after the finale - is not in the data.
+
+The page says the method before it says a number, for that reason. Ten of the twenty-two
+seasons were never re-asked inside the window and are absent rather than listed as settled;
+533 of the 544 re-asks are Kitsu's, and the page says that too.
+
+**Also on the page:** a season acquires its scores weeks after it is listed. Fall 2026 sat in
+the catalogue through four runs with no scored title, then went 1 to 19 to 55 to 59 of 81 in
+fifteen days. That is the halftone-as-certainty system drawn along the time axis, which is
+the argument for it being a page rather than a paragraph.
+
+**Not in the nav.** The five sections already fill 352px of a 390px line. It is reached from
+the score arc on a title page, where a reader who sees a number move asks whether that is
+normal, and from `/changes`, which is the same history one week at a time.
+
 ---
 
 ## Open — carried over, not urgent

@@ -415,12 +415,18 @@ export type ScorePoint = { run_date: string; score_100: number };
  *  product does not use anywhere else.
  *
  *  It is still worth having where people look, because movement tracks how
- *  recently a show aired - the votes stop arriving and the average sets. Of TV
- *  titles with a series: 51% of the airing season had visibly moved and 71% of
- *  the season just ended, against 2% of a year before and none of Fall 2025. So
- *  this fires about half the time on a current title and essentially never on an
- *  old one, which is the same rule the rest of the page follows: say it where
- *  there is something to say. */
+ *  recently a show aired - the votes stop arriving and the average sets. Where a
+ *  source was demonstrably asked again, the printed score changed on 35% of
+ *  readings of a season still on air and on 1% of readings of one already over
+ *  (544 re-asked readings, 2026-10-14; /scores shows the working). So this fires
+ *  about a third of the time on a current title and essentially never on an old
+ *  one, which is the same rule the rest of the page follows: say it where there
+ *  is something to say.
+ *
+ *  An earlier version of this note put those rates at 51% and 0% by counting
+ *  snapshots rather than fetches. Most rows in most runs are carried forward
+ *  unchanged, so that version was measuring which seasons the pipeline refetches
+ *  - see app/scores/page.tsx and backend/app/routers/scores.py. */
 export function scoreArc(points: ScorePoint[] | null | undefined): string | null {
   if (!points || points.length < 2) return null;
 
@@ -437,6 +443,67 @@ export function scoreArc(points: ScorePoint[] | null | undefined): string | null
   if (last < first) return `down from ${first.toFixed(1)} since ${since}`;
   // Ends level, middle did not: the arc is the fact, so name its range.
   return `between ${low.toFixed(1)} and ${high.toFixed(1)} since ${since}`;
+}
+
+/** Mirrors backend/app/schemas.py. One season's re-asked readings: a reading
+ *  counted only where the source's own vote count had also moved, which is the
+ *  proof that it was fetched rather than carried forward. See /scores. */
+export type SeasonSettling = {
+  season: string;
+  season_year: number;
+  /** Titles with at least one re-asked reading, not the size of the season. */
+  titles: number;
+  reasks: number;
+  /** The number came back different at all, against different at the one
+   *  decimal this site prints. The gap between them is the finding. */
+  revised: number;
+  visible: number;
+  /** Points out of 100, as the warehouse stores a score. One whole point is the
+   *  smallest step the site can print. */
+  median_change: number;
+  largest_change: number;
+  up: number;
+  down: number;
+  phase: SeasonPhase;
+};
+
+/** Where a season's own quarter sits against the window of run dates: on air
+ *  while the pipeline was watching, over before it began, or not yet started. */
+export type SeasonPhase = "airing" | "over" | "upcoming";
+
+export type SettlingBand = Omit<SeasonSettling, "season" | "season_year" | "largest_change"> & {
+  seasons: number;
+};
+
+export type ArrivalPoint = { run_date: string; listed: number; scored: number };
+
+export type ScoreSettling = {
+  first_run: string | null;
+  last_run: string | null;
+  snapshots: number;
+  /** Seasons the catalogue holds, against the ones in `seasons`. The difference
+   *  is seasons nothing asked about again, which this cannot speak for. */
+  seasons_held: number;
+  reasks: number;
+  sources: { source: string; reasks: number }[];
+  seasons: SeasonSettling[];
+  bands: SettlingBand[];
+  arrival: { season: string; season_year: number; points: ArrivalPoint[] } | null;
+};
+
+/** What a phase is called on the page. The data's own words are for the data. */
+export const PHASE_LABEL: Record<SeasonPhase, string> = {
+  airing: "On air",
+  over: "Over",
+  upcoming: "Not started",
+};
+
+/** A count as a share of its total, for a table that prints both.
+ *
+ *  The null marker rather than 0% where there is no total: a season nothing was
+ *  asked about has no rate, and 0% would state the opposite of that. */
+export function shareOf(part: number, whole: number): string {
+  return whole === 0 ? "\u2014" : `${Math.round((part / whole) * 100)}%`;
 }
 
 export function scoreOutOfTen(score100: number | null | undefined): string | null {

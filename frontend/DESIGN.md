@@ -74,6 +74,16 @@ A season settles to about 10-12% once it has run; the one on screen by default s
 quarter, and more than half of it is screened back a format chip away. The page has to look
 composed either way, and the design has not run out of work to do.
 
+**The screened-back state is a stage, not a category, and `/scores` is where that is shown.**
+Fall 2026 sat in the catalogue through four runs with no scored title at all, then went 1 to 19
+to 55 to 59 of 81 in fifteen days (2026-10-12). Every plate in a new season starts unknown and
+most of them stop being unknown; the halftone is the first few weeks of a title's life, drawn.
+Once a score exists it keeps moving while the show is on air and then stops moving where the
+page can print it, without ever stopping being revised. That page is the one place here that
+reads the warehouse down its dates rather than across its titles, and it states its method
+before it states a number, because the first version of the measurement counted snapshots and
+measured the pipeline's refetch schedule instead.
+
 This lives in two utilities in `globals.css` (`.plate-known` / `.plate-unknown`) and is applied
 from `isKnown(anime)` — a real predicate over real data. **It must never be applied
 decoratively.** The moment the halftone stops meaning "no score upstream", the design becomes

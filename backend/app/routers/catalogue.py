@@ -5,22 +5,9 @@ from fastapi import APIRouter, Depends
 
 from ..db import get_db, run_query
 from ..schemas import CatalogueSummary
+from ..seasons import QUARTER, SEASON_START
 
 router = APIRouter(prefix="/catalogue", tags=["catalogue"])
-
-# The broadcast year runs Winter, Spring, Summer, Fall. Sorted alphabetically,
-# Fall would come first in a year and Summer after Spring only by luck.
-_QUARTER = "CASE season WHEN 'WINTER' THEN 0 WHEN 'SPRING' THEN 1 WHEN 'SUMMER' THEN 2 WHEN 'FALL' THEN 3 END"
-
-# When a season begins, so a season the pipeline has fetched but that has not
-# started yet can say so. The pipeline fetches the next season as soon as the
-# sources list it (ingestion/seasons.capture_both), months before it airs, and a
-# client that simply took the newest season on file would default every page to
-# a season with no scores and nothing aired.
-_SEASON_START = (
-    "make_date(season_year, CASE season WHEN 'WINTER' THEN 1 WHEN 'SPRING' THEN 4 "
-    "WHEN 'SUMMER' THEN 7 ELSE 10 END, 1)"
-)
 
 
 def _sources(con: duckdb.DuckDBPyConnection) -> list[str]:
@@ -54,9 +41,9 @@ def catalogue(con: duckdb.DuckDBPyConnection = Depends(get_db)) -> CatalogueSumm
     seasons = run_query(
         con,
         "SELECT season, season_year, COUNT(*) AS count, "
-        f"  {_SEASON_START} > current_date AS upcoming "
+        f"  {SEASON_START} > current_date AS upcoming "
         "FROM anime_media_latest "
         "WHERE season IS NOT NULL AND season_year IS NOT NULL "
-        f"GROUP BY season, season_year ORDER BY season_year DESC, {_QUARTER} DESC NULLS LAST, season",
+        f"GROUP BY season, season_year ORDER BY season_year DESC, {QUARTER} DESC NULLS LAST, season",
     )
     return CatalogueSummary(total=total, sources=_sources(con), seasons=seasons)

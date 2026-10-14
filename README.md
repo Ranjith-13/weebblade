@@ -209,6 +209,10 @@ Seeded from every snapshot on file: 98 changes back to 30 August 2026, each on i
 - `GET /digest`, `/digest/latest`, `/digest/{run_date}` — the weekly LLM trend digest.
 - `GET /runs?dag=&limit=10` — what recent pipeline runs checked about their own output: their
   numbers, and what failed them, if anything did.
+- `GET /scores/settling` — what a score does over its life, read down the warehouse's time
+  axis: when a season acquires its numbers, and how often a re-asked reading comes back
+  different. The one endpoint here whose unit is a *re-ask* rather than a row, because most
+  rows in most runs are copies of the week before.
 - `GET /search?q=...&n=...` — semantic similarity search over indexed titles; each result
   carries its poster, score, format and `wb_id`.
 - `GET /health` — liveness.

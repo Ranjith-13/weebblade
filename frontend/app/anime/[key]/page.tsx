@@ -370,8 +370,24 @@ async function AnimeDetail({
                   is an average over tens of thousands of votes and crawls: 283
                   of 3,653 titles with a series moved at all, 121 visibly. The
                   ones that do are the ones still airing, which is where readers
-                  are - about half of a current season, none of Fall 2025. */}
-              {arc && <p className="meta mt-2 text-right">{arc}</p>}
+                  are.
+
+                  It links to /scores, because a reader who sees a number move
+                  asks whether that is normal, and the answer is a page: 35% of
+                  re-asked readings of a season on air changed where it shows,
+                  against 1% of a season already over. The padding makes a 26px
+                  target of an 18px line and the negative margin takes it back
+                  out of the layout, so the figure above does not move. */}
+              {arc && (
+                <p className="meta mt-2 text-right">
+                  <Link
+                    href="/scores"
+                    className="-my-1 inline-block py-1 underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+                  >
+                    {arc}
+                  </Link>
+                </p>
+              )}
             </>
           ) : (
             <p className="text-[0.8rem] leading-relaxed text-ink-soft">
