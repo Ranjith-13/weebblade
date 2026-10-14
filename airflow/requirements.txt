@@ -1,6 +1,18 @@
 requests==2.34.2
 pyarrow==23.0.1
 pyspark==3.5.8
+# Pinned, and the pin is load-bearing in ways a bump will not announce.
+#
+# NaN ordering differs from newer versions, which is how a search test passed
+# locally and failed in CI; view-over-view name resolution differs, which is how
+# publishing the warehouse died on a run after doing every piece of real work.
+#
+# WHEN YOU DO BUMP IT: every result here is read with `con.execute(...)
+# .fetch_arrow_table()`. From 1.3 that method warns and will eventually go. Its
+# replacement, to_arrow_table, exists in 1.1.3 only on DuckDBPyRelation, not on
+# the connection, so the call sites change shape rather than name - and
+# `.arrow()` is not the bridge either: it returns a Table here and a
+# RecordBatchReader in 1.5.6. Checked 2026-10-14 against both wheels.
 duckdb==1.1.3
 sentence-transformers==6.0.1
 
