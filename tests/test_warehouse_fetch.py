@@ -6,6 +6,8 @@ disk, so it downloads the catalogue on every wake-up, which turns every GitHub
 hiccup into a user-visible event unless the failure path is the careful one.
 """
 
+import urllib.error
+
 import duckdb
 import pytest
 
@@ -140,3 +142,131 @@ def test_a_good_download_becomes_the_served_warehouse(tmp_path, monkeypatch):
     assert warehouse.ensure_warehouse(tmp_path) == "state-2026-10-11"
     assert (tmp_path / "warehouse.tag").read_text() == "state-2026-10-11"
     assert warehouse.state["origin"] == "fetched"
+
+
+# RETRYING, AND THE ONE CASE IT IS FOR.
+#
+# On 14 October 2026 a wake-up's fetch failed and the container served 503 to
+# everything until it slept again, taking a CI build with it. Nothing retried.
+# The tests below pin both halves of the fix: it tries again when it has nothing
+# to serve, and it does not when it has.
+
+
+@pytest.fixture
+def slept(monkeypatch):
+    """Records the backoff instead of taking it, so a retry test stays instant."""
+    waits: list[float] = []
+    monkeypatch.setattr(warehouse.time, "sleep", waits.append)
+    return waits
+
+
+def _publishes(dest):
+    _a_working_warehouse(dest)
+    return dest.stat().st_size
+
+
+def test_a_transient_failure_with_nothing_to_serve_is_tried_again(tmp_path, monkeypatch, slept):
+    """The failure this was written for. An empty disk plus a shrug is a process
+    that answers 503 for as long as it lives: the six-hourly refresh is the only
+    other chance it gets, and on a container that sleeps after fifteen idle
+    minutes that refresh will rarely fire at all."""
+    monkeypatch.setenv("WAREHOUSE_REPO", "owner/repo")
+    calls = []
+
+    def flaky(repo, timeout):
+        calls.append(repo)
+        if len(calls) == 1:
+            raise OSError("connection reset")
+        return [_release("state-2026-10-11", ["warehouse.duckdb"])]
+
+    monkeypatch.setattr(warehouse, "_fetch_releases", flaky)
+    monkeypatch.setattr(warehouse, "_download",
+                        lambda repo, asset_id, dest, timeout: _publishes(dest))
+
+    assert warehouse.ensure_warehouse(tmp_path) == "state-2026-10-11"
+    assert len(calls) == 2
+    assert slept == [warehouse.BACKOFF[0]]
+
+
+def test_a_transient_failure_is_not_retried_when_there_is_a_warehouse_to_serve(
+    tmp_path, monkeypatch, slept
+):
+    """The other half, and the reason this is not just "retry everything". A
+    stale catalogue is a fine answer, so a reader's first request should not
+    wait behind attempts at a fresher one."""
+    monkeypatch.setenv("WAREHOUSE_REPO", "owner/repo")
+    _a_working_warehouse(tmp_path / "warehouse.duckdb")
+    (tmp_path / "warehouse.tag").write_text("state-2026-10-04")
+    calls = []
+
+    def down(repo, timeout):
+        calls.append(repo)
+        raise OSError("name resolution failed")
+
+    monkeypatch.setattr(warehouse, "_fetch_releases", down)
+
+    assert warehouse.ensure_warehouse(tmp_path) == "state-2026-10-04"
+    assert len(calls) == 1
+    assert slept == []
+
+
+def test_a_bad_token_is_not_retried(tmp_path, monkeypatch, slept):
+    """A 401 answers the same way in five seconds as it does now, and three
+    attempts at a certain answer only delay the service starting. The fix is a
+    new token, which the log line says."""
+    monkeypatch.setenv("WAREHOUSE_REPO", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "expired")
+    calls = []
+
+    def unauthorised(repo, timeout):
+        calls.append(repo)
+        raise urllib.error.HTTPError("url", 401, "Unauthorized", {}, None)
+
+    monkeypatch.setattr(warehouse, "_fetch_releases", unauthorised)
+
+    assert warehouse.ensure_warehouse(tmp_path) is None
+    assert len(calls) == 1
+    assert slept == []
+
+
+def test_github_being_down_is_retried_and_then_given_up_on(tmp_path, monkeypatch, slept):
+    """Still never raises. After the last attempt the process starts anyway and
+    answers 503, which is the state /health reports and the refresher can still
+    recover from - the point of the retry is to make that rare, not impossible."""
+    monkeypatch.setenv("WAREHOUSE_REPO", "owner/repo")
+    calls = []
+
+    def unavailable(repo, timeout):
+        calls.append(repo)
+        raise urllib.error.HTTPError("url", 503, "Service Unavailable", {}, None)
+
+    monkeypatch.setattr(warehouse, "_fetch_releases", unavailable)
+
+    assert warehouse.ensure_warehouse(tmp_path) is None
+    assert len(calls) == warehouse.ATTEMPTS
+    assert slept == list(warehouse.BACKOFF)
+
+
+def test_a_download_that_will_not_open_is_tried_again_with_nothing_to_serve(
+    tmp_path, monkeypatch, slept
+):
+    """A file that will not open is usually a read that ended early rather than
+    a published asset that is actually broken. It costs another 37 MB, which is
+    why only the empty-disk case pays it."""
+    monkeypatch.setenv("WAREHOUSE_REPO", "owner/repo")
+    monkeypatch.setattr(warehouse, "_fetch_releases",
+                        lambda *a, **k: [_release("state-2026-10-11", ["warehouse.duckdb"])])
+    downloads = []
+
+    def truncated_once(repo, asset_id, dest, timeout):
+        downloads.append(asset_id)
+        if len(downloads) == 1:
+            dest.write_bytes(b"DUCK" + b"\x00" * 200)
+            return 204
+        return _publishes(dest)
+
+    monkeypatch.setattr(warehouse, "_download", truncated_once)
+
+    assert warehouse.ensure_warehouse(tmp_path) == "state-2026-10-11"
+    assert len(downloads) == 2
+    assert not (tmp_path / "warehouse.duckdb.part").exists()

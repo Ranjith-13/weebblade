@@ -310,7 +310,12 @@ so CI prerenders against the real thing. Delete the now-unused AWS secrets
 `CI_AWS_ACCESS_KEY_ID`, `CI_AWS_SECRET_ACCESS_KEY`).
 
 `GET /health` reports which release the API is serving, which is the only way to tell a stale
-container from a current one once the warehouse is fetched rather than mounted.
+container from a current one once the warehouse is fetched rather than mounted. A `warehouse` of
+`null` there is the one failure worth watching for: the fetch did not produce a file, so every
+other endpoint answers 503 until the container is replaced. It happened once, on 14 October 2026,
+and took a CI build with it; `ensure_warehouse` now makes three attempts before giving up, but
+only when it has nothing to fall back to - with a catalogue already on disk a failed refresh
+costs freshness and is not worth delaying a start-up over.
 
 ## Operations
 

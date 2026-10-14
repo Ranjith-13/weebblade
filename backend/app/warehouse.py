@@ -45,6 +45,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -75,6 +76,31 @@ _PROBE = "SELECT count(*) FROM anime_media_latest"
 # is actually serving - a question that has no answer anywhere else once the
 # file is fetched rather than mounted.
 state: dict[str, object] = {"tag": None, "origin": None}
+
+# HOW HARD TO TRY, AND WHEN TRYING AGAIN IS WORTH ANYTHING AT ALL.
+#
+# On 14 October 2026 one wake-up's fetch failed and the container then served
+# 503 to every request until it slept again - taking a CI build with it, and a
+# production deploy had the timing differed. Nothing retried, because the
+# never-raises rule below reads the same whether or not there is a catalogue on
+# disk to fall back to.
+#
+# Those two cases are not the same, and the difference is the whole of this:
+#
+#   - Something on disk. A failure costs freshness. A reader sees last week's
+#     catalogue and the next refresh tries again. Retrying here would hold up
+#     startup to avoid an outcome that is already acceptable.
+#   - Nothing on disk. A failure costs everything, and it does not heal: the API
+#     answers 503 until the next refresh, and on a container that sleeps after
+#     fifteen idle minutes that refresh will rarely fire at all (REFRESH_HOURS).
+#
+# So the retry is spent only where there is nothing to fall back to. Three
+# attempts a few seconds apart covers what actually goes wrong - a dropped
+# connection, a 5xx, a read that ends early - and is short enough that it can
+# never be the reason a wake-up times out. It blocks startup, which is already
+# true of the download it is retrying, and nothing is being served yet.
+ATTEMPTS = 3
+BACKOFF = (2.0, 5.0)
 
 
 def _db_path(data_dir: Path) -> Path:
@@ -194,9 +220,15 @@ def ensure_warehouse(data_dir: Path, timeout: float = 60.0) -> str | None:
 
     Never raises. Every failure here - GitHub down, rate limited, no weekly run
     yet, a corrupt asset - leaves whatever was already on disk in place and
-    lets the API answer from it, or answer 503 if there is nothing. A serving
-    process that refuses to start because a release could not be listed is
-    strictly worse than one that serves last week's catalogue.
+    lets the API answer from it. A serving process that refuses to start because
+    a release could not be listed is strictly worse than one that serves last
+    week's catalogue.
+
+    What it does NOT do any more is shrug at a failure that leaves it with
+    nothing. With an empty disk the same shrug means answering 503 to every
+    request for as long as the process lives, so that case gets ATTEMPTS tries
+    before it gives up. See the note above those constants: the two failures
+    look identical in the code and are nothing alike in effect.
     """
     repo = os.environ.get("WAREHOUSE_REPO")
     db = _db_path(data_dir)
@@ -212,6 +244,39 @@ def ensure_warehouse(data_dir: Path, timeout: float = 60.0) -> str | None:
     if not repo:
         return have
 
+    for attempt in range(ATTEMPTS):
+        tag, worth_retrying = _fetch_once(repo, data_dir, have, timeout)
+        if tag is not None:
+            return tag
+        # Anything already on disk is an answer, so the service starts with it
+        # rather than spending a reader's first request on a second attempt.
+        if have is not None or not worth_retrying or attempt == ATTEMPTS - 1:
+            return have
+        pause = BACKOFF[attempt]
+        logger.warning(
+            "No warehouse to serve and the fetch failed; retrying in %.0fs (%d of %d)",
+            pause, attempt + 2, ATTEMPTS,
+        )
+        time.sleep(pause)
+
+    return have
+
+
+def _fetch_once(
+    repo: str, data_dir: Path, have: str | None, timeout: float
+) -> tuple[str | None, bool]:
+    """One attempt, as (the tag now on disk, whether another attempt could help).
+
+    A tag means there is something to serve: either a fresh download or the one
+    already there being the newest published. None means this attempt produced
+    nothing, and the flag says whether that is worth sleeping on.
+
+    WHAT COUNTS AS WORTH RETRYING is the narrow question of whether the same
+    request could answer differently in five seconds. A dropped connection, a
+    5xx, a 429, a download that ends early: yes. A 401, a 403 with no token, a
+    repository with no warehouse published yet: no, and burning three attempts
+    on a certain answer only delays the service starting.
+    """
     try:
         newest = newest_warehouse(_fetch_releases(repo, timeout))
     except urllib.error.HTTPError as exc:
@@ -236,35 +301,42 @@ def ensure_warehouse(data_dir: Path, timeout: float = 60.0) -> str | None:
         else:
             hint = ""
         logger.warning("Could not list releases of %s: HTTP %s%s", repo, exc.code, hint)
-        return have
+        # A token problem and a shared-IP limit both answer the same way next
+        # second; a 5xx or a secondary limit may not.
+        return None, exc.code >= 500 or (exc.code == 429 and bool(os.environ.get("GITHUB_TOKEN")))
     except Exception:
+        # Unreachable, timed out, a truncated JSON body. All transient.
         logger.warning("Could not list releases of %s", repo, exc_info=True)
-        return have
+        return None, True
 
     if newest is None:
         logger.warning("No release of %s carries a %s yet - nothing to serve",
                        repo, ASSET_NAME)
-        return have
+        return None, False
 
     tag, asset_id = newest
     if tag == have:
         logger.info("Already serving the newest published warehouse (%s)", tag)
-        return tag
+        return tag, False
 
     data_dir.mkdir(parents=True, exist_ok=True)
+    db = _db_path(data_dir)
     staged = db.with_name(db.name + ".part")
     try:
         size = _download(repo, asset_id, staged, timeout)
     except Exception:
         logger.warning("Could not download %s from %s", ASSET_NAME, tag, exc_info=True)
         staged.unlink(missing_ok=True)
-        return have
+        return None, True
 
     if not _is_usable(staged):
         staged.unlink(missing_ok=True)
         logger.warning("Keeping the existing warehouse (%s) rather than a bad download",
                        have or "none")
-        return have
+        # Worth another go: a file that will not open is usually a read that
+        # ended early rather than a published asset that is actually broken. It
+        # costs another 37 MB, which is why only the empty-disk case pays it.
+        return None, True
 
     # os.replace, not a copy: atomic on the same filesystem, so no request can
     # ever see a partly written file. Connections already open keep reading the
@@ -274,4 +346,4 @@ def ensure_warehouse(data_dir: Path, timeout: float = 60.0) -> str | None:
     _tag_path(data_dir).write_text(tag)
     state.update(tag=tag, origin="fetched")
     logger.info("Serving warehouse from %s (%.1f MB)", tag, size / 1e6)
-    return tag
+    return tag, False
