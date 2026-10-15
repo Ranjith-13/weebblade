@@ -310,3 +310,124 @@ def test_a_finished_title_is_never_flagged(tmp_path):
 
     assert _latest(tmp_path, data)[0]["airing_unconfirmed"] is False
 
+
+
+# --- the daily score series ------------------------------------------------
+#
+# Weekly snapshots record a score that moved twice in a week as one move. This
+# view is the dense half, read from the DATED anilist_status files that
+# ingestion.storage.write_daily has been keeping all along - the only view here
+# that reads a glob rather than processed/current, because here the history is
+# the subject rather than a cost on every request.
+
+
+def _status_day(data_dir: Path, run_date: str, rows: list[dict], with_score: bool = True) -> None:
+    """A day's AniList status answers, as fetch_status lands them."""
+    import pyarrow as pa
+
+    fields = [("anilist_id", pa.int64()), ("mal_id", pa.int64()), ("status", pa.string())]
+    if with_score:
+        fields += [("score_100", pa.int64()), ("user_count", pa.int64())]
+    fields += [("ended_on", pa.string()), ("fetched_on", pa.string())]
+    for r in rows:
+        r.setdefault("mal_id", None)
+        r.setdefault("status", "current")
+        r.setdefault("ended_on", None)
+        r.setdefault("fetched_on", run_date)
+        if not with_score:
+            r.pop("score_100", None)
+            r.pop("user_count", None)
+    path = data_dir / "processed" / "anilist_status" / f"{run_date}.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist(rows, schema=pa.schema(fields)), path)
+
+
+def _series(tmp_path, data_dir):
+    db = tmp_path / "warehouse.duckdb"
+    created = refresh_catalog(data_dir, db)
+    if "anime_score_daily" not in created:
+        return created, []
+    con = duckdb.connect(str(db))
+    try:
+        rows = con.execute(
+            "SELECT wb_id, fetched_on, score_100, user_count FROM anime_score_daily "
+            "ORDER BY wb_id, fetched_on"
+        ).fetchall()
+    finally:
+        con.close()
+    return created, rows
+
+
+def test_a_score_asked_for_daily_keeps_one_reading_per_day(tmp_path):
+    """The point of the whole item: weekly granularity flattens movement inside
+    a week, so three days must be three readings and not one."""
+    data = tmp_path / "data"
+    ids, reg, _ = assign([["anilist:1"]], Registry(), "2026-10-16")
+    save(data, reg)
+    _catalogue(data, "2026-10-16", [
+        {"source": "anilist", "source_id": "1", "title_english": "A", "wb_id": ids[0]},
+    ])
+    for day, score, votes in (("2026-10-14", 78, 40_000), ("2026-10-15", 78, 40_900),
+                              ("2026-10-16", 79, 41_400)):
+        _status_day(data, day, [{"anilist_id": 1, "score_100": score, "user_count": votes}])
+
+    created, rows = _series(tmp_path, data)
+
+    assert "anime_score_daily" in created
+    assert rows == [
+        (ids[0], "2026-10-14", 78, 40_000),
+        (ids[0], "2026-10-15", 78, 40_900),
+        (ids[0], "2026-10-16", 79, 41_400),
+    ]
+
+
+def test_a_reading_with_no_score_is_absent_rather_than_null(tmp_path):
+    """A title nobody has rated has not been measured, which is a different
+    thing from one measured at the same value as yesterday."""
+    data = tmp_path / "data"
+    ids, reg, _ = assign([["anilist:1"]], Registry(), "2026-10-16")
+    save(data, reg)
+    _catalogue(data, "2026-10-16", [
+        {"source": "anilist", "source_id": "1", "title_english": "A", "wb_id": ids[0]},
+    ])
+    _status_day(data, "2026-10-15", [{"anilist_id": 1, "score_100": None, "user_count": 12}])
+    _status_day(data, "2026-10-16", [{"anilist_id": 1, "score_100": 71, "user_count": 90}])
+
+    _, rows = _series(tmp_path, data)
+
+    assert rows == [(ids[0], "2026-10-16", 71, 90)]
+
+
+def test_days_fetched_before_the_score_was_collected_do_not_break_the_series(tmp_path):
+    """Every dated file written before this shipped has neither column. They
+    have to read as absent readings, not as an error that takes the view out."""
+    data = tmp_path / "data"
+    ids, reg, _ = assign([["anilist:1"]], Registry(), "2026-10-16")
+    save(data, reg)
+    _catalogue(data, "2026-10-16", [
+        {"source": "anilist", "source_id": "1", "title_english": "A", "wb_id": ids[0]},
+    ])
+    _status_day(data, "2026-09-30", [{"anilist_id": 1}], with_score=False)
+    _status_day(data, "2026-10-16", [{"anilist_id": 1, "score_100": 71, "user_count": 90}])
+
+    created, rows = _series(tmp_path, data)
+
+    assert "anime_score_daily" in created
+    assert rows == [(ids[0], "2026-10-16", 71, 90)]
+
+
+def test_before_any_day_carries_a_score_there_is_no_series_at_all(tmp_path):
+    """The state on the morning this ships. No column to select, so no view -
+    rather than a view that fails every query that touches it."""
+    data = tmp_path / "data"
+    ids, reg, _ = assign([["anilist:1"]], Registry(), "2026-10-16")
+    save(data, reg)
+    _catalogue(data, "2026-10-16", [
+        {"source": "anilist", "source_id": "1", "title_english": "A", "wb_id": ids[0]},
+    ])
+    _status_day(data, "2026-09-30", [{"anilist_id": 1}], with_score=False)
+
+    created, rows = _series(tmp_path, data)
+
+    assert "anime_score_daily" not in created
+    assert rows == []

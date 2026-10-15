@@ -72,6 +72,7 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
         created += _franchise_views(con, data_dir)
         created += _change_view(con, data_dir, has_registry)
         created += _airing_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
+        created += _score_daily_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
         created += _prose_views(con, data_dir)
     finally:
         con.close()
@@ -229,28 +230,36 @@ def _current_placed(
         logger.warning("Nothing fetched yet for %s (%s), skipping it", view, current)
         return []
 
-    rows = f"read_parquet('{current}')"
-    if has_registry:
-        placed, joins = ["a.wb_id"], [
-            "LEFT JOIN anime_identity a ON a.source_key = 'anilist:' || CAST(l.anilist_id AS VARCHAR)",
-        ]
-        if resolved:
-            placed.append("r.wb_id")
-            joins.append(
-                "LEFT JOIN anime_anilist_resolved r ON r.anilist_id = CAST(l.anilist_id AS BIGINT)"
-            )
-        placed.append("m.wb_id")
-        joins.append(
-            "LEFT JOIN anime_identity m ON m.source_key = 'mal:' || CAST(l.mal_id AS VARCHAR)"
-        )
-        if mapped:
-            placed.append("k.wb_id")
-            joins.append("LEFT JOIN anime_mapped_mal_id k ON k.mal_id = CAST(l.mal_id AS BIGINT)")
-        sql = f"SELECT l.*, COALESCE({', '.join(placed)}) AS wb_id FROM {rows} l {' '.join(joins)}"
-    else:
-        sql = f"SELECT *, CAST(NULL AS VARCHAR) AS wb_id FROM {rows}"
+    sql = _placed_sql(f"read_parquet('{current}')", has_registry, mapped, resolved)
     con.execute(f"CREATE OR REPLACE VIEW {view} AS {sql}")
     return [view]
+
+
+def _placed_sql(rows: str, has_registry: bool, mapped: bool, resolved: bool) -> str:
+    """The placement itself, over any expression that yields AniList answers.
+
+    Extracted so the daily score series can read the *dated* files with exactly
+    the same rules the served file is read by. Two copies of this join would
+    drift, and a row placed on a different title in one of them than the other
+    is the hardest kind of wrong to notice."""
+    if not has_registry:
+        return f"SELECT *, CAST(NULL AS VARCHAR) AS wb_id FROM {rows}"
+    placed, joins = ["a.wb_id"], [
+        "LEFT JOIN anime_identity a ON a.source_key = 'anilist:' || CAST(l.anilist_id AS VARCHAR)",
+    ]
+    if resolved:
+        placed.append("r.wb_id")
+        joins.append(
+            "LEFT JOIN anime_anilist_resolved r ON r.anilist_id = CAST(l.anilist_id AS BIGINT)"
+        )
+    placed.append("m.wb_id")
+    joins.append(
+        "LEFT JOIN anime_identity m ON m.source_key = 'mal:' || CAST(l.mal_id AS VARCHAR)"
+    )
+    if mapped:
+        placed.append("k.wb_id")
+        joins.append("LEFT JOIN anime_mapped_mal_id k ON k.mal_id = CAST(l.mal_id AS BIGINT)")
+    return f"SELECT l.*, COALESCE({', '.join(placed)}) AS wb_id FROM {rows} l {' '.join(joins)}"
 
 
 def _mapped_mal_ids(con: duckdb.DuckDBPyConnection, titles: str | None, has_registry: bool) -> list[str]:
@@ -338,6 +347,51 @@ def _anilist_status_view(
     return _current_placed(
         con, "anime_anilist_status", "anilist_status", data_dir, has_registry, mapped, resolved
     )
+
+
+def _score_daily_view(
+    con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool, mapped: bool, resolved: bool
+) -> list[str]:
+    """One row per airing title per day it was asked about, with the score and
+    the vote count AniList gave that morning.
+
+    THE DATED GLOB, DELIBERATELY, and it is the only view here that reads one.
+    Every other daily view reads processed/current/*.parquet because it is
+    joined into anime_media_latest, which every request reads, and the glob
+    would cost those queries a file more each day. This one is the opposite: the
+    history IS the subject, the files were already being written and kept by
+    ingestion.storage.write_daily, and nothing but this reads it - so a page
+    that plots a score pays the cost and a page that does not never touches it.
+
+    Weekly snapshots record a score that moved twice in a week as one move, and
+    /scores exists to say how scores move while a season airs. This is the dense
+    half of that series, and it costs no new fetch: fetch_status already asks
+    AniList about exactly the airing titles, every morning.
+
+    Rows with no score are dropped rather than carried as nulls - a title nobody
+    has rated yet has not been measured, which is a different thing from one
+    measured at the same value - and user_count is kept because a reading is
+    only a re-ask where the vote count moved (see backend/app/routers/scores.py).
+
+    Guarded on the column existing: dated files written before this shipped have
+    neither field, union_by_name fills them with nulls once ANY file has them,
+    and until the first new-schema file lands there is no column to select."""
+    files = data_dir / "processed" / "anilist_status"
+    if not (has_registry and list(files.glob("*.parquet"))):
+        return []
+    rows = f"read_parquet('{files}/*.parquet', union_by_name=true)"
+    columns = {row[0] for row in con.execute(f"DESCRIBE SELECT * FROM {rows}").fetchall()}
+    if "score_100" not in columns:
+        logger.info("No daily score readings yet (no file carries score_100), skipping the series")
+        return []
+    con.execute(
+        "CREATE OR REPLACE VIEW anime_score_daily AS "
+        "SELECT wb_id, fetched_on, score_100, user_count FROM ("
+        f"  {_placed_sql(rows, has_registry, mapped, resolved)}"
+        ") WHERE wb_id IS NOT NULL AND score_100 IS NOT NULL "
+        "QUALIFY ROW_NUMBER() OVER (PARTITION BY wb_id, fetched_on ORDER BY anilist_id) = 1"
+    )
+    return ["anime_score_daily"]
 
 
 def _status_corrected(con: duckdb.DuckDBPyConnection, latest: str, has_status: bool) -> str:

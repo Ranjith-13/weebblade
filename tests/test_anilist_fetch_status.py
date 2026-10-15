@@ -61,8 +61,9 @@ class _AniList:
         return {"Page": {"media": media}}
 
 
-def _media(anilist_id, mal_id, status, end=None):
-    return {"id": anilist_id, "idMal": mal_id, "status": status,
+def _media(anilist_id, mal_id, status, end=None, score=None, popularity=None):
+    return {"id": anilist_id, "idMal": mal_id, "status": status, "averageScore": score,
+            "popularity": popularity,
             "endDate": dict(zip(("year", "month", "day"), end or (None, None, None)))}
 
 
@@ -137,7 +138,8 @@ def test_a_check_lands_under_its_date(tmp_path):
 
     dated = pq.read_table(tmp_path / "data" / "processed" / "anilist_status" / "2026-09-14.parquet").to_pylist()
     current = pq.read_table(tmp_path / "data" / "processed" / "current" / "anilist_status.parquet").to_pylist()
-    assert dated == current == [{"anilist_id": 1, "mal_id": 10, "status": "finished", "ended_on": "2026-09-10",
+    assert dated == current == [{"anilist_id": 1, "mal_id": 10, "status": "finished", "score_100": None,
+                                 "user_count": None, "ended_on": "2026-09-10",
                                  "fetched_on": "2026-09-14"}]
 
 
@@ -148,3 +150,30 @@ def test_a_check_that_finds_nothing_still_writes_a_readable_file(tmp_path):
 
     table = pq.read_table(tmp_path / "data" / "processed" / "anilist_status" / "2026-09-14.parquet")
     assert (table.num_rows, table.schema.names) == (0, fs.SCHEMA.names)
+
+
+def test_the_score_and_its_vote_count_ride_along_on_the_status_check(tmp_path):
+    """The whole point of #2: no extra request, two more fields on the query
+    that was already going out every morning."""
+    assert "averageScore" in fs._FIELDS and "popularity" in fs._FIELDS
+
+    _warehouse(tmp_path, [(["anilist:1"], 10, "current")])
+    fs.land_status(
+        tmp_path / "data", "2026-10-16",
+        _AniList([_media(1, 10, "RELEASING", score=78, popularity=40_112)]),
+    )
+
+    row = pq.read_table(
+        tmp_path / "data" / "processed" / "anilist_status" / "2026-10-16.parquet"
+    ).to_pylist()[0]
+    # Out of 100, which is the scale the warehouse stores; /10 is display only.
+    assert (row["score_100"], row["user_count"]) == (78, 40_112)
+
+
+def test_a_title_nobody_has_rated_yet_carries_no_score_rather_than_a_zero():
+    """A premiere with no rating has not been measured. Zero would be a
+    measurement, and would drag any average it ever reached."""
+    row = fs.flatten_status(_media(1, 10, "RELEASING", score=None, popularity=3), "2026-10-16")
+
+    assert row["score_100"] is None
+    assert row["user_count"] == 3

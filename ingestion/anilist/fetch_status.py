@@ -39,7 +39,22 @@ logger = logging.getLogger(__name__)
 
 CHUNK = 50
 
-_FIELDS = "id idMal status endDate { year month day }"
+# averageScore and popularity ride along on a request that was already being
+# made. The weekly pipeline refetches a season once every seven days, so a score
+# that moves twice in a week is recorded as one move and anything inside the week
+# is simply not there - and movement DURING a season is the whole subject of
+# /scores, which measured 35% of readings of an airing season changing against 1%
+# of a finished one. This check already asks AniList about exactly the titles
+# that are airing, every morning, so the dense half of that series costs two
+# more fields on an existing query and no extra requests at all.
+#
+# popularity is not decoration either. /scores counts a pair of readings only
+# where the source's own vote count moved, because a detector that looks at the
+# score throws away every reading that came back the same and reports movement
+# near 100% by construction. AniList's popularity is that vote count: the number
+# of users holding the title on a list. Without it a daily series cannot tell a
+# score that was re-asked and did not move from one that was never asked.
+_FIELDS = "id idMal status averageScore popularity endDate { year month day }"
 BY_ANILIST_ID = (
     "query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) { " + _FIELDS + " } } }"
 )
@@ -64,6 +79,13 @@ SCHEMA = pa.schema(
         ("anilist_id", pa.int64()),
         ("mal_id", pa.int64()),
         ("status", pa.string()),
+        # AniList's averageScore is already out of 100, which is the scale the
+        # warehouse stores and /10 is only ever a display concern. Null for a
+        # title nobody has rated yet, which is most of a premiere week.
+        ("score_100", pa.int64()),
+        # AniList's popularity: users holding the title on a list. The movement
+        # detector, not a statistic to print - see the note above _FIELDS.
+        ("user_count", pa.int64()),
         # ISO, as much of it as AniList knows: "2026-09-10", "2026-09", "2026".
         ("ended_on", pa.string()),
         ("fetched_on", pa.string()),
@@ -138,6 +160,8 @@ def flatten_status(media: dict[str, Any], fetched_on: str) -> dict[str, Any]:
         "anilist_id": media["id"],
         "mal_id": media.get("idMal"),
         "status": _STATUSES.get(media.get("status") or ""),
+        "score_100": media.get("averageScore"),
+        "user_count": media.get("popularity"),
         "ended_on": _ended_on(media.get("endDate")),
         "fetched_on": fetched_on,
     }
