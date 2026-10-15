@@ -352,6 +352,56 @@ all, not a check that the patterns were written correctly. Until that test passe
 `buildFilter` on this service as unproven rather than as understood, and prefer the cost of a spare
 rebuild to the cost of a silently stale API.
 
+### 13. [x] A title typed in was being treated as a semantic question
+
+"Romaji search recall is 24/40" sat in the carried-over list since September. The first
+job was not fixing it but being able to re-run it: the figure, and the four document
+variants in `embed.text_for_embedding` chosen against figures like it, came from a script
+that was never committed. **`ai/search/evaluate.py` is that harness**, with cases derived
+from the warehouse rather than hand-listed, because a fixed list of forty titles rots into
+a list of titles that happen to still work.
+
+Re-measured over the 40 most-held titles, the live number was **10/40 first**, not 24 - but
+**28/40 found inside the top ten**. So the titles were not missing, they were losing, and
+the failures were almost all franchises: four Attack on Titan entries and three Demon Slayer
+arcs whose documents are near-identical, which is exactly the case cosine distance cannot
+separate.
+
+**The fix this file suggested does not work.** Adding `title_native` to the embedded
+document moved Japanese first-hits from 0/40 to **1/40**. The model is `all-MiniLM-L6-v2`,
+English-only: Japanese tokenises to almost nothing, so the text went in and bought nothing
+while slightly diluting everything else (romaji 10/40 to 9/40). Measured, reverted.
+
+What worked is the other half of the note. A name match now sorts ahead of distance - one
+`ORDER BY` term, no second index, no rank fusion - with **both sides normalised the same
+way**: lower case, punctuation to spaces, `\pL`/`\pN` so any script survives. Compared as
+stored it only fires for titles carrying no punctuation, which is no franchise entry at all.
+
+| | before | after |
+|---|---|---|
+| romaji, as stored | 10/40 | 40/40 |
+| romaji, typed loosely | 10/40 | 40/40 |
+| romaji, two letters swapped | 6/40 | 7/40 |
+| native (Japanese) | 0/40 | 37/40 |
+| on-genre, twelve vague queries | 92/120 | 92/120 |
+
+**Two of those rows are honest about being nearly free.** Cases are generated from the
+warehouse's own strings, so a rule that matches a name exactly scores 40/40 by construction;
+and once the fix normalised punctuation, the harness's own "typed loosely" perturbation
+became the same transformation applied from both ends. The transposition row is what is left
+when the exact path cannot fire - 7/40 against the vector index's own 6/40, a floor rather
+than a gain. Repairing typos needs trigram or edit distance, which is a second index to keep
+in step rather than a term in an ORDER BY, and it is not done.
+
+The row that matters most is the last one: unchanged. A vague query equals no title's name,
+so every row scores the same and the ordering is the distance ordering it has always been.
+
+It is a **query-side change**, so it needed no re-embedding and took effect on deploy rather
+than on the next weekly run. It also fixed a latent outage: the first version named all three
+title columns unconditionally, and a warehouse built from a snapshot older than one of them
+answers every search with `BinderException` rather than ranking slightly worse. The columns
+are checked now, the same way `build_index._select_for_index` already checked them.
+
 ### 10. [x] The warehouse was only ever read across, never down
 
 Twenty-two seasons of weekly snapshots sat in `anime_media` - 66,098 dated rows - and every
@@ -436,9 +486,8 @@ answers with an empty list and the block does not render.
 - **Six poster URLs are dead upstream** at Kitsu (404 at origin, confirmed). Currently
   ignored narrowly in the smoke suite so it does not go permanently red. A liveness check
   at ingest would cost 6,359 HEAD requests a week, which is why it has not been done.
-- **Romaji search recall is 24/40** — typing a title's other name finds it first 24 times
-  out of 40. Adding native titles to the indexed document, or blending keyword matching
-  with vectors, would lift it.
+- ~~**Romaji search recall is 24/40**~~ — **fixed 2026-10-16, and the 24/40 was not
+  reproducible.** See item 13.
 - **533 titles have no synopsis anywhere** (2026-10-14; 26 were fillable when checked).
   Upstream gap.
 - **40 titles are `airing_unconfirmed`** (2026-10-14) — nothing upstream can confirm them.
