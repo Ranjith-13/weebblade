@@ -24,3 +24,14 @@ sentence-transformers==6.0.1
 # Parquet write in the project. Pin pandas forward to a numpy-2-compatible release
 # instead of trying to hold numpy back (numpy 2.x is what the ML deps actually want).
 pandas>=2.2.3
+
+# Declared because ai/search/similar.py imports it directly - the only
+# first-party module that does - to compare 6,359 vectors against each other
+# once a week. It arrives anyway through sentence-transformers, and an
+# undeclared direct dependency is one that a bump of something else can remove
+# without a word, in a step that runs last in the weekly pipeline.
+#
+# Deliberately unpinned, and the note above is the reason: numpy's version here
+# is settled by the ML dependency chain, with pandas pinned forward to follow
+# it, so naming a version would be this file arguing with itself.
+numpy
