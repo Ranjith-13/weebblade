@@ -307,6 +307,34 @@ The trailer is a click-to-load facade (`components/Trailer.tsx`). **Do not swap 
 iframe** — that ships ~500 KB of third-party JS and sets cookies on every view whether or not
 anyone presses play.
 
+## The API and this app race on every push
+
+Render replaces a free container rather than draining it, so around a deploy its proxy answers
+**502** with nothing behind it. Both the CI build and the Vercel build prerender against the live
+API at exactly that moment, and a single 502 took the whole build down twice in two days - the
+second time on the very commit whose deploy it was racing.
+
+`getJson` in `lib/api.ts` retries **502 and 504** and network errors, three times, backing off
+2s / 6s / 15s. About 23 seconds, which is proportionate rather than arbitrary: this app already
+waits ~32s for a sleeping container with no fetch timeout at all. It is not meant to ride out a
+long outage - a build that waits that long *should* go red, because a Vercel deploy made then
+would have failed too.
+
+**Not 503.** From `get_db` that means the warehouse is not on disk, which does not clear in
+seconds; the API retries its own fetch where it can actually be fixed
+(`backend/app/warehouse.ensure_warehouse`).
+
+**`_retry=N` on the URL is load-bearing and looks like debris.** Next memoises `fetch` by URL
+within a render pass, so retrying the identical URL is answered from that memo and **no request
+leaves the process**. Measured against a stub that failed its first three calls: without the
+parameter the build made one request per caller and died; with it, `/catalogue` was asked at 0s,
+2s and 6s and the third answered. `cache: "no-store"` does **not** defeat the memo. Remove the
+parameter and the retry silently becomes a no-op that still looks correct.
+
+Checked both ways with the cache cleared each time - with the retry the build exits 0, without it
+exits 1, same stub. `lib/api.ts` is `server-only`, so none of this runs in a reader's browser;
+`/search` does its own fetch from the client and is untouched.
+
 ## Caching is a rate-limit boundary, not a perf tweak
 
 The API limits per client IP (60/min, 20/min on `/search`) and on Vercel every visitor shares the

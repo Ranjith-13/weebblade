@@ -78,10 +78,64 @@ function buildUrl(path: string, params: Record<string, unknown> = {}): string {
   return url.toString();
 }
 
+/* THE API AND THIS APP BOTH REDEPLOY ON A PUSH, AND THEY RACE.
+ *
+ * Render replaces a free container rather than draining it, so for a minute or
+ * so around a deploy its proxy answers 502 with nothing behind it. Both this
+ * app's CI build and its Vercel build prerender against the live API at exactly
+ * that moment, and a single 502 took the whole build down twice in two days -
+ * the second time on the commit that caused the deploy it was racing.
+ *
+ * So a status that means "ask again in a moment" is asked again. 502 and 504
+ * are the proxy with no healthy instance behind it. Network-level failures too,
+ * which arrive as a thrown TypeError rather than a response.
+ *
+ * NOT 503, deliberately. From get_db that means the warehouse is not on disk
+ * (backend/app/db.py), which does not clear in seconds and is retried where it
+ * can actually be fixed - the API re-fetches its own warehouse before serving
+ * (backend/app/warehouse.ensure_warehouse). Retrying it here would only make
+ * every page slower on the day the API has nothing to serve.
+ *
+ * The budget is about 23 seconds, which is proportionate rather than arbitrary:
+ * this app already waits around 32 seconds for a sleeping container to wake,
+ * with no fetch timeout at all. It is not enough to ride out a long outage, and
+ * it is not meant to be - a build that waits that long should go red, because a
+ * Vercel deploy made at that moment would have failed too.
+ *
+ * This file is server-only, so none of it runs in a reader's browser. /search
+ * does its own fetch from the client (app/search/SearchClient.tsx) and is
+ * untouched: it spends the visitor's own rate-limit budget, where a retry would
+ * be spending someone else's. */
+const RETRY_STATUS = new Set([502, 504]);
+const RETRY_BACKOFF_MS = [2_000, 6_000, 15_000];
+
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new ApiError(res.status, `${res.status} from ${url}`);
-  return res.json() as Promise<T>;
+  for (let attempt = 0; ; attempt++) {
+    const last = attempt >= RETRY_BACKOFF_MS.length;
+    try {
+      // THE _retry PARAMETER IS LOAD-BEARING AND LOOKS LIKE DEBRIS, so: Next
+      // memoises fetch by URL within a render pass, and a retry of the exact
+      // same URL is answered from that memo without a request leaving the
+      // process. Measured against a stub that failed the first three calls -
+      // without this the build made ONE request per caller and died; with it,
+      // /catalogue was asked at 0s, 2s and 6s and the third answered. `cache:
+      // "no-store"` does not defeat the memo; a different URL does. The API
+      // ignores unknown query parameters, and seeing _retry=2 in its log is a
+      // fair description of what happened.
+      const attempted = attempt === 0
+        ? url
+        : `${url}${url.includes("?") ? "&" : "?"}_retry=${attempt}`;
+      const res = await fetch(attempted, { headers: { Accept: "application/json" } });
+      if (res.ok) return (await res.json()) as T;
+      // Thrown rather than returned so the one exit for a failure is the same
+      // whatever went wrong; the catch below decides whether it is final.
+      throw new ApiError(res.status, `${res.status} from ${url}`);
+    } catch (err) {
+      const retryable = err instanceof ApiError ? RETRY_STATUS.has(err.status) : true;
+      if (last || !retryable) throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, RETRY_BACKOFF_MS[attempt]));
+  }
 }
 
 /** Quarterly order, not alphabetical - FALL sorts last in the year, not first. */
