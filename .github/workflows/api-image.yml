@@ -14,23 +14,18 @@
 # the API ever stops fitting, this goes red instead of the deployment.
 name: API image
 
-# WHAT GOES INTO THE IMAGE IS STATED TWICE, HERE AND IN render.yaml, and the
-# two cannot share a constant because they are read by different systems. The
-# source of truth is backend/Dockerfile, which COPYs exactly backend/
-# requirements.txt, backend/app and ai; .dockerignore keeps the rest of the
-# repository out of the build context.
+# WHAT GOES INTO THE IMAGE. The source of truth is backend/Dockerfile, which
+# COPYs exactly backend/requirements.txt, backend/app and ai; .dockerignore
+# keeps the rest of the repository out of the build context. .dockerignore is
+# listed below because it decides what that context contains - a pattern that
+# caught ai/ would break the image - and it was missing until the two lists were
+# walked against each other.
 #
-# They are also inverses. This is an allowlist, so a new input the image needs
-# must be ADDED here; render.yaml's buildFilter is a denylist, so the same
-# change means making sure the path is NOT in its ignoredPaths. Change one
-# without the other and the symptoms differ: a missed build here is an image
-# nobody proved, a missed deploy there is a live API running old code.
-#
-# .dockerignore was the one they already disagreed about, found by writing this
-# comment and walking the two lists against each other. It decides what the
-# build context contains, so a pattern that caught ai/ would break the image -
-# and it was not listed here, while Render would deploy on it. That is exactly
-# the "an image nobody proved" half, so it is listed now.
+# render.yaml used to state the same thing as a buildFilter, so that Render
+# would not redeploy the API for commits that cannot change it. It was reverted:
+# it skipped a commit that changed backend/app and ai/ outright, leaving the
+# live API on older code than main. That note is kept in render.yaml. If it is
+# ever tried again, this list is the thing it has to agree with.
 on:
   push:
     paths:

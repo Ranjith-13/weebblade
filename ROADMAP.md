@@ -308,6 +308,29 @@ Tokyo, so for a few hours after a broadcast it names one that has just aired. "E
 Oct" is true either way; only the word "next" would not be, which is why the plate does not
 use it.
 
+### 12. [!] The buildFilter skipped a deploy it must not have, and is reverted
+
+`88a8234` told Render not to redeploy the API for commits that cannot change it:
+`buildFilter.ignoredPaths` over `frontend/**`, `tests/**`, `pipeline/**`, `**/*.md` and the
+rest. The reason was good - four of six deploys that day were for commits that never touched
+the API, and every restart refetches the 39 MB warehouse at the one moment a failed fetch
+leaves the service answering 503.
+
+**It skipped `fe436a2`**, which changed `backend/app/routers/anime.py`, `backend/app/schemas.py`
+and added `ai/search/similar.py`. No entry in the Deploys list at all; the API served the
+previous commit while `main` had moved on. That is the exact failure the comment above the
+filter said it existed to avoid, and the comment was right about which way to err.
+
+**The verification was the mistake.** The rule was replayed over 14 past commits in Python,
+which tests a model of the engine rather than the engine. And the two commits that did deploy
+under the filter, `88a8234` and `2c840c6`, both edited `render.yaml` - a blueprint sync deploys
+regardless - so the only evidence it worked came from commits that would have deployed anyway.
+`fe436a2` was the first one under the filter that did not touch that file.
+
+Reverted. Before trying again: read Render's own `buildFilter` semantics rather than assuming
+"deploy if any changed path is not ignored", and test with a commit touching **only** `backend/`
+so a blueprint sync cannot confound the result.
+
 ### 10. [x] The warehouse was only ever read across, never down
 
 Twenty-two seasons of weekly snapshots sat in `anime_media` - 66,098 dated rows - and every

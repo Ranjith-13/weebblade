@@ -31,52 +31,36 @@ services:
     # Nearest to both the readers this is for and the sources it mirrors.
     region: singapore
     healthCheckPath: /health
-    # WHAT ACTUALLY GOES INTO THIS IMAGE, and nothing else should restart it.
+    # NO buildFilter HERE, AND THAT IS THE SECOND ANSWER TO THE SAME QUESTION.
     #
-    # Auto-deploy fires on every push to main, and on 14 October 2026 four of
-    # the API's six deploys were for commits that never touched the API: three
-    # frontend-only, and the daily pipeline writing one line to RUNS.md. Each
-    # rebuilt the image and restarted the container, and every restart refetches
-    # the 39 MB warehouse. The cost is not really the bandwidth - it is that a
-    # restart is exactly when a failed fetch leaves the service answering 503
-    # (backend/app/warehouse.ensure_warehouse), so a needless redeploy is a
-    # needless roll of that dice, once a day guaranteed.
+    # Auto-deploy fires on every push to main, and most of them cannot change
+    # this image: on 14 October 2026 four of six deploys were frontend-only or
+    # the daily pipeline writing one line to RUNS.md. Each restarted the
+    # container, and every restart refetches the 39 MB warehouse - which matters
+    # because a restart is when a failed fetch leaves the service answering 503
+    # (see backend/app/warehouse.ensure_warehouse).
     #
-    # The list is derived, not guessed. backend/Dockerfile COPYs exactly three
-    # things - backend/requirements.txt, backend/app and ai - and .dockerignore
-    # keeps the rest of the repository out of the build context entirely. Every
-    # import under backend/app and ai/ resolves within those two trees or to a
-    # third-party package; nothing reaches into processing/, pipeline/ or
-    # ingestion/, which is why they are listed here despite being Python.
+    # So 88a8234 added buildFilter.ignoredPaths for frontend/**, tests/**,
+    # pipeline/**, "**/*.md" and the rest, verified by replaying the rule over
+    # 14 past commits. Replaying a rule tests the model of it, not the engine,
+    # and the engine disagreed: fe436a2 changed backend/app/routers/anime.py,
+    # backend/app/schemas.py and added ai/search/similar.py - none of them
+    # ignored - and Render never deployed it. No entry in the service's Deploys
+    # list at all. The API served the previous commit's code while main had
+    # moved on, which is the one failure mode that comment said it was built to
+    # avoid.
     #
-    # ignoredPaths rather than paths, deliberately. An allowlist silently stops
-    # deploying when someone adds a directory the image needs, and a stale API
-    # is far worse than a spare rebuild - so anything not named below still
-    # triggers a deploy. render.yaml itself is absent on purpose: a change to
-    # this file should reach the service.
+    # What makes it worse than a bad glob: the two commits that DID deploy under
+    # the filter, 88a8234 and 2c840c6, both touched this file, and a blueprint
+    # sync deploys regardless. fe436a2 was the first commit under the filter
+    # that did not, and it was skipped - so the filter may have been skipping
+    # everything and the evidence that it worked was an artifact of editing it.
     #
-    # The same fact is stated in .github/workflows/api-image.yml, which gates the
-    # image build on backend/**, ai/** and this file. They cannot share a
-    # constant, and they are inverses: that one is an allowlist to add to, this
-    # one is a denylist to keep a path out of. If the image gains an input,
-    # both need looking at.
-    #
-    # If the API ever looks like it is running old code, this is the first thing
-    # to suspect, and Manual Deploy > Deploy latest commit is the way out.
-    buildFilter:
-      ignoredPaths:
-        - frontend/**
-        - airflow/**
-        - ingestion/**
-        - processing/**
-        - pipeline/**
-        - tests/**
-        - scripts/**
-        - .github/**
-        - data/**
-        - output/**
-        - "*.md"
-        - "**/*.md"
+    # Reverted rather than re-tuned. A stale API is far worse than a spare
+    # rebuild, which the version of this comment that shipped the filter said
+    # itself. Before trying again: read Render's own buildFilter semantics, and
+    # test with a commit that changes ONLY backend/ so the result cannot be
+    # confounded by a blueprint sync.
     envVars:
       # Where to find the published warehouse. Setting this is what switches the
       # API from "read a mounted file" to "fetch the newest release asset".
