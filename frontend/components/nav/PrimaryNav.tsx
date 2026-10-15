@@ -84,6 +84,7 @@ export function NavList({ active }: { active: Section | null }) {
           <li key={link.key}>
             <Link
               href={link.href}
+              data-pressable
               aria-current={active === link.key ? "page" : undefined}
               className={`${item} ${itemState(active === link.key)}`}
             >

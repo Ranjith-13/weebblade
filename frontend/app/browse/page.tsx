@@ -272,6 +272,7 @@ async function BrowseResults({
             {earlier && (
               <Link
                 href={toSeason(earlier.key)}
+                data-pressable
                 className="inline-block py-1.5 text-[0.85rem] transition-colors hover:text-flag"
               >
                 <span className="meta mr-1.5">Earlier</span>
@@ -281,6 +282,7 @@ async function BrowseResults({
             {later && (
               <Link
                 href={toSeason(later.key)}
+                data-pressable
                 className="inline-block py-1.5 text-[0.85rem] transition-colors hover:text-flag"
               >
                 <span className="meta mr-1.5">Later</span>
@@ -552,6 +554,7 @@ async function BrowseResults({
           {clamped > 1 ? (
             <Link
               href={buildHref(current, { page: String(clamped - 1) })}
+              data-pressable
               className="meta inline-block py-2 transition-colors hover:text-flag"
             >
               Previous
@@ -565,6 +568,7 @@ async function BrowseResults({
           {clamped < totalPages ? (
             <Link
               href={buildHref(current, { page: String(clamped + 1) })}
+              data-pressable
               className="meta inline-block py-2 transition-colors hover:text-flag"
             >
               Next
@@ -609,6 +613,7 @@ function Chip({
     <Link
       href={href}
       title={title}
+      data-pressable
       aria-current={active ? "true" : undefined}
       className={[
         "inline-block border-b-2 py-1.5 text-[0.82rem] transition-colors duration-150",

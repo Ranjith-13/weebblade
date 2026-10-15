@@ -415,6 +415,11 @@ body > * {
     animation: rule-sweep 1.15s ease-in-out infinite;
   }
 
+  /* Every button, and the links that are CONTROLS rather than prose: the filter
+     chips, the nav sections, the season neighbours, the pager. Opt-in by
+     attribute rather than a blanket a:active, because "Clear the filters"
+     inside a sentence is a link in running text and a sentence that twitches
+     under the thumb is worse than one that does nothing. */
   button:not(:disabled):active,
   a[data-pressable]:active {
     translate: 0 1px;

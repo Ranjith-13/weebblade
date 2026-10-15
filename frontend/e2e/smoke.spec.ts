@@ -360,6 +360,28 @@ for (const motion of ["no-preference", "reduce"] as const) {
     expect(pressed, "a press moves the control, or does not").toBe(moving ? "0px 1px" : "none");
     await page.keyboard.press("Escape");
 
+    /* And the controls that are links rather than buttons - the nav sections,
+       the filter chips, the pager. These opt in by attribute rather than a
+       blanket a:active, because "Clear the filters" sits inside a sentence and
+       a line of prose that twitches under the thumb is worse than one that does
+       nothing. So the prose link is asserted to stay still in both modes. */
+    const navLink = page.locator("header nav a[data-pressable]").first();
+    await navLink.hover();
+    await page.mouse.down();
+    const linkPressed = await navLink.evaluate((e) => getComputedStyle(e).translate);
+    await page.mouse.up();
+    expect(linkPressed, "a control-shaped link presses").toBe(moving ? "0px 1px" : "none");
+
+    const prose = page.locator("main p a:not([data-pressable])").first();
+    if (await prose.count()) {
+      await prose.scrollIntoViewIfNeeded();
+      await prose.hover();
+      await page.mouse.down();
+      const prosePressed = await prose.evaluate((e) => getComputedStyle(e).translate);
+      await page.mouse.up();
+      expect(prosePressed, "running text never presses").toBe("none");
+    }
+
     /* The theme flip. Reduced motion is checked in the component rather than in
        CSS, because suppressing the animation in a stylesheet still takes the
        snapshot - so the assertion is that the API was not CALLED, and that the
