@@ -224,6 +224,49 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+/* The theme control, and specifically the half of it that can fail silently.
+ *
+ * A stored choice lives in localStorage, which the server cannot read, so the
+ * root layout ships a blocking inline script that applies it before first
+ * paint. The first version of that script read localStorage.getItem(undefined)
+ * - the key was exported from a "use client" module, so the Server Component
+ * importing it got a client reference instead of the string. It compiled, it
+ * ran, and it did nothing: every reload painted the system's answer and then
+ * snapped to the reader's.
+ *
+ * So the assertion that matters is made at domcontentloaded, BEFORE hydration.
+ * A test that waits for the page to settle would pass on a site that flashes. */
+test("an explicit theme survives a reload without a flash", async ({ browser }) => {
+  // A light OS, so only an explicit choice can make it dark.
+  const context = await browser.newContext({ colorScheme: "light" });
+  const page = await context.newPage();
+  const state = () =>
+    page.evaluate(() => ({
+      attr: document.documentElement.getAttribute("data-theme"),
+      bg: getComputedStyle(document.body).backgroundColor,
+    }));
+
+  await page.goto("/browse");
+  const fresh = await state();
+  expect(fresh.attr, "untouched follows the system").toBeNull();
+
+  await page.getByRole("button", { name: "dark", exact: true }).click();
+  const chosen = await state();
+  expect(chosen.attr).toBe("dark");
+  expect(chosen.bg).not.toBe(fresh.bg);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  const reloaded = await state();
+  expect(reloaded.attr, "applied before hydration, not after").toBe("dark");
+  expect(reloaded.bg, "no flash of the system theme").toBe(chosen.bg);
+
+  // And System is a real choice, not the absence of one.
+  await page.getByRole("button", { name: "system", exact: true }).click();
+  expect((await state()).attr).toBeNull();
+
+  await context.close();
+});
+
 /* The streamed pages, which send their layout before their content: the footer
  * waits for the content (data-footer-waits in globals.css) so it cannot be
  * pushed down when it arrives. That guard is invisible until it breaks, so it

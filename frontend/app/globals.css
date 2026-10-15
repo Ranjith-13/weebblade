@@ -79,9 +79,8 @@
 /* The design is an almanac, so the dark palette is a printing decision rather
    than a filter: the stock changes and the ink changes with it. Both signal
    hues are preserved EXACTLY - flag stays 331deg, data stays 227deg - and only
-   their lightness moves, because section 8 of the brief this was audited
-   against is right that a brand desaturated into dark mode stops being the
-   brand.
+   their lightness moves, because a brand desaturated into dark mode stops
+   being the brand.
 
    CONTRAST IS COMPUTED HERE TOO, and matched to the light palette's own
    relationships rather than merely passing:
@@ -98,41 +97,64 @@
    --color-ink in dark is the light palette's own paper. The flip is literal:
    what was the sheet becomes the ink.
 
-   Every utility in the app reads these variables, so nothing in any component
-   knows which mode it is in. That is the whole reason this was a palette change
-   and not a rewrite.
+   THE VALUES LIVE HERE ONCE. They are named --dark-* and mapped onto the real
+   --color-* tokens by the two selectors below, because a theme a reader can
+   CHOOSE needs the same palette reachable two ways: from the system setting,
+   and from an explicit choice. Duplicating hex codes across those two would be
+   two places to edit and one to forget.
+
+   The image filters are variables for the same reason: it keeps the two
+   selectors below to a list of custom properties with no rule bodies to
+   duplicate. Artwork is lit for a white page, so on dark stock a known plate
+   loses a little brightness and a screened one loses the lift it needed on
+   paper. The certainty treatment is unchanged in kind: colour against grey.
 
    The social card does NOT follow. app/anime/[key]/opengraph-image.tsx reads
-   these tokens out of this file by regular expression and takes the FIRST
-   match, which is the @theme block above - so a shared link unfurls in the
-   product's primary identity rather than in whatever mode the server happened
-   to think it was in. That is deliberate; do not move this block above @theme.
-*/
+   tokens out of this file by regular expression and takes the FIRST match,
+   which is the @theme block above - so a shared link unfurls in the product's
+   primary identity. These are named --dark-* precisely so that regex cannot
+   see them; do not rename them to --color-*. */
+:root {
+  --dark-paper: #17171c;
+  --dark-plate: #232329;
+  --dark-rule: #33333c;
+  --dark-ink: #e9e7e0;
+  --dark-ink-soft: #8e8e98;
+  --dark-flag: #ff3396;
+  --dark-data: #7992ec;
+  --dark-destructive: #ff5f72;
+  --dark-known-filter: saturate(1.02) contrast(1.02) brightness(0.92);
+  --dark-unknown-filter: grayscale(1) contrast(0.92) brightness(0.78);
+}
+
+/* The system's answer, unless the reader has explicitly asked for light. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --color-paper: #17171c;
-    --color-plate: #232329;
-    --color-rule: #33333c;
-
-    --color-ink: #e9e7e0;
-    --color-ink-soft: #8e8e98;
-
-    --color-flag: #ff3396;
-    --color-data: #7992ec;
-
-    --color-destructive: #ff5f72;
+  :root:not([data-theme="light"]) {
+    --color-paper: var(--dark-paper);
+    --color-plate: var(--dark-plate);
+    --color-rule: var(--dark-rule);
+    --color-ink: var(--dark-ink);
+    --color-ink-soft: var(--dark-ink-soft);
+    --color-flag: var(--dark-flag);
+    --color-data: var(--dark-data);
+    --color-destructive: var(--dark-destructive);
+    --plate-known-filter: var(--dark-known-filter);
+    --plate-unknown-filter: var(--dark-unknown-filter);
   }
+}
 
-  /* Artwork is lit for a white page. On a dark ground a full-brightness poster
-     glares against the stock around it, so the known plate loses a little
-     brightness and the screened one loses the lift it needed on paper. The
-     certainty treatment is unchanged in kind: colour against grey. */
-  .plate-known img {
-    filter: saturate(1.02) contrast(1.02) brightness(0.92);
-  }
-  .plate-unknown img {
-    filter: grayscale(1) contrast(0.92) brightness(0.78);
-  }
+/* The reader's own answer, which wins over the system either way. */
+:root[data-theme="dark"] {
+  --color-paper: var(--dark-paper);
+  --color-plate: var(--dark-plate);
+  --color-rule: var(--dark-rule);
+  --color-ink: var(--dark-ink);
+  --color-ink-soft: var(--dark-ink-soft);
+  --color-flag: var(--dark-flag);
+  --color-data: var(--dark-data);
+  --color-destructive: var(--dark-destructive);
+  --plate-known-filter: var(--dark-known-filter);
+  --plate-unknown-filter: var(--dark-unknown-filter);
 }
 
 html {
@@ -188,10 +210,10 @@ body > * {
    Applied from real data (score_100 != null), never decoratively.
    ------------------------------------------------------------------------ */
 .plate-known img {
-  filter: saturate(1.06) contrast(1.03);
+  filter: var(--plate-known-filter, saturate(1.06) contrast(1.03));
 }
 .plate-unknown img {
-  filter: grayscale(1) contrast(0.9) brightness(1.06);
+  filter: var(--plate-unknown-filter, grayscale(1) contrast(0.9) brightness(1.06));
 }
 .plate-unknown::after {
   content: "";

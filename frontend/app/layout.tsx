@@ -5,8 +5,9 @@ import { Suspense } from "react";
 import { NavList, PrimaryNav } from "@/components/nav/PrimaryNav";
 import { Provenance, PROVENANCE_FALLBACK } from "@/components/Provenance";
 import { SeasonIndex } from "@/components/SeasonIndex";
+import { ThemeChoice } from "@/components/ThemeChoice";
 import { WarmupPing } from "@/components/WarmupPing";
-import { SITE_URL } from "@/lib/types";
+import { SITE_URL, THEME_KEY } from "@/lib/types";
 import "./globals.css";
 
 /* Bodoni Moda for the masthead. A didone: the historical face of printed
@@ -61,6 +62,25 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${bodoni.variable} ${archivo.variable}`}>
+      <head>
+        {/* BEFORE FIRST PAINT, AND IT HAS TO BE INLINE AND BLOCKING.
+            A stored theme lives in localStorage, which the server cannot read,
+            so without this the page paints in the system's answer and then
+            snaps to the reader's on hydration - a white flash on every single
+            navigation for anyone who chose dark under a light OS. That is the
+            one bug this whole control is capable of causing, and it is a worse
+            experience than having no control at all.
+
+            Reading localStorage can throw outright in a private window with
+            site data blocked, so the whole thing is wrapped: a failure here
+            must cost the preference, never the page. "system" simply removes
+            the attribute and lets the media query answer. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem(${JSON.stringify(THEME_KEY)});if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="flex min-h-dvh flex-col">
         <WarmupPing />
         <a
@@ -105,6 +125,10 @@ export default function RootLayout({
             <Suspense fallback={<p className="meta">{PROVENANCE_FALLBACK}</p>}>
               <Provenance className="meta" />
             </Suspense>
+            {/* In the footer rather than the masthead: the five nav items
+                already fill 352px of a 390px line, and a theme is a preference
+                a reader sets once, not a section they navigate to. */}
+            <ThemeChoice />
             <a
               href="https://github.com/Ranjith-13/weebblade"
               className="meta inline-block py-2 underline decoration-rule underline-offset-4 transition-colors hover:text-flag"

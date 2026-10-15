@@ -32,6 +32,22 @@ duplicated. There is no literal hex anywhere in `app/`, `components/` or `lib/`;
 Palette: `paper #E9E7E0` · `plate #DFDCD2` · `rule #C6C2B6` · `ink #15151A` · `ink-soft #5E5E66` ·
 `flag #C2005E` · `data #1B3FBF`. Two signal colours only — a third is drift.
 
+**The reader can choose: System / Light / Dark, in the footer** (`components/ThemeChoice.tsx`),
+with System the default because most people have already told their OS and a site that asks again
+did not listen. The choice is an attribute on `<html>`; the media query answers for everyone who
+never touches it, including anyone with JS off.
+
+**`THEME_KEY` lives in `lib/types.ts`, not in the component, and that is not tidiness.** The root
+layout is a Server Component and needs the string to build the blocking script that applies a
+stored theme before first paint. Importing it from a `"use client"` module hands a Server
+Component a client *reference* instead of the value, so the script shipped as
+`localStorage.getItem(undefined)`: it compiled, it ran, and it silently did nothing while every
+reload flashed light. The smoke suite now asserts the applied theme at `domcontentloaded`, before
+hydration, because a test that waits for the page to settle passes on a site that flashes.
+
+The control is an external store, not `useState` + `useEffect` - `localStorage` *is* external
+state, and the `set-state-in-effect` rule objects to the alternative, as it does for `Airing.tsx`.
+
 **Dark mode is a palette swap, not a second design.** `@media (prefers-color-scheme: dark)` in
 `globals.css` redefines the same variables; both signal hues are preserved exactly (flag 331°,
 data 227°) and only lightness moves. Dark `--color-ink` is the light palette's paper. No component

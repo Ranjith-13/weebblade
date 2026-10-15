@@ -20,6 +20,18 @@ export const API_BASE =
  * three to the EC2 host, which would have published a dead domain in every
  * crawler's index and every shared link's preview. Override with
  * NEXT_PUBLIC_SITE_URL if the deployment is named something else. */
+/** Where a reader's explicit theme choice is remembered.
+ *
+ *  HERE, NOT IN components/ThemeChoice.tsx, AND THAT IS NOT TIDINESS. The root
+ *  layout is a Server Component and it needs this string to build the blocking
+ *  script that applies a stored theme before first paint. Importing it from a
+ *  "use client" module gives a Server Component a client REFERENCE rather than
+ *  the value, so the script shipped as localStorage.getItem(undefined) - it
+ *  compiled, it ran, it silently did nothing, and every reload flashed light
+ *  before the choice reapplied. This module carries no "use client", so both
+ *  sides get the actual string. */
+export const THEME_KEY = "weebblade-theme";
+
 export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://weebblade.vercel.app";
 
