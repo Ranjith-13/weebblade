@@ -89,6 +89,18 @@ from `isKnown(anime)` — a real predicate over real data. **It must never be ap
 decoratively.** The moment the halftone stops meaning "no score upstream", the design becomes
 ornament and the honesty is gone.
 
+**There is exactly one dot screen on this site, and that is the rule this paragraph was failing
+to enforce.** A "paper tooth" shipped on 2026-09-09: ink dots at 4px pitch, opacity 0.38, over
+every pixel of every page, to stop flat `#E9E7E0` reading as a grey div. It was a second
+halftone, and a reader who sees dots everywhere has no reason to read dots on a plate as a fact.
+It also rendered unpredictably — a 0.5px dot is sub-pixel, so it nearly vanished on the 1x display
+it was tuned on and printed as a screen door over body text on a high-DPI one, which is why it
+went five weeks unnoticed. Removed 2026-10-15, after comparing 0.38, 0.15 and none at both pixel
+ratios: the paper colour, the hairlines and the didone already do the work it was added for.
+
+The corollary is `.plate-fine`: a 36×49px thumbnail gets a 2px pitch, because 4px leaves nine dots
+across the image and a screen nobody can read as a screen is decoration by another route.
+
 ---
 
 ## 3. Palette

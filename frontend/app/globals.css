@@ -85,19 +85,33 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Paper tooth. A single dot screen over the whole page at low opacity — the
-   thing that makes flat #E9E7E0 read as stock rather than as a grey div.
-   Fixed so it never parallaxes; pointer-events off so it never eats a click. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.38;
-  background-image: radial-gradient(var(--color-ink) 0.5px, transparent 0.6px);
-  background-size: 4px 4px;
-}
+/* NO PAPER TOOTH, AND THE REASON IS THE REST OF THE DESIGN.
+ *
+ * There was a dot screen over the whole page here - ink at 4px pitch, opacity
+ * 0.38, fixed so it never parallaxed - to make flat #E9E7E0 read as stock
+ * rather than as a grey div. Two things were wrong with it.
+ *
+ * It was a second halftone. This design spends its one screen on a single
+ * meaning: a plate is screened back because the pipeline has no score for it.
+ * Section 2 of DESIGN.md says that the moment the halftone stops meaning that,
+ * "the design becomes ornament and the honesty is gone". A dot screen over
+ * every pixel of every page is exactly that, and it blunts the one that
+ * carries information - a reader seeing dots everywhere has no reason to read
+ * dots on a plate as a fact.
+ *
+ * And it rendered unpredictably. A 0.5px dot is sub-pixel: on a 1x display it
+ * half-resolves and nearly disappears, on a high-DPI one it lands on a real
+ * device pixel and prints at full strength. The same CSS was a whisper on the
+ * machine it was tuned on and a screen door over the body text elsewhere,
+ * which is how it shipped at 0.38 and went unnoticed for five weeks.
+ *
+ * Compared at 1x and 2x against 0.38, 0.15 and none before removing it: the
+ * paper colour, the hairlines and the didone already do the work it was added
+ * for, and the type is measurably crisper without a screen over it.
+ *
+ * The stacking rule below stays. It no longer has a texture to sit above, but
+ * the sticky title-page rail and the masthead parallax both rely on body
+ * children establishing their own stacking context. */
 body > * {
   position: relative;
   z-index: 1;
