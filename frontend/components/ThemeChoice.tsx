@@ -130,8 +130,26 @@ export function ThemeToggle() {
   );
 }
 
+/* The one moment on this site where every colour changes at once, so a hard cut
+ * between two frames reads as a glitch rather than as a choice. View
+ * Transitions cross-fade it in the compositor: no library, no JavaScript
+ * animation, nothing to clean up if it fails.
+ *
+ * Reduced motion is checked HERE rather than in CSS, because suppressing the
+ * animation in a stylesheet still takes the snapshot and still runs the
+ * machinery. A browser without the API applies the theme directly, which is
+ * exactly the behaviour this replaces, so there is nothing to fall back to. */
+function applyPreferringTransition(choice: Choice) {
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced || typeof document.startViewTransition !== "function") {
+    apply(choice);
+    return;
+  }
+  document.startViewTransition(() => apply(choice));
+}
+
 function pick(next: Choice) {
-  apply(next);
+  applyPreferringTransition(next);
   try {
     if (next === "system") localStorage.removeItem(THEME_KEY);
     else localStorage.setItem(THEME_KEY, next);

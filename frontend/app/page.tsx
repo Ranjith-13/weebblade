@@ -34,7 +34,7 @@ export default function HomePage() {
 
 function HomeSkeleton() {
   return (
-    <div className="py-10">
+    <div data-skeleton className="py-10">
       <div className="h-24 w-2/3 bg-plate" />
       <div className="mt-8 h-20 border-y border-rule" />
       <div className="mt-10">

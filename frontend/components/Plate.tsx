@@ -154,7 +154,10 @@ export function PlateGrid({
  *  nothing shifts when content arrives. */
 export function PlateGridSkeleton({ count = 12 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+    <div
+      data-skeleton
+      className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
+    >
       {Array.from({ length: count }).map((_, i) => (
         <div key={i}>
           <div className="plate-empty aspect-[3/4] border border-rule bg-plate" />

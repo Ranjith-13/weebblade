@@ -366,6 +366,73 @@ body > * {
   color: var(--color-paper);
 }
 
+/* ---- COMPONENT FEEL ----------------------------------------------------
+   Three things the components were missing, all CSS rather than GSAP: GSAP is
+   for the page's set pieces and costs 49 KB, and none of this is worth a byte
+   of it. All of it is transform and opacity only, so CLS stays 0, and all of it
+   is inside a no-preference query, because section 6 is explicit that reduced
+   motion means NO animation rather than a faster one. */
+
+/* 1. A SKELETON THAT DOES NOT MOVE IS INDISTINGUISHABLE FROM FAILED CONTENT.
+   Every loading shape here was a static block of --color-plate, which is also
+   what an empty plate looks like, so a slow season read as a grid that had
+   arrived holding nothing. A slow breath says the page is still working.
+
+   It breathes the WHOLE skeleton rather than sweeping a highlight across it: a
+   shimmer is a material this design does not have, and the one thing that must
+   not animate is the halftone, which would gain a second meaning ("not arrived
+   yet") beside the only one it is allowed ("no score upstream"). Opacity never
+   reaches 0, for the same reason no entrance starts from invisible. */
+@keyframes plate-breath {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* 2. PRESS FEEDBACK, which the site had nowhere. Every control transitions on
+   hover, and hover does not exist on a phone: a reader tapping a filter chip
+   got no acknowledgement at all until the page changed under them, which on a
+   cold request is a second or more of wondering whether the tap landed. One
+   pixel down, the way a key presses into paper. Translate, so nothing reflows
+   and no neighbour moves. */
+@keyframes rule-sweep {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 300% 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-skeleton] {
+    animation: plate-breath 1.9s ease-in-out infinite;
+  }
+
+  /* Indeterminate, and it has to stay that way: a cold search container takes
+     about half a minute and nothing in the client knows how far along it is. */
+  [data-sweep] {
+    animation: rule-sweep 1.15s ease-in-out infinite;
+  }
+
+  button:not(:disabled):active,
+  a[data-pressable]:active {
+    translate: 0 1px;
+  }
+}
+
+/* 3. THE THEME FLIP IS A CROSS-FADE where the browser can do one. Switching
+   theme repainted the entire page between two frames, which is the one moment
+   on this site where every colour changes at once and a hard cut reads as a
+   glitch rather than a choice. View Transitions do it in the compositor, so it
+   costs no JavaScript and no library. Browsers without the API apply the theme
+   directly, which is exactly today's behaviour, and reduced motion is handled
+   in the component rather than here so the snapshot is never taken at all. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+}
+
 /* WHERE AN ANCHOR LANDED YOU. /changes runs 28,444px on a phone and /schedule
    flows seven days; both open with a line of anchors into their own sections.
    Following one jumped twenty viewports into a page that looked exactly like

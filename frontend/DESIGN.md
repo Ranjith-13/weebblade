@@ -246,6 +246,31 @@ almost no JS, and it is the reason each effect below has to justify itself.
 | Parallax | Detail page key art | Stops one image plus one text column reading as a flat slab. Applied to the image *inside* a fixed frame, so nothing reflows. |
 | Halftone lift | Unscored plate hover | CSS, not JS. The plate is screened because there is no score; leaning in reveals what *is* there. |
 
+### Component motion, which is CSS and not GSAP
+
+GSAP is for the page's set pieces and costs 49 KB. None of the following is worth a byte of it, and
+all of it is transform and opacity only, so CLS stays 0.
+
+| Effect | Where | Why it earns its place |
+|---|---|---|
+| Plate breath | Every loading skeleton | A static skeleton is indistinguishable from content that arrived holding nothing - and here the skeleton's resting tone *is* `--color-plate`, which is what an empty plate looks like. The whole shape breathes; nothing sweeps across it. |
+| Press | Every `button` | Hover does not exist on a phone. A reader tapping a filter chip had no acknowledgement at all until the page changed, which on a cold request is a second of wondering whether the tap landed. One pixel down, the way a key presses into paper. |
+| Indeterminate rule | `/search`, while waiting | A cold container answers in ~32s, and that was a line of static text. Never a percentage: nothing in the client knows how far along the request is, and a bar that invents one is lying to fill a gap. |
+| Theme cross-fade | The toggle | The one moment where every colour on the page changes at once, so a hard cut between two frames reads as a glitch rather than a choice. A View Transition, so it costs no JavaScript and no library. |
+
+**No shimmer, and the skeleton must never borrow the halftone.** A highlight sweeping across a
+loading block is a material this design does not have. More importantly, animating the screen would
+give it a second meaning - "not arrived yet" beside the only one it is allowed, "no score upstream" -
+which is the same objection that keeps the halftone out of the entrance animations above.
+
+**These are CSS, so the `gsap.matchMedia` guard does not cover them.** Each lives inside its own
+`@media (prefers-reduced-motion: no-preference)` block, except the theme cross-fade, where the check
+is in the component: suppressing a view transition's animation in a stylesheet still takes the
+snapshot and still runs the machinery. The smoke suite asserts all four twice, once under each
+preference, because a no-preference block is the entire mechanism and deleting it leaves everything
+running for a reader who asked it not to. Motion is removed under `reduce`; the features are not -
+the theme still applies, the press still presses, the search still searches.
+
 **Deliberately not built:**
 
 - **Horizontal scroll hijack.** `/browse` has filters, pagination and a season of 233 to 370 titles behind real URLs.

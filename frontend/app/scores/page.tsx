@@ -412,7 +412,7 @@ async function Settling() {
    the only layout shift this site has ever measured. */
 function SettlingSkeleton() {
   return (
-    <div data-footer-waits className="mt-6">
+    <div data-footer-waits data-skeleton className="mt-6">
       <div className="h-4 w-2/3 max-w-[40rem] bg-plate" />
       <div className="mt-2 h-4 w-1/2 max-w-[32rem] bg-plate" />
       <div className="mt-10 h-7 w-1/3 max-w-[24rem] bg-plate" />

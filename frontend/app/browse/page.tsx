@@ -76,13 +76,13 @@ const HEADING = "font-display text-[clamp(2.2rem,6vw,3.4rem)] font-black leading
 
 function BrowseSkeleton() {
   return (
-    <>
+    <div data-skeleton>
       <div className="h-[clamp(2.2rem,6vw,3.4rem)] w-[min(18rem,70%)] bg-plate" aria-hidden />
       <div className="mt-8 h-32 border-y border-rule" />
       <div className="mt-9">
         <PlateGridSkeleton count={18} />
       </div>
-    </>
+    </div>
   );
 }
 

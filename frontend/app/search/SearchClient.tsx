@@ -191,6 +191,15 @@ export function SearchClient({ total }: { total: number }) {
         {state.status === "loading" && (
           <div>
             <p className="meta">Embedding &ldquo;{state.query}&rdquo;&hellip;</p>
+            {/* A cold container takes ~32s to answer, and until now that was a
+                line of static text: nothing on the screen said the page was
+                still working rather than finished and empty. An indeterminate
+                rule, never a percentage - nothing here knows how far along the
+                request is, and a bar that invents one is lying to fill a gap.
+                It is the same hairline the rest of the page separates with. */}
+            <div className="mt-2.5 h-[2px] w-full max-w-[18rem] overflow-hidden bg-rule" aria-hidden>
+              <div data-sweep className="h-full w-1/3 bg-flag" />
+            </div>
             {/* Said the way everything else on this site says it: what is
               * happening and why, in the reader's terms. Not "the container is
               * booting on Render" - a reader has no container and did not choose

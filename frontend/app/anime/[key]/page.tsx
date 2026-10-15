@@ -120,7 +120,11 @@ function DetailSkeleton() {
    this: see the rule in globals.css. */
 function DetailBodySkeleton() {
   return (
-    <div data-footer-waits className="mt-7 grid gap-x-12 gap-y-8 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+    <div
+      data-footer-waits
+      data-skeleton
+      className="mt-7 grid gap-x-12 gap-y-8 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]"
+    >
       <div className="plate-empty aspect-[3/4] border border-rule bg-plate" />
       <div className="space-y-4">
         <div className="h-12 w-2/3 bg-plate" />

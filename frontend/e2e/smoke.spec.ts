@@ -313,6 +313,78 @@ test("the masthead toggle flips the page and agrees with the footer", async ({ b
   }
 });
 
+/* COMPONENT FEEL, and the half of it that is easy to ship broken.
+ *
+ * Section 6 of DESIGN.md is explicit that reduced motion means NO animation
+ * rather than a faster one, and every one of these is CSS rather than GSAP, so
+ * none of them is covered by the matchMedia guard the GSAP effects live inside.
+ * A no-preference block is the whole mechanism; delete it and all three keep
+ * running for a reader who asked them not to. So each is asserted twice. */
+for (const motion of ["no-preference", "reduce"] as const) {
+  const moving = motion === "no-preference";
+
+  test(`component motion is ${moving ? "on" : "off"} under prefers-reduced-motion: ${motion}`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      reducedMotion: motion === "reduce" ? "reduce" : "no-preference",
+    });
+    const page = await context.newPage();
+    await page.goto("/browse");
+
+    // The loading shapes and the search sweep, probed as rules rather than by
+    // racing a real fallback: the question is whether the stylesheet matches.
+    const anims = await page.evaluate(() => {
+      const nameFor = (attr: string) => {
+        const d = document.createElement("div");
+        d.setAttribute(attr, "");
+        document.body.append(d);
+        const n = getComputedStyle(d).animationName;
+        d.remove();
+        return n;
+      };
+      return { skeleton: nameFor("data-skeleton"), sweep: nameFor("data-sweep") };
+    });
+    expect(anims.skeleton).toBe(moving ? "plate-breath" : "none");
+    expect(anims.sweep).toBe(moving ? "rule-sweep" : "none");
+
+    // Press feedback. Hover does not exist on a phone, so this is the only
+    // acknowledgement a tap gets before the page changes.
+    const button = page.locator(".season-index-toggle");
+    const box = (await button.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    const pressed = await button.evaluate((e) => getComputedStyle(e).translate);
+    await page.mouse.up();
+    expect(pressed, "a press moves the control, or does not").toBe(moving ? "0px 1px" : "none");
+    await page.keyboard.press("Escape");
+
+    /* The theme flip. Reduced motion is checked in the component rather than in
+       CSS, because suppressing the animation in a stylesheet still takes the
+       snapshot - so the assertion is that the API was not CALLED, and that the
+       theme applied regardless. Motion is removed; the feature is not. */
+    const flip = await page.evaluate(async () => {
+      let called = false;
+      const real = document.startViewTransition;
+      const supported = typeof real === "function";
+      if (supported) {
+        document.startViewTransition = function (cb: () => void) {
+          called = true;
+          return real.call(this, cb);
+        };
+      }
+      document.querySelector<HTMLButtonElement>('header button[aria-label^="Switch"]')!.click();
+      await new Promise((r) => setTimeout(r, 500));
+      return { supported, called, theme: document.documentElement.getAttribute("data-theme") };
+    });
+    if (flip.supported) expect(flip.called, "cross-faded, or cut").toBe(moving);
+    expect(flip.theme, "the theme applies either way").toBeTruthy();
+
+    await context.close();
+  });
+}
+
 /* ENTER MEANS TWO THINGS, and on a catalogue of Japanese titles the second one
    is not an edge case. While an IME is composing, Enter confirms the candidate;
    it does not submit. Unguarded, picking the kanji for a half-typed kana fired a
