@@ -170,7 +170,8 @@ almost no JS, and it is the reason each effect below has to justify itself.
 |---|---|---|
 | Line-mask entrance | Masthead | The one moment the page announces itself. Above the fold, so a scroll trigger would never fire. |
 | Parallax + scrub fade | Masthead | 12% speed difference makes the catalogue slide *over* the cover rather than with it. Scrub-linked, so dragging backwards plays it back. |
-| Stagger reveal | Plate grids, stat rail, digest archive | A season's 233 to 370 near-identical 3:4 plates landing at once give the eye no order. A stagger turns a wall into a sequence. |
+| **Coming into register** | **Plate grids** | **Offset printing's signature artifact is misregistration: plates landing a hair off true and being pulled in. The grid arrives as a sheet off a press rather than as a web page scrolling.** |
+| Stagger reveal | Stat rail, digest archive, listings | A wall of near-identical rows landing at once gives the eye no order. A stagger turns a wall into a sequence. |
 | **Pin** | "How to read this" key | Functional, not decorative: the key decodes the plates, so it stays put while plates scroll past it. Desktop only. |
 | Parallax | Detail page key art | Stops one image plus one text column reading as a flat slab. Applied to the image *inside* a fixed frame, so nothing reflows. |
 | Halftone lift | Unscored plate hover | CSS, not JS. The plate is screened because there is no score; leaning in reveals what *is* there. |
@@ -195,6 +196,17 @@ opacity 0.
 **Everything animates transform and opacity only**, so no effect can trigger layout and CLS stays
 at 0. Every animation uses `gsap.from()`, meaning the DOM's resting state is the *final* state: if
 JS never runs, the page is complete and unstyled-back, not invisible.
+
+**No entrance starts from invisible.** `autoAlpha: 0` made that promise false in practice: a
+scroll trigger that has not fired holds its targets at opacity 0, so a full-page capture of the
+home page showed the entire catalogue as blank paper, and a fast scroller saw the same thing.
+Opacity now bottoms out at 0.35 on the plate grids. Measured after the change: all twelve plates
+below the home page's fold sit at 0.35 rather than 0, and CLS is still 0 at 1440 and 390.
+
+**The halftone is not an entrance and must never become one.** Animating the screen was the
+obvious way to make a plate "develop", and it would give the screen a second meaning: "not
+arrived yet" beside "no score upstream". Registration moves the artwork; the screen stays exactly
+as honest as section 2 requires.
 
 ---
 

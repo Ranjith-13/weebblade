@@ -136,6 +136,60 @@ body > * {
   opacity: 0.55;
 }
 
+/* INK TAKING, on hover, for every plate rather than only the screened ones.
+   Until now a scored plate answered a hover only by recolouring its title
+   underneath, which is a long way from the pointer and easy to miss. The
+   artwork now pushes a hair past its frame, the way ink spreads into paper
+   under pressure; the frame is overflow-hidden and does not move, so what the
+   eye reads is the image getting denser rather than growing.
+
+   1.025 is deliberately under the threshold where it reads as a zoom. A grid of
+   a hundred of these must not become a carousel, and this is meant to be felt
+   rather than watched. Transform only, inside a clipped box, so nothing
+   reflows and no neighbour shifts. */
+.plate-known img,
+.plate-unknown img {
+  transition:
+    transform 420ms var(--ease-print),
+    filter 320ms var(--ease-print);
+}
+.group:hover .plate-known img,
+.group:focus-visible .plate-known img,
+.group:hover .plate-unknown img,
+.group:focus-visible .plate-unknown img {
+  transform: scale(1.025);
+}
+
+/* A plate with no artwork has no ink to take, so its rule fill travels instead
+   - the one state that would otherwise sit dead under a pointer. */
+.plate-empty {
+  transition: background-position 420ms var(--ease-print);
+}
+.group:hover .plate-empty,
+.group:focus-visible .plate-empty {
+  background-position: 7px 0;
+}
+
+/* Reduced motion gets the meaning without the movement: the screen still lifts
+   on an unscored plate, because that reveals information, and nothing travels. */
+@media (prefers-reduced-motion: reduce) {
+  .plate-known img,
+  .plate-unknown img,
+  .plate-empty {
+    transition: none;
+  }
+  .group:hover .plate-known img,
+  .group:focus-visible .plate-known img,
+  .group:hover .plate-unknown img,
+  .group:focus-visible .plate-unknown img {
+    transform: none;
+  }
+  .group:hover .plate-empty,
+  .group:focus-visible .plate-empty {
+    background-position: 0 0;
+  }
+}
+
 /* Diagonal rule fill for the ~20% of titles with no artwork at all. A missing
    poster is a different gap from a missing score, and gets its own treatment
    rather than being folded into one "incomplete" state. */

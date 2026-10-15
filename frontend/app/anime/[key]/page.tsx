@@ -326,7 +326,22 @@ async function AnimeDetail({
       )}
 
     <div className="mt-7 grid gap-x-12 gap-y-9 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-      <div>
+      {/* THE RAIL TRAVELS. This column holds the poster and the score and then
+          stopped, leaving roughly fourteen hundred pixels of empty paper beside
+          the facts, the slot, the changelog and the franchise - the longest
+          dead space on the site, on its most-read page.
+
+          Sticky rather than filled with something: what belongs beside those
+          rows is the title's own identity and its number, and a reader scrolling
+          a changelog of score moves should be able to see the score they moved
+          to. A running head, which is what a printed page does with the space.
+
+          md and up only, because below that the rail is not a margin, it is the
+          top of the page and must scroll away. top-7 matches the grid's own mt-7
+          so it settles level with where it started, and self-start stops the
+          grid item stretching to the row height, which would make `sticky` a
+          no-op with nothing to slide against. */}
+      <div className="md:sticky md:top-7 md:self-start">
         <ParallaxPoster
           className={[
             "relative aspect-[3/4] overflow-hidden border border-ink",

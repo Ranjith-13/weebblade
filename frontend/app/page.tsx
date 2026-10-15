@@ -6,6 +6,7 @@ import { ProvenanceLines } from "@/components/Provenance";
 import { getChanges, getLatestDigest, getSeason, getSeasons, getWeekEpisodes } from "@/lib/api";
 import { MastheadScroll } from "@/components/motion/MastheadScroll";
 import { PinnedAside } from "@/components/motion/PinnedAside";
+import { RegisterReveal } from "@/components/motion/RegisterReveal";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
 import { halftone } from "@/lib/design-tokens";
 import { byScoreThenPopularity, changeSummary, isTv, SEASON_INDEX_ID } from "@/lib/types";
@@ -136,83 +137,104 @@ async function Home() {
         </dl>
       </ScrollReveal>
 
+      {/* THE MARGIN. At 1440 this section ran a 470px column of prose with nine
+          hundred pixels of empty paper beside it, and the three notes that
+          qualify the digest - what it is, that its figures are point-in-time,
+          what the week changed - were stacked underneath, pushing the posters
+          further down the page the digest had already been trimmed to lift.
+
+          An almanac puts its notes in the margin, so they go there: one reading
+          measure of prose, and a rail of marginalia beside it that only exists
+          where there is room for it. Below lg the rail returns to the flow in
+          the same order, because on a phone a margin is just a narrower column
+          and stacking is what the page did before.
+
+          The rail is deliberately not a sidebar of links or a "related" box -
+          every line in it is about the paragraph it sits beside. */}
       <section className="border-b border-rule py-9">
-        <div>
-          {digest ? (
-            <>
-              <p className="meta mb-4">
-                Written by an LLM from this week&rsquo;s ingested data
-              </p>
-              <div className="digest-prose text-[1.02rem]">
-                <Markdown>{lead}</Markdown>
+        <div className="lg:grid lg:grid-cols-[minmax(0,62ch)_minmax(0,1fr)] lg:gap-x-14">
+          <div>
+            {digest ? (
+              <>
+                <p className="meta mb-4">
+                  Written by an LLM from this week&rsquo;s ingested data
+                </p>
+                <div className="digest-prose text-[1.02rem]">
+                  <Markdown>{lead}</Markdown>
+                </div>
+              </>
+            ) : (
+              <div className="digest-prose">
+                <p className="meta">No digest yet</p>
+                <p className="mt-4 leading-relaxed text-ink-soft">
+                  The pipeline writes one each week from the freshly ingested season. The
+                  catalogue below is live in the meantime.
+                </p>
               </div>
-              {hasMore && (
-                <Link
-                  href={`/digest/${digest.run_date}`}
-                  className="mt-6 inline-block border-b-2 border-flag pb-0.5 text-[0.85rem] font-medium transition-colors hover:text-flag"
-                >
-                  Read the full digest ({paragraphs.length - 1} more{" "}
-                  {paragraphs.length === 2 ? "paragraph" : "paragraphs"})
-                </Link>
-              )}
-              {/* The digest quotes the figures from its own run, which will not
-                  always match today's rail - when this was written, 140 where
-                  the season held 142. Saying so is cheaper and more honest
-                  than quietly letting two numbers disagree on one page. */}
-              <p className="meta mt-3 max-w-[54ch] !leading-[1.6]">
+            )}
+          </div>
+
+          {/* The margin. Everything here qualifies the paragraph beside it:
+              where to read the rest, that its figures are from its own run, and
+              what the sources changed this week. All three used to sit under
+              the prose in the same column.
+
+              A rule on the left edge at lg, not a box: the almanac separates
+              with hairlines and never with a card. Below lg the rule goes and
+              the rail rejoins the flow in the same order. */}
+          <aside className="mt-8 border-t border-rule pt-5 lg:mt-0 lg:border-l lg:border-t-0 lg:pl-7 lg:pt-0">
+            {digest && hasMore && (
+              <Link
+                href={`/digest/${digest.run_date}`}
+                className="inline-block border-b-2 border-flag pb-0.5 text-[0.85rem] font-medium transition-colors hover:text-flag"
+              >
+                Read the full digest ({paragraphs.length - 1} more{" "}
+                {paragraphs.length === 2 ? "paragraph" : "paragraphs"})
+              </Link>
+            )}
+
+            {/* The digest quotes the figures from its own run, which will not
+                always match today's rail - when this was written, 140 where the
+                season held 142. Saying so is cheaper and more honest than
+                quietly letting two numbers disagree on one page. */}
+            {digest && (
+              <p className="meta mt-4 max-w-[46ch] !leading-[1.6]">
                 Figures inside the digest are as written at that run and may differ from
                 the counts above
               </p>
-            </>
-          ) : (
-            <div className="digest-prose">
-              <p className="meta">No digest yet</p>
-              <p className="mt-4 leading-relaxed text-ink-soft">
-                The pipeline writes one each week from the freshly ingested season. The
-                catalogue below is live in the meantime.
+            )}
+
+            {/* WHAT THE PIPELINE ACTUALLY DOES, SAID ON THE PAGE PEOPLE LAND ON.
+                Every title keeps a per-source history - a score moving 8.2 to
+                8.1 per AniList, a premiere sliding a day per MyAnimeList - and
+                until now the only way to find out was to open a title and
+                scroll, or to already know /changes was in the nav. It is the one
+                thing here no other anime site has, and it was invisible.
+
+                Counted from the feed, never written down: a number in the copy
+                is wrong within a week, which is the mistake the provenance line
+                exists to end. */}
+            {changed && (
+              <p className="meta mt-5 max-w-[46ch] !leading-[1.6]">
+                <Link
+                  href="/changes"
+                  className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+                >
+                  The sources changed their minds{" "}
+                  <span className="tnum">{changed.total}</span> times this week
+                </Link>
+                {": "}
+                {changed.kinds.map((kind, i) => (
+                  <span key={kind.label}>
+                    {i > 0 && (i === changed.kinds.length - 1 ? " and " : ", ")}
+                    <span className="tnum">{kind.count}</span> {kind.label}
+                  </span>
+                ))}
+                , each with the source that reported it
               </p>
-            </div>
-          )}
-
-          {/* WHAT THE PIPELINE ACTUALLY DOES, SAID ON THE PAGE PEOPLE LAND ON.
-              Every title keeps a per-source history - a score moving 8.2 to 8.1
-              per AniList, a premiere sliding a day per MyAnimeList - and until
-              now the only way to find out was to open a title and scroll, or to
-              already know /changes was in the nav. It is the one thing here no
-              other anime site has, and it was invisible.
-
-              A sentence rather than a section: the home page is a digest and a
-              catalogue, and a third block would push the posters back down the
-              page the digest was already trimmed to lift them up. Counted from
-              the feed, never written down - a number in the copy is wrong within
-              a week, which is the mistake the provenance line exists to end. */}
-          {changed && (
-            <p className="meta mt-4 max-w-[54ch] !leading-[1.6]">
-              <Link
-                href="/changes"
-                className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
-              >
-                The sources changed their minds{" "}
-                <span className="tnum">{changed.total}</span> times this week
-              </Link>
-              {/* A colon, not the em-dash this shipped with. DESIGN.md bans
-                  em-dashes in visible copy by name, and the one carve-out is
-                  the null marker on an unscored plate - this was neither, and
-                  it was on the page every visitor lands on. A colon is also
-                  what the sentence actually wants: a count, then the
-                  itemisation of that count. */}
-              {": "}
-              {changed.kinds.map((kind, i) => (
-                <span key={kind.label}>
-                  {i > 0 && (i === changed.kinds.length - 1 ? " and " : ", ")}
-                  <span className="tnum">{kind.count}</span> {kind.label}
-                </span>
-              ))}
-              , each with the source that reported it
-            </p>
-          )}
+            )}
+          </aside>
         </div>
-
       </section>
 
       <section className="py-9">
@@ -260,9 +282,9 @@ async function Home() {
             </ul>
           </PinnedAside>
 
-          <ScrollReveal selector=":scope > div > a" stagger={0.05}>
+          <RegisterReveal selector=":scope > div > a" stagger={0.05}>
             <PlateGrid items={featured} columns="lg:grid-cols-3 xl:grid-cols-4" week={week} />
-          </ScrollReveal>
+          </RegisterReveal>
         </div>
       </section>
     </>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
-import { ScrollReveal } from "@/components/motion/ScrollReveal";
+import { RegisterReveal } from "@/components/motion/RegisterReveal";
 import { facetsOf, getFacets, getSeason, getSeasons, getStudio, getWeekEpisodes } from "@/lib/api";
 import {
   DEFAULT_FORMAT,
@@ -513,9 +513,9 @@ async function BrowseResults({
           </p>
         </div>
       ) : (
-        <ScrollReveal className="mt-9" selector=":scope > div > a" stagger={0.035}>
+        <RegisterReveal className="mt-9" selector=":scope > div > a" stagger={0.035}>
           <PlateGrid items={visible} week={week} />
-        </ScrollReveal>
+        </RegisterReveal>
       )}
 
       {totalPages > 1 && (
