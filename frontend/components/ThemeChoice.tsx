@@ -64,21 +64,87 @@ function getSnapshot(): Choice {
 // Null on the server: nothing is marked current until this has mounted.
 const getServerSnapshot = () => null;
 
+/* WHAT THE READER IS ACTUALLY LOOKING AT, which is a different question from
+   what they chose. "System" is a choice whose answer lives in the OS, so the
+   header toggle has to resolve it to decide which way it flips. Subscribing to
+   the media query as well means that a reader on System who changes their OS
+   theme sees the toggle's label change under them, rather than it offering to
+   switch to the mode they are already in. */
+function subscribeEffective(onChange: () => void) {
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  const stop = subscribe(onChange);
+  mq.addEventListener("change", onChange);
+  return () => {
+    stop();
+    mq.removeEventListener("change", onChange);
+  };
+}
+
+function getEffective(): "light" | "dark" {
+  const chosen = getSnapshot();
+  if (chosen !== "system") return chosen;
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+/** One button that flips between light and dark, for the masthead.
+ *
+ *  Deliberately NOT a third copy of the three-state control. The header is
+ *  where someone reaches when the page is too bright to read right now, and
+ *  that is a one-tap question; "System" belongs where a preference is set
+ *  rather than where it is corrected. The footer keeps all three, and picking
+ *  System there puts this back under the OS's control.
+ *
+ *  The label names what pressing it will DO, not what is currently on, because
+ *  a button labelled with the current state is ambiguous about which one it
+ *  means. Fixed width so the word changing cannot reflow the masthead.
+ *
+ *  IT CARRIES THE CHIP BORDER, and that is not decoration. Set in plain .meta
+ *  beside the wordmark it printed "WeebBlade  Dark", which reads as the name of
+ *  an edition rather than as a thing to press - the one word is a noun in the
+ *  wrong company. The bordered chip is this site's existing idiom for a
+ *  pressable control (the footer's three, every facet row on /browse), so it
+ *  says "button" without a drop shadow, a radius or an icon, none of which
+ *  DESIGN.md allows. */
+export function ThemeToggle() {
+  const effective = useSyncExternalStore(subscribeEffective, getEffective, getServerSnapshot);
+  const next = effective === "dark" ? "light" : "dark";
+
+  return (
+    <button
+      type="button"
+      onClick={() => pick(next)}
+      /* aria-label rather than the visible word alone: "Dark" on its own does
+         not say whether it is a state or an action. */
+      aria-label={effective ? `Switch to the ${next} theme` : "Switch theme"}
+      className="mb-[0.55rem] inline-flex min-w-[4.25rem] items-center justify-center border border-rule px-2 py-1.5 text-[0.7rem] capitalize text-ink-soft transition-colors duration-150 hover:border-flag hover:text-flag"
+    >
+      {/* Nothing until it has mounted, for the same reason the three-state
+          control marks nothing: the server cannot know. The width is held so
+          the word arriving does not move the masthead beside it. */}
+      {effective ? next : "\u00a0"}
+    </button>
+  );
+}
+
+function pick(next: Choice) {
+  apply(next);
+  try {
+    if (next === "system") localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, next);
+  } catch {
+    // Private mode, or storage blocked. The choice still applies for this page;
+    // it simply will not be remembered, which is a better outcome than a
+    // control that throws when clicked.
+  }
+  window.dispatchEvent(new Event(CHANGED));
+}
+
 export function ThemeChoice() {
   const choice = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-
-  function pick(next: Choice) {
-    apply(next);
-    try {
-      if (next === "system") localStorage.removeItem(THEME_KEY);
-      else localStorage.setItem(THEME_KEY, next);
-    } catch {
-      // Private mode, or storage blocked. The choice still applies for this
-      // page; it simply will not be remembered, which is a better outcome than
-      // a control that throws when clicked.
-    }
-    window.dispatchEvent(new Event(CHANGED));
-  }
 
   return (
     <div className="meta flex items-baseline gap-x-3">

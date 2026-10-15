@@ -267,6 +267,75 @@ test("an explicit theme survives a reload without a flash", async ({ browser }) 
   await context.close();
 });
 
+/* The masthead toggle, and the two things about it that broke in review.
+ *
+ * It is a second control over one piece of state, so the failure mode is the
+ * two disagreeing: the footer kept rendering "System" as current after the
+ * header had moved the page to dark. localStorage fires `storage` in OTHER
+ * tabs only, so a local change dispatches its own event; without that the
+ * footer is stale until something else re-renders it, which looks exactly like
+ * a control that did nothing.
+ *
+ * And it flips against what the reader is LOOKING at, not what they chose, so
+ * under a dark OS an untouched page offers "light". Resolving that needs the
+ * media query, not just the stored value. */
+test("the masthead toggle flips the page and agrees with the footer", async ({ browser }) => {
+  for (const scheme of ["light", "dark"] as const) {
+    const context = await browser.newContext({ colorScheme: scheme });
+    const page = await context.newPage();
+    await page.goto("/browse");
+
+    const opposite = scheme === "light" ? "dark" : "light";
+    const toggle = page.getByRole("button", { name: `Switch to the ${opposite} theme` });
+    await expect(toggle, `under a ${scheme} OS it offers ${opposite}`).toBeVisible();
+
+    const before = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await toggle.click();
+
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe(
+      opposite,
+    );
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe(
+      before,
+    );
+
+    // The footer control is the same state seen from elsewhere, so it has to
+    // have moved too - this is the half that fails silently.
+    await expect(
+      page.getByRole("button", { name: opposite, exact: true }),
+      "the footer agrees with the header",
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // And it flips back, naming the other direction now.
+    await expect(page.getByRole("button", { name: `Switch to the ${scheme} theme` })).toBeVisible();
+
+    await context.close();
+  }
+});
+
+/* NOTHING MAY PUSH THE PAGE SIDEWAYS. The nav's five sections already take
+   352px of a 390px line, which CLAUDE.md records as a measurement and which,
+   until this test, nothing enforced: adding the theme toggle beside them gave
+   the site its first horizontal scrollbar and it was caught by hand, which is
+   not a process. The toggle rides with the wordmark for this reason. */
+for (const width of [390, 1440]) {
+  test(`no horizontal overflow at ${width}`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width, height: 844 } });
+    const page = await context.newPage();
+    // /search and /schedule carry the longest marked nav item, which is what
+    // tipped the row past the viewport; both belong in this list.
+    for (const path of ["/", "/browse", "/schedule", "/changes", "/search", "/digest"]) {
+      await page.goto(path);
+      const doc = await page.evaluate(() => ({
+        scroll: document.documentElement.scrollWidth,
+        client: document.documentElement.clientWidth,
+      }));
+      expect(doc.scroll, `${path} at ${width} fits its viewport`).toBeLessThanOrEqual(doc.client);
+    }
+    await context.close();
+  });
+}
+
 /* The streamed pages, which send their layout before their content: the footer
  * waits for the content (data-footer-waits in globals.css) so it cannot be
  * pushed down when it arrives. That guard is invisible until it breaks, so it

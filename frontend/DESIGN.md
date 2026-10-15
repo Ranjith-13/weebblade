@@ -158,6 +158,23 @@ link unfurls in the product's primary identity. The dark block must stay below i
 token edited to taste cannot quietly drop a pair below AA. Verified by setting dark `--color-ink`
 to `#3a3a42`: the dark test failed at 1.59 and the light one still passed.
 
+**There are two controls, and the difference between them is the point.** The footer sets a
+*preference* - System / Light / Dark, with System a real answer rather than the absence of one.
+The masthead corrects what is *on the screen right now*, so it is one button flipping two ways and
+offers no System: that is a thing you set once, not a thing you reach for because the page is too
+bright at this moment. Picking System in the footer hands the page back to the OS.
+
+The toggle names the action, never the state - a button reading "Dark" beside a dark page cannot
+say whether it describes or proposes - and it resolves System against the media query so it always
+offers the mode the reader is *not* in. It wears the same hairline chip as the footer's three and
+every facet on `/browse`, because that is already this site's word for "pressable": no radius, no
+shadow, no icon. Set in plain `.meta` next to the wordmark it read "WeebBlade  Dark", the name of
+an edition rather than a control.
+
+Shipping the palette without either control was the real failure here, and it was reported as
+"dark mode" for a week. A design that answers only `prefers-color-scheme` is a design with no
+dark mode for every reader whose OS is light and whose room is not.
+
 ---
 
 ## 4. Typography

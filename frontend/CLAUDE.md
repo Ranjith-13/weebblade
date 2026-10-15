@@ -37,6 +37,24 @@ with System the default because most people have already told their OS and a sit
 did not listen. The choice is an attribute on `<html>`; the media query answers for everyone who
 never touches it, including anyone with JS off.
 
+**The masthead carries a second control, and it is two-state on purpose.** `ThemeToggle` flips
+light/dark only: the header is where someone reaches when the page is too bright to read *now*,
+which is a one-tap question, while "System" is a preference and belongs where preferences are set.
+Picking System in the footer hands control back to the OS. Two controls over one value, so they
+share the store and a local change dispatches its own event - `storage` fires in *other* tabs only,
+and without that the footer sat on a stale "System" after the header had moved the page, which
+looks exactly like a control that did nothing. The e2e suite asserts the two agree.
+
+It flips against what the reader is **looking at**, not what they chose, so it resolves System
+against `matchMedia` and subscribes to it: a reader on System who changes their OS theme sees the
+label change under them rather than being offered the mode they are already in. The label names the
+action ("Dark" = make it dark), never the state, and it carries the chip border every other control
+here has - set in plain `.meta` beside the wordmark it printed "WeebBlade  Dark", which reads as the
+name of an edition rather than as a thing to press.
+
+**It rides with the wordmark, not with the nav, and that is a measurement.** See the nav budget
+below; putting a sixth control in that row gave the site its first horizontal scrollbar.
+
 **`THEME_KEY` lives in `lib/types.ts`, not in the component, and that is not tidiness.** The root
 layout is a Server Component and needs the string to build the blocking script that applies a
 stored theme before first paint. Importing it from a `"use client"` module hands a Server
@@ -464,8 +482,26 @@ A title page lists what its sources have reported differently from one fetch to 
 grouped by what kind of news each is (`CHANGE_SECTIONS` in `lib/types.ts`), listed like `/schedule`
 rather than gridded like `/browse` - the subject is an event, and one show can appear under two
 headings. Its window ends at the newest fetch compared, not today, so it is a fixed week between
-runs rather than a shrinking one. The nav carries it as the fifth section; at 390px the five items
-still sit on one line (measured, 352px of 390). Layout shift 0 at 1440x1000 and 390x844, cold and
+runs rather than a shrinking one. The nav carries it as the fifth section.
+
+**The nav row is a width budget, and the figure recorded here was wrong for a month.** This said
+"the five items still sit on one line (measured, 352px of 390)". They did sit on one line - by
+hanging off the edge of it. Re-measured 2026-10-15 at 390 on a production build, the row was
+366-372px inside a 350px column (`max-w` minus the `px-5` gutters), overflowing its container on
+*every* route and the viewport itself on `/schedule` (392) and `/search` (391), with `/changes`
+exactly on the line at 390. Nothing caught it because nothing measured the document's scroll width;
+the original note recorded the claim it wanted rather than the number.
+
+Two things made it hide. The width **moves with the route** - the active item is semibold, and
+"Schedule" marked is 6px wider than nothing marked - so it tipped over on one page and not another.
+And "sits on one line" is true of a row that overflows, so the eye confirms it.
+
+`gap-x-3 min-[420px]:gap-x-5 sm:gap-x-7` brings it to 334-340px, inside 350 with the semibold
+variance absorbed. 20px fits again from 412 up, hence the step at 420. Swept 360 to 1440: no
+overflow at any width. **The smoke suite now asserts `scrollWidth <= clientWidth`** on six routes at
+390 and 1440, because a measurement written into a document is not a gate.
+
+Layout shift 0 at 1440x1000 and 390x844, cold and
 warm, on a production build (2026-09-21), with /schedule measured alongside as a control.
 
 ## How a score settles
@@ -502,7 +538,7 @@ is balanced both ways (122 up / 113 down while airing), so there is no decay sto
   API are separately deployed, so a frontend build can reach a container running an older commit;
   throwing took the whole production build down the first time this page was added.
 - It is reached from the score arc on a title page and from `/changes`, **not from the nav**: the
-  five sections already fill 352px of a 390px line.
+  five sections already fill the nav's width budget at 390 (see above).
 
 ## Long pages say what is on them
 
@@ -564,7 +600,8 @@ which is the point of having it.
 
 It is a smoke suite, not a substitute for looking: it would not notice a page that renders
 correct content ungracefully. Run the build, then check in a real browser at 390 and 1440. Current gate results: 0 contrast
-failures, 0 tap targets under the WCAG 2.2 24px minimum, CLS 0, visible focus on every control.
+failures, 0 tap targets under the WCAG 2.2 24px minimum, CLS 0, visible focus on every control,
+and no horizontal overflow on any route at 390 or 1440.
 
 **A page that streams gives the footer something to wait for.** A route that renders behind a
 `<Suspense>` - every title page, the schedule - sends the layout first, footer included, and the

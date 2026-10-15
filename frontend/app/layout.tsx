@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { NavList, PrimaryNav } from "@/components/nav/PrimaryNav";
 import { Provenance, PROVENANCE_FALLBACK } from "@/components/Provenance";
 import { SeasonIndex } from "@/components/SeasonIndex";
-import { ThemeChoice } from "@/components/ThemeChoice";
+import { ThemeChoice, ThemeToggle } from "@/components/ThemeChoice";
 import { WarmupPing } from "@/components/WarmupPing";
 import { SITE_URL, THEME_KEY } from "@/lib/types";
 import "./globals.css";
@@ -96,12 +96,22 @@ export default function RootLayout({
             so the header never waits on the page below it. */}
         <header id="site-header" className="border-b-2 border-ink">
           <div className="mx-auto flex max-w-[1340px] flex-wrap items-end justify-between gap-x-8 px-5 sm:px-7">
-            <Link
-              href="/"
-              className="inline-block pt-3.5 pb-2.5 font-display text-[1.55rem] font-black leading-none tracking-[-0.02em] sm:pb-3 sm:text-[1.75rem]"
-            >
-              WeebBlade
-            </Link>
+            {/* The toggle rides with the wordmark, NOT with the nav, and that
+                is a measurement rather than a preference. The five nav items
+                already take 352px of a 390px line; putting a sixth control
+                beside them pushed the header past the viewport and gave this
+                site its first horizontal scrollbar. On the wordmark side there
+                is room at every width, and when the header wraps on a phone the
+                two travel together. */}
+            <div className="flex items-end gap-x-4">
+              <Link
+                href="/"
+                className="inline-block pt-3.5 pb-2.5 font-display text-[1.55rem] font-black leading-none tracking-[-0.02em] sm:pb-3 sm:text-[1.75rem]"
+              >
+                WeebBlade
+              </Link>
+              <ThemeToggle />
+            </div>
             <Suspense fallback={<NavList active={null} />}>
               <PrimaryNav />
             </Suspense>

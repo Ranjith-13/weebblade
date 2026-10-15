@@ -43,7 +43,23 @@ function itemState(active: boolean) {
 export function NavList({ active }: { active: Section | null }) {
   return (
     <nav aria-label="Primary" className="self-end">
-      <ul className="flex gap-x-5 sm:gap-x-7">
+      {/* THE GAP IS A BUDGET, not a preference. Five items at 0.875rem measure
+          334-340px with these gaps; the container offers 350 at 390px wide
+          (max-w minus the px-5 gutters). At the previous gap-x-5 the row
+          measured 366-372 and had been overflowing its container on every
+          route, spilling past the viewport on /schedule (392) and /search
+          (391) with /changes exactly on the line at 390. It read as fitting
+          because it does sit on one line - it simply did so by hanging off the
+          edge, and nothing measured the document's scroll width until the
+          smoke suite started to.
+
+          The width also moves with the route, which is why this surfaced on
+          one page and not another: the active item is semibold, and "Schedule"
+          in semibold is 6px wider than no marker at all. The budget absorbs
+          that now rather than depending on which word is longest.
+
+          20px fits again from 412px up, so the step back to it is at 420. */}
+      <ul className="flex gap-x-3 min-[420px]:gap-x-5 sm:gap-x-7">
         <li>
           <button
             type="button"
