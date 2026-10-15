@@ -331,6 +331,27 @@ Reverted. Before trying again: read Render's own `buildFilter` semantics rather 
 "deploy if any changed path is not ignored", and test with a commit touching **only** `backend/`
 so a blueprint sync cannot confound the result.
 
+**Read, 15 October 2026 (render.com/docs/monorepo-support), and the assumption above was right.**
+That is the uncomfortable half of this. Render documents the skip as applying when a changeset
+modifies *only* ignored files; the "ignoring takes precedence over including" rule is about a single
+file matching both lists, not about a mixed commit. Two other statements in that page confirm the
+rest of this note: Blueprint YAML changes are **always** processed and blueprint syncs ignore build
+filters entirely, which is exactly why `88a8234` and `2c840c6` deployed and proved nothing; and
+manual deploys are unaffected, which is why Manual Deploy was the way out.
+
+So the model was not the mistake. Checked against the config as it actually stood: `ignoredPaths`
+listed neither `backend/**` nor `ai/**`, no `rootDir` was set (`dockerContext: .`), and `fe436a2`
+was a single commit pushed 57 minutes after the one before it - not a batch whose head Render might
+have evaluated instead. It changed `backend/app/routers/anime.py`, `backend/app/schemas.py` and
+added `ai/search/similar.py`, all non-ignored. **By the documentation it should have deployed.**
+
+That leaves the engine disagreeing with its own docs, which is a worse thing to know than a
+misread rule and changes what the retry has to prove. The experiment is unchanged - one commit
+touching only `backend/` - but it is now an empirical test of whether build filters work here at
+all, not a check that the patterns were written correctly. Until that test passes, treat
+`buildFilter` on this service as unproven rather than as understood, and prefer the cost of a spare
+rebuild to the cost of a silently stale API.
+
 ### 10. [x] The warehouse was only ever read across, never down
 
 Twenty-two seasons of weekly snapshots sat in `anime_media` - 66,098 dated rows - and every
