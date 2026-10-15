@@ -73,8 +73,72 @@
   --color-destructive: #a1132b;
 }
 
+/* ============================================================================
+   DARK — the same ink on a darker stock, not an inverted web page.
+   ========================================================================= */
+/* The design is an almanac, so the dark palette is a printing decision rather
+   than a filter: the stock changes and the ink changes with it. Both signal
+   hues are preserved EXACTLY - flag stays 331deg, data stays 227deg - and only
+   their lightness moves, because section 8 of the brief this was audited
+   against is right that a brand desaturated into dark mode stops being the
+   brand.
+
+   CONTRAST IS COMPUTED HERE TOO, and matched to the light palette's own
+   relationships rather than merely passing:
+
+     pair                   light      dark
+     ink on paper           14.71      14.43
+     ink-soft on paper       5.19       5.51
+     flag on paper           4.91       5.24
+     data on paper           6.76       6.07
+     paper on flag           4.91       5.24   (the score tab, both ways)
+     rule on paper           1.44       1.43   (hairline, non-text)
+     plate on paper          1.11       1.14   (raised surface, non-text)
+
+   --color-ink in dark is the light palette's own paper. The flip is literal:
+   what was the sheet becomes the ink.
+
+   Every utility in the app reads these variables, so nothing in any component
+   knows which mode it is in. That is the whole reason this was a palette change
+   and not a rewrite.
+
+   The social card does NOT follow. app/anime/[key]/opengraph-image.tsx reads
+   these tokens out of this file by regular expression and takes the FIRST
+   match, which is the @theme block above - so a shared link unfurls in the
+   product's primary identity rather than in whatever mode the server happened
+   to think it was in. That is deliberate; do not move this block above @theme.
+*/
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: #17171c;
+    --color-plate: #232329;
+    --color-rule: #33333c;
+
+    --color-ink: #e9e7e0;
+    --color-ink-soft: #8e8e98;
+
+    --color-flag: #ff3396;
+    --color-data: #7992ec;
+
+    --color-destructive: #ff5f72;
+  }
+
+  /* Artwork is lit for a white page. On a dark ground a full-brightness poster
+     glares against the stock around it, so the known plate loses a little
+     brightness and the screened one loses the lift it needed on paper. The
+     certainty treatment is unchanged in kind: colour against grey. */
+  .plate-known img {
+    filter: saturate(1.02) contrast(1.02) brightness(0.92);
+  }
+  .plate-unknown img {
+    filter: grayscale(1) contrast(0.92) brightness(0.78);
+  }
+}
+
 html {
-  color-scheme: light;
+  /* Both, so form controls, scrollbars and the browser's own surfaces follow
+     the palette instead of staying light under a dark page. */
+  color-scheme: light dark;
 }
 
 body {

@@ -32,6 +32,13 @@ duplicated. There is no literal hex anywhere in `app/`, `components/` or `lib/`;
 Palette: `paper #E9E7E0` · `plate #DFDCD2` · `rule #C6C2B6` · `ink #15151A` · `ink-soft #5E5E66` ·
 `flag #C2005E` · `data #1B3FBF`. Two signal colours only — a third is drift.
 
+**Dark mode is a palette swap, not a second design.** `@media (prefers-color-scheme: dark)` in
+`globals.css` redefines the same variables; both signal hues are preserved exactly (flag 331°,
+data 227°) and only lightness moves. Dark `--color-ink` is the light palette's paper. No component
+is mode-aware, and the halftone needs no variant because its dots are `--color-paper`. The social
+card deliberately stays light: `opengraph-image.tsx` regex-reads the FIRST match in the file, so
+**never move the dark block above `@theme`**. The smoke suite computes contrast in both modes.
+
 **Contrast is computed, not eyeballed.** The first draft's `#FF2E88` measured 2.83:1 (fails even
 large-text AA) and `#6E6E75` measured 4.09:1 (fails body). Re-measure if you change a colour.
 

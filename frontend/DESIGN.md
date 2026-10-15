@@ -125,6 +125,39 @@ re-measure.
 
 Two signal colours only. A third is drift.
 
+### Dark
+
+The same ink on a darker stock, not an inverted page. Both signal hues are preserved **exactly**
+and only their lightness moves, because a brand desaturated into dark mode stops being the brand.
+`--color-ink` in dark is the light palette's own paper: what was the sheet becomes the ink.
+
+| Pair | Light | Dark |
+|---|---|---|
+| ink on paper | 14.71 | 14.43 |
+| ink-soft on paper | 5.19 | 5.51 |
+| flag on paper | 4.91 | 5.24 |
+| data on paper | 6.76 | 6.07 |
+| **paper on flag** (the score tab, both ways) | 4.91 | 5.24 |
+| rule on paper (hairline, non-text) | 1.44 | 1.43 |
+| plate on paper (raised, non-text) | 1.11 | 1.14 |
+
+The dark values are matched to the light palette's own *relationships* rather than merely
+clearing AA, which is why the page reads as the same object rather than as a second design.
+
+**Nothing in any component knows which mode it is in.** Every utility reads a variable, so this
+was a palette change and not a rewrite. The halftone needs no dark variant either: its dots are
+`--color-paper`, so on dark stock they become dark dots and the screen still reads as paper
+showing through. Artwork loses a little brightness in dark, because a poster lit for a white page
+glares against a dark ground.
+
+**The social card does not follow.** `opengraph-image.tsx` reads these tokens out of `globals.css`
+by regular expression and takes the first match, which is the light `@theme` block, so a shared
+link unfurls in the product's primary identity. The dark block must stay below it.
+
+`e2e/smoke.spec.ts` measures the rendered colours in both modes and does the arithmetic, so a
+token edited to taste cannot quietly drop a pair below AA. Verified by setting dark `--color-ink`
+to `#3a3a42`: the dark test failed at 1.59 and the light one still passed.
+
 ---
 
 ## 4. Typography

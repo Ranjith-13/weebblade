@@ -164,6 +164,66 @@ test("the digest reaches the page with none of the typography a model reaches fo
   }
 });
 
+/* DARK MODE, CHECKED THE WAY THIS PROJECT CHECKS COLOUR: computed, never
+ * eyeballed. globals.css claims a contrast figure for every pair in both
+ * palettes; this measures the rendered values and does the arithmetic, so a
+ * token edited to taste cannot quietly drop a pair below AA.
+ *
+ * Both modes in one test, because the point is that the SAME markup satisfies
+ * both - every utility reads a variable, so nothing in any component knows
+ * which mode it is in. */
+function contrast(a: [number, number, number], b: [number, number, number]) {
+  const lum = (c: [number, number, number]) =>
+    c.map((v) => {
+      const x = v / 255;
+      return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    }).reduce((acc, v, i) => acc + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`the palette clears AA in ${scheme} mode`, async ({ browser }) => {
+    const page = await browser.newPage({ colorScheme: scheme });
+    await page.goto("/browse");
+    await page.waitForTimeout(2500);
+
+    const rgb = (value: string): [number, number, number] => {
+      const m = value.match(/\d+/g)!;
+      return [Number(m[0]), Number(m[1]), Number(m[2])];
+    };
+
+    const measured = await page.evaluate(() => {
+      const cs = getComputedStyle(document.body);
+      const h1 = getComputedStyle(document.querySelector("h1")!);
+      const tab = document.querySelector('[class*="bg-flag"]');
+      return {
+        background: cs.backgroundColor,
+        body: cs.color,
+        heading: h1.color,
+        tabBg: tab ? getComputedStyle(tab).backgroundColor : null,
+        tabText: tab ? getComputedStyle(tab).color : null,
+      };
+    });
+
+    const bg = rgb(measured.background);
+    expect(contrast(rgb(measured.body), bg), `body text in ${scheme}`).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(rgb(measured.heading), bg), `heading in ${scheme}`).toBeGreaterThanOrEqual(4.5);
+
+    /* The score tab is the one place the signal colour is a BACKGROUND, so it
+       has to clear AA from the other side as well. It is the single most
+       important pair on the site: it is what "this value is known" looks like. */
+    if (measured.tabBg && measured.tabText) {
+      expect(
+        contrast(rgb(measured.tabText), rgb(measured.tabBg)),
+        `score tab in ${scheme}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+
+    await page.close();
+  });
+}
+
 /* The streamed pages, which send their layout before their content: the footer
  * waits for the content (data-footer-waits in globals.css) so it cannot be
  * pushed down when it arrives. That guard is invisible until it breaks, so it
