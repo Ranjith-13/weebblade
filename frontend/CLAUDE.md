@@ -192,7 +192,10 @@ of six chip rows inside `/browse`'s filter block. So there are now three ways in
   layout, listing every season by year with its count and one sentence on what a season is here.
   Anything with `popoverTarget={SEASON_INDEX_ID}` opens it: the header's **Seasons** button, the
   `/browse` heading, the front page's masthead. Being a popover it opens without JS, closes on
-  Escape or an outside click, and sits in the top layer where no `overflow` can clip it. It prerenders
+  Escape or an outside click, and sits in the top layer where no `overflow` can clip it. It scrolls
+  twenty-two seasons, so it carries `overscroll-behavior: contain`: without it, reaching the end of
+  the list chains the scroll into the catalogue standing behind, and the reader loses their place in
+  both at once. It prerenders
   with nothing marked current (a layout gets no `searchParams`) and the live version marks the season
   in view and closes itself on navigation.
 - **`/browse`'s heading is the season's name**, with its earlier and later neighbours beside it. The
@@ -394,6 +397,15 @@ publishes weekly so this costs nothing in freshness.
 queries. Do not move it to the server. Results carry no artwork from the API, so the server passes
 a trimmed season lookup and the client joins locally.
 
+**Enter is guarded against the IME, and on this catalogue that is not an edge case.** While an
+input method is composing, Enter confirms the candidate it is offering; it does not submit. So
+typing `ゆるキャン` and pressing Enter to pick the kanji submitted the half-formed kana instead,
+spending one of the reader's 20 queries a minute on a string they never meant to send and replacing
+the box's contents mid-thought. `e.nativeEvent.isComposing` is the browser saying the IME still owns
+the keystroke; preventing the default stops only the submit. The e2e assertion is on the **network**,
+not on the handler, because a guard that calls `preventDefault` on an event nobody submits would
+pass a DOM-level test and still be wrong.
+
 `lib/types.ts` is client-safe; `lib/api.ts` imports `server-only`. Importing `API_BASE` from
 `api.ts` into a client component drags `cacheLife` into the browser bundle and breaks the build.
 
@@ -553,6 +565,19 @@ with no previous value is not a smaller 8.2-to-8.1 - it is the moment a title st
 screened back and comes up in colour, which is the one event this design exists to show. 89 of
 them were mixed into a 147-row section called "Score moves" and sorted among them by title. The
 split is `c.old == null`, declared on the section in `CHANGE_SECTIONS` rather than by field.
+
+**An anchor says where it put you.** Following one of those links jumps twenty viewports into a
+page that looks exactly like the part just left - every section is drawn the same way and every row
+under a heading is a title and a date. `section[id]:target > h2` turns that heading's ink rule flag,
+which is the mark the masthead already uses for the current section, so no new element is drawn and
+nothing moves. It persists until another anchor is followed, meaning the same thing the nav's marker
+means.
+
+**And on a phone the heading stays.** `/changes` is thirty-three viewports there; once a heading has
+scrolled past, nothing on screen says which section you are inside. The headings are `sticky` at the
+top below `sm` only - above it both pages flow in newspaper columns, and `position: sticky` inside a
+multicol fragment is undefined. The heading already carries the ink rule, so it is not a new bar; it
+simply stops leaving. Both are asserted in the smoke suite at 390 and 1440.
 
 **A thumbnail gets a finer screen.** The halftone's 4px dot pitch is chosen against a 150-230px
 catalogue plate; the schedule and the change feed reproduce the same plate at 36x49, where that

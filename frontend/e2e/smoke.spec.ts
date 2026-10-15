@@ -313,6 +313,102 @@ test("the masthead toggle flips the page and agrees with the footer", async ({ b
   }
 });
 
+/* ENTER MEANS TWO THINGS, and on a catalogue of Japanese titles the second one
+   is not an edge case. While an IME is composing, Enter confirms the candidate;
+   it does not submit. Unguarded, picking the kanji for a half-typed kana fired a
+   search on the fragment and spent one of the reader's 20 queries a minute.
+
+   The assertion is on the network, not the handler: a guard that calls
+   preventDefault on an event nobody submits would pass a DOM-level test. */
+test("an IME's Enter does not fire a search", async ({ page }) => {
+  const api: string[] = [];
+  page.on("request", (r) => {
+    if (/onrender\.com\/search/.test(r.url())) api.push(r.url());
+  });
+
+  await page.goto("/search");
+  await page.fill("#q", "ゆるキャン");
+
+  await page.evaluate(() =>
+    document
+      .querySelector("#q")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          isComposing: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+  );
+  await page.waitForTimeout(1200);
+  expect(api, "composing Enter sends nothing").toHaveLength(0);
+
+  // And a real Enter, composition finished, still searches.
+  await page.press("#q", "Enter");
+  await expect
+    .poll(() => api.length, { timeout: 40_000, message: "a finished Enter searches" })
+    .toBe(1);
+  expect(decodeURIComponent(api[0]), "the whole phrase, not a fragment").toContain("ゆるキャン");
+});
+
+/* The two long pages: following an anchor has to say where it put you, and the
+   heading has to stay once you are there. Both pages run past thirty viewports
+   on a phone, where every row below a heading reads the same under any of them. */
+for (const path of ["/changes", "/schedule"]) {
+  test(`${path} marks the section an anchor landed on`, async ({ page }) => {
+    await page.goto(path);
+    const id = await page.evaluate(() => document.querySelector("section[id]")?.id);
+    const rule = () =>
+      page.evaluate(
+        (s) => getComputedStyle(document.querySelector(`section[id="${s}"] > h2`)!).borderBottomColor,
+        id,
+      );
+
+    const unmarked = await rule();
+    await page.goto(`${path}#${id}`);
+    const marked = await rule();
+    expect(marked, "the landed section is flagged").not.toBe(unmarked);
+    expect(marked, "and flagged in the marker colour, not some new one").toBe("rgb(194, 0, 94)");
+  });
+
+  test(`${path} parks its section heading on a phone only`, async ({ browser }) => {
+    for (const [width, want] of [
+      [390, "sticky"],
+      [1440, "static"],
+    ] as const) {
+      const context = await browser.newContext({ viewport: { width, height: 844 } });
+      const page = await context.newPage();
+      await page.goto(path);
+      // Above sm the page flows in newspaper columns, and sticky inside a
+      // multicol fragment is undefined - so it must NOT be sticky there.
+      await expect
+        .poll(
+          () =>
+            page.evaluate(
+              () => getComputedStyle(document.querySelector("section[id] > h2")!).position,
+            ),
+          { message: `${path} at ${width}` },
+        )
+        .toBe(want);
+      await context.close();
+    }
+  });
+}
+
+/* Scrolling to the end of the season list should stop there, not carry on into
+   the catalogue standing behind it. */
+test("the season index contains its own scroll", async ({ page }) => {
+  await page.goto("/browse");
+  await page.click(".season-index-toggle");
+  await expect(page.locator(".season-index")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => getComputedStyle(document.querySelector(".season-index")!).overscrollBehaviorY,
+    ),
+  ).toBe("contain");
+});
+
 /* NOTHING MAY PUSH THE PAGE SIDEWAYS. The nav's five sections already take
    352px of a 390px line, which CLAUDE.md records as a measurement and which,
    until this test, nothing enforced: adding the theme toggle beside them gave

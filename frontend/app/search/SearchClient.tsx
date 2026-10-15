@@ -140,6 +140,21 @@ export function SearchClient({ total }: { total: number }) {
           enterKeyHint="search"
           placeholder="a quiet show about cooking…"
           className="font-display text-[1.35rem]"
+          /* ENTER MEANS TWO DIFFERENT THINGS, and this is a catalogue of
+             Japanese titles, so the second one is not an edge case here.
+             Typing with an IME, Enter confirms the candidate the IME is
+             offering - it does not submit the form. Without this guard,
+             composing "ゆるキャン" fired a search on the half-formed kana the
+             moment the reader pressed Enter to pick the kanji, spending one of
+             their 20 queries a minute on a string they never meant to send and
+             replacing the box's contents mid-thought.
+
+             isComposing is the browser telling us the IME still owns this
+             keystroke. Preventing the default stops only the submit; the IME
+             has already consumed the key for its own purposes. */
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && e.nativeEvent.isComposing) e.preventDefault();
+          }}
         />
         <button
           type="submit"

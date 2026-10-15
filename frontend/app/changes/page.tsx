@@ -126,7 +126,17 @@ async function Week() {
       >
         {sections.map((s) => (
           <section key={s.key} id={s.key} className="mb-9 break-inside-avoid scroll-mt-6">
-            <h2 className="flex flex-wrap items-baseline justify-between gap-x-3 border-b-2 border-ink pb-1.5">
+            {/* The heading parks at the top while its own section scrolls under
+                it, on a phone only. This page is thirty-three viewports there,
+                and the section you are inside is the one thing the screen never
+                tells you once the heading has gone past - every row below it is
+                a title and a date, which reads the same under any heading.
+
+                Phone only because above sm this flows in newspaper columns, and
+                position: sticky inside a multicol fragment is undefined. The
+                heading already carries the ink rule, so nothing new is drawn;
+                it simply stops leaving. */}
+            <h2 className="flex flex-wrap items-baseline justify-between gap-x-3 border-b-2 border-ink pb-1.5 max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:bg-paper max-sm:pt-2">
               <span className="font-display text-[1.35rem] font-black leading-none">{s.title}</span>
               <span className="meta tnum">{s.rows.length}</span>
             </h2>

@@ -366,6 +366,21 @@ body > * {
   color: var(--color-paper);
 }
 
+/* WHERE AN ANCHOR LANDED YOU. /changes runs 28,444px on a phone and /schedule
+   flows seven days; both open with a line of anchors into their own sections.
+   Following one jumped twenty viewports into a page that looked exactly like
+   the part just left, because every section heading is drawn the same way and
+   nothing said "this is the one you asked for".
+
+   The mark is the one the masthead already uses for the current section: the
+   ink rule under the heading turns flag. No new element, no motion, nothing
+   that moves - the heading was already there and already ruled. It persists
+   until another anchor is followed, which is the same thing the nav's marker
+   does and means the same thing. */
+section[id]:target > h2 {
+  border-color: var(--color-flag);
+}
+
 /* The season index (components/SeasonIndexPanel.tsx). A native popover, so it
    opens without JavaScript, dismisses on Escape or a click outside, and sits in
    the top layer where no ancestor's overflow can clip it. The browser's popover
@@ -382,6 +397,11 @@ body > * {
   margin: 0;
   padding: 0;
   overflow: auto;
+  /* Scrolling to the end of a season list should stop there. Without this the
+     chain continues into the page behind, so a reader flicking through
+     twenty-two seasons scrolls the catalogue they are standing on instead and
+     loses their place in both. */
+  overscroll-behavior: contain;
   border: 0;
   border-bottom: 2px solid var(--color-ink);
   background: var(--color-paper);
