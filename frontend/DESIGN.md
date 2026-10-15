@@ -149,6 +149,14 @@ build for using its equivalent 23+ times so every label shouted equally; the rew
 everything communicates nothing. If `.stamp` creeps past single digits again, it has stopped being
 a label and become a texture.
 
+**It crept, and this paragraph did not stop it.** A title page rendered **14** of them on 2026-10-15:
+three section heads and eleven rows of the facts table, each `<dt>` taking the stamp because a
+definition-list term is on the sanctioned list. The predicted cost arrived exactly as written -
+"Score", the number a reader opened the page for, was set identically to "Episode length". The
+table's terms are `.meta` now and the page renders three. The lesson is that the budget is about
+what the *page* shows, not how many places in the source apply it: one `<dt>` in a map is eleven
+labels on screen.
+
 ---
 
 ## 5. Shape

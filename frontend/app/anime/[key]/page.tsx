@@ -509,7 +509,16 @@ async function AnimeDetail({
               key={term}
               className="flex items-baseline justify-between gap-6 border-b border-rule py-2.5"
             >
-              <dt className="stamp">{term}</dt>
+              {/* .meta, not .stamp, and this is the rule in globals.css being
+                  obeyed rather than an aesthetic preference. The uppercase
+                  tracked label is for structural labels and is rationed to
+                  single digits sitewide; eleven of these rows plus three
+                  section heads put ONE page at fourteen. The cost was exactly
+                  what that rule predicts: "Score", the number a reader came
+                  for, was set identically to "Episode length". The three heads
+                  keep the stamp; the rows in a two-column table do not each
+                  need shouting to be read as terms - their position does it. */}
+              <dt className="meta">{term}</dt>
               <dd className="tnum text-[0.85rem]">{value}</dd>
             </div>
           ))}
