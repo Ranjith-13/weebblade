@@ -184,6 +184,13 @@ async function BrowseResults({
     const st = current.studio.toLowerCase();
     items = items.filter((a) => (a.studios ?? []).some((x) => x.toLowerCase() === st));
   }
+  /* Captured BEFORE the rated filter so the two chips in the Rated row can
+     count what they would actually produce under everything else the reader
+     has already chosen. Counting the whole season instead would tell a reader
+     filtered to Mecha that 59 titles are rated, when the answer in front of
+     them is four - the same season-wide-count flaw the genre chips still have,
+     which is not a reason to add another. */
+  const beforeRated = items;
   if (current.rated === "1") items = items.filter(isKnown);
 
   items = sortAnime(items, sortKey);
@@ -457,6 +464,36 @@ async function BrowseResults({
           </FilterRow>
         )}
 
+        {/* A FILTER THAT WAS SITTING IN THE SORT ROW. "Rated only" removes
+            every title the pipeline has no score for - 22 of this season's 81 -
+            and it was a chip in the Sort row, one word from "Rated first",
+            styled identically to it. A reader aiming at a reordering could
+            delete a quarter of the season and be given no sign of it beyond a
+            number they had no reason to be watching. A hairline divider had
+            been put in front of it, which says someone felt the problem; the
+            label above it still said SORT.
+
+            It is a facet, so it is a facet row, built like every other one: a
+            reset chip first, the narrowing chip second, both carrying counts so
+            the cost of the choice is visible before it is made. */}
+        <FilterRow label="Rated">
+          <Chip
+            href={buildHref(current, { rated: undefined, page: undefined })}
+            active={current.rated !== "1"}
+            count={beforeRated.length}
+          >
+            All titles
+          </Chip>
+          <Chip
+            href={buildHref(current, { rated: "1", page: undefined })}
+            active={current.rated === "1"}
+            count={beforeRated.filter(isKnown).length}
+            title="Hide titles with no score upstream"
+          >
+            Rated only
+          </Chip>
+        </FilterRow>
+
         <FilterRow label="Sort">
           {SORTS.map((s) => (
             <Chip
@@ -468,17 +505,6 @@ async function BrowseResults({
               {s.label}
             </Chip>
           ))}
-          <span className="mx-1 h-4 w-px bg-rule" aria-hidden />
-          <Chip
-            href={buildHref(current, {
-              rated: current.rated === "1" ? undefined : "1",
-              page: undefined,
-            })}
-            active={current.rated === "1"}
-            title="Hide titles with no score upstream"
-          >
-            Rated only
-          </Chip>
         </FilterRow>
         </div>
       </details>

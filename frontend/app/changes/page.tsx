@@ -63,7 +63,9 @@ async function Week() {
 
   const sections = CHANGE_SECTIONS.map((s) => ({
     ...s,
-    rows: changes.filter((c) => (s.fields as readonly string[]).includes(c.field)),
+    rows: changes.filter(
+      (c) => s.fields.includes(c.field) && (s.where ? s.where(c) : true),
+    ),
   })).filter((s) => s.rows.length > 0);
 
   return (
@@ -86,6 +88,34 @@ async function Week() {
         .
       </p>
 
+      {/* WHAT IS ON THIS PAGE, which it never said. The sections run as
+          newspaper columns and the page is 11,603px tall at 1440 and 28,284px
+          on a phone - thirty-three viewports - so a reader who wanted "Newly
+          listed" had to scroll past three hundred other entries to find out it
+          existed. At 1440 the columns make it worse than a long page: you reach
+          the bottom of column one and go back to the top for column two.
+
+          One .meta line of anchors, built from the same sections the page
+          renders, so it cannot drift from them. The device is the one the home
+          page already uses to name this page's contents in a sentence. No
+          numbering, no bullets, no rule - this is a line of prose that happens
+          to be clickable. */}
+      <p className="meta mt-3 max-w-[72ch] !leading-[1.8]">
+        On this page:{" "}
+        {sections.map((s, i) => (
+          <span key={s.key}>
+            {i > 0 && ", "}
+            <a
+              href={`#${s.key}`}
+              className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+            >
+              {s.title.toLowerCase()}
+            </a>{" "}
+            <span className="tnum">{s.rows.length}</span>
+          </span>
+        ))}
+      </p>
+
       {/* Columns for the same reason as the schedule: the sections are uneven,
           and a grid would leave dead space under the short ones. */}
       <ScrollReveal
@@ -95,7 +125,7 @@ async function Week() {
         start="top 94%"
       >
         {sections.map((s) => (
-          <section key={s.key} className="mb-9 break-inside-avoid">
+          <section key={s.key} id={s.key} className="mb-9 break-inside-avoid scroll-mt-6">
             <h2 className="flex flex-wrap items-baseline justify-between gap-x-3 border-b-2 border-ink pb-1.5">
               <span className="font-display text-[1.35rem] font-black leading-none">{s.title}</span>
               <span className="meta tnum">{s.rows.length}</span>

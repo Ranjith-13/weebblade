@@ -979,14 +979,34 @@ export function changeSentence(c: Change): string {
 /* The kinds of change, in sections a reader would ask for rather than the
    field names the pipeline uses. Order is the page's order: what happened to a
    show first, what it is going to do next, then the numbers. */
-export const CHANGE_SECTIONS = [
+export type ChangeSection = {
+  key: string;
+  title: string;
+  fields: readonly string[];
+  /** Narrows a field further, where one field carries two kinds of news. */
+  where?: (change: Change) => boolean;
+};
+
+/** How the week's changes are grouped. "Seven episode counts" and "ten shows
+ *  finished" are read differently, and one show can appear under two headings.
+ *
+ *  FIRST SCORED IS ITS OWN SECTION, and that split is the one that matters. A
+ *  score change with no previous value is not a smaller version of 8.2 to 8.1 -
+ *  it is the moment a title stops printing screened back and comes up in
+ *  colour, which is the single event this whole design is built to show. They
+ *  were mixed into "Score moves" and sorted among them by title, so on
+ *  2026-10-15 eighty-nine of them were hidden inside a list of 147 that the
+ *  page described as score moves. The one genuinely newsworthy class of change
+ *  was invisible, and carried the same typographic weight as a 0.1 tick. */
+export const CHANGE_SECTIONS: readonly ChangeSection[] = [
   { key: "status", title: "Finished and started", fields: ["status"] },
   { key: "dates", title: "Dates and seasons", fields: ["premiere", "season", "broadcast"] },
   { key: "episodes", title: "Episode counts", fields: ["episodes"] },
-  { key: "score", title: "Score moves", fields: ["score"] },
+  { key: "first-scored", title: "First scored", fields: ["score"], where: (c) => c.old == null },
+  { key: "score", title: "Score moves", fields: ["score"], where: (c) => c.old != null },
   { key: "watch", title: "Trailers and streaming", fields: ["trailer", "streaming"] },
   { key: "listed", title: "Newly listed", fields: ["listed"] },
-] as const;
+];
 
 /** The week's changes said in one line: how many, and the three kinds there
  *  were most of.

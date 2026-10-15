@@ -66,7 +66,7 @@ function Row({ entry: e }: { entry: FranchiseEntry }) {
       <span
         className={[
           "relative block h-[3.2rem] w-[2.4rem] shrink-0 overflow-hidden border border-ink",
-          known ? "plate-known" : "plate-unknown",
+          known ? "plate-known" : "plate-unknown plate-fine",
           e.poster_url ? "" : "plate-empty bg-plate",
         ].join(" ")}
       >

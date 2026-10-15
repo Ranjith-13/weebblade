@@ -190,6 +190,23 @@ body > * {
   }
 }
 
+/* A FINER SCREEN FOR A SMALLER REPRODUCTION, which is what a printer does.
+   The dot pitch above is 4px, chosen against a 3:4 plate in a catalogue grid
+   that is 150-230px wide. The schedule and the change feed reproduce the same
+   plate at 36x49px, where 4px leaves about nine dots across the whole image:
+   not a halftone, just noise. A screen nobody can read as a screen is the
+   certainty system applied decoratively, which section 2 of DESIGN.md forbids
+   outright - and on those two pages the plate is the ONLY thing carrying the
+   signal, because neither row prints a score.
+
+   So the pitch scales with the reproduction, exactly as a line screen does:
+   2px dots on a thumbnail give roughly eighteen across and read as a screen
+   again. Same meaning, same ink, sized for the plate it sits on. */
+.plate-fine::after {
+  background-image: radial-gradient(var(--color-paper) 0.65px, transparent 0.75px);
+  background-size: 2px 2px;
+}
+
 /* Diagonal rule fill for the ~20% of titles with no artwork at all. A missing
    poster is a different gap from a missing score, and gets its own treatment
    rather than being folded into one "incomplete" state. */

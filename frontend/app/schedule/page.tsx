@@ -30,7 +30,10 @@ function EpisodeRow({ e }: { e: ScheduledEpisode }) {
       <span
         className={[
           "relative block h-[3.2rem] w-[2.4rem] shrink-0 overflow-hidden border border-ink",
-          known ? "plate-known" : "plate-unknown",
+          // plate-fine, because 36x49 is too small for the catalogue's 4px dot
+          // pitch to read as a screen at all - see globals.css. The plate is
+          // the only certainty signal on this row; it has to be legible.
+          known ? "plate-known" : "plate-unknown plate-fine",
           e.poster_url ? "" : "plate-empty bg-plate",
         ].join(" ")}
       >
@@ -38,7 +41,13 @@ function EpisodeRow({ e }: { e: ScheduledEpisode }) {
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[0.9rem] font-medium leading-tight transition-colors duration-150 group-hover:text-flag group-focus-visible:text-flag">
+        {/* Two lines rather than one, because one was truncating 44 of the
+            week's 123 titles at 390px - "The Prince of Tennis II U-17 WORLD CUP
+            Final Member Selection Match" needs 465px in a 216px column. A
+            reader opens this page to find out what is on tonight and was being
+            shown the first two thirds of the answer. line-clamp leaves a title
+            that fits on one line, so nothing changes at 1440 where most do. */}
+        <span className="line-clamp-2 text-[0.9rem] font-medium leading-tight transition-colors duration-150 group-hover:text-flag group-focus-visible:text-flag">
           {e.title ?? "Untitled"}
         </span>
         {/* One line, held for the reader's own time, which arrives after
@@ -107,6 +116,36 @@ async function Week() {
         </p>
       )}
 
+      {/* THE WEEK, IN ORDER, BEFORE THE COLUMNS SCRAMBLE IT. The days flow as
+          newspaper columns, so the three headings in the first viewport at 1440
+          read Thursday 15 Oct, Sunday 18 Oct, Tuesday 20 Oct - the tops of
+          three columns, not the next three days. Friday, Saturday, Monday and
+          Wednesday are below the fold of columns one to three and nothing says
+          the columns continue.
+
+          Columns are still right for the board itself (see below), so the fix
+          is to say the week in reading order once, with each day a link to its
+          own heading and its count beside it. Same device as /changes, and for
+          the same reason: the page was navigable only by scrolling it. */}
+      <p className="meta mt-5 max-w-[72ch] !leading-[1.8]">
+        This week:{" "}
+        {days.map((d, i) => {
+          const { weekday, date } = dayKeyLabel(d.key);
+          return (
+            <span key={d.key}>
+              {i > 0 && ", "}
+              <a
+                href={`#${d.key}`}
+                className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
+              >
+                {weekday} {date}
+              </a>{" "}
+              <span className="tnum">{d.items.length}</span>
+            </span>
+          );
+        })}
+      </p>
+
       {/* Columns, not a grid. The days are uneven, and in a grid every row is
           as tall as its tallest cell, leaving short days above dead space.
           Multi-column flow lets each day start where the last one ended;
@@ -123,7 +162,7 @@ async function Week() {
         {days.map((d) => {
           const { weekday, date } = dayKeyLabel(d.key);
           return (
-            <section key={d.key} className="mb-9 break-inside-avoid">
+            <section key={d.key} id={d.key} className="mb-9 break-inside-avoid scroll-mt-6">
               <h2 className="flex flex-wrap items-baseline justify-between gap-x-3 border-b-2 border-ink pb-1.5">
                 <span className="flex items-baseline gap-x-2.5">
                   <span className="font-display text-[1.5rem] font-black leading-none">{weekday}</span>

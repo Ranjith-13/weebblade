@@ -473,6 +473,39 @@ is balanced both ways (122 up / 113 down while airing), so there is no decay sto
 - It is reached from the score arc on a title page and from `/changes`, **not from the nav**: the
   five sections already fill 352px of a 390px line.
 
+## Long pages say what is on them
+
+`/changes` is 11,725px at 1440 and 28,444px on a phone - **thirty-three viewports** - and
+`/schedule` flows seven days as newspaper columns, so the first screen at 1440 used to read
+Thursday / Sunday / Tuesday: the tops of three columns, not the next three days. Both now open
+with one `.meta` line of in-page anchors built from the same sections they render, so the index
+cannot drift from the page.
+
+**`First scored` is its own section on `/changes`, and that split is the point.** A score change
+with no previous value is not a smaller 8.2-to-8.1 - it is the moment a title stops printing
+screened back and comes up in colour, which is the one event this design exists to show. 89 of
+them were mixed into a 147-row section called "Score moves" and sorted among them by title. The
+split is `c.old == null`, declared on the section in `CHANGE_SECTIONS` rather than by field.
+
+**A thumbnail gets a finer screen.** The halftone's 4px dot pitch is chosen against a 150-230px
+catalogue plate; the schedule and the change feed reproduce the same plate at 36x49, where that
+leaves about nine dots across the whole image. A screen nobody can read as a screen is the
+certainty system applied decoratively, which DESIGN.md forbids - and on those rows the plate is
+the only signal, because neither prints a score. `.plate-fine` halves the pitch, the way a
+printer picks a line screen for the reproduction size.
+
+**Schedule titles wrap to two lines.** One line truncated 44 of the week's 123 at 390px; now 9.
+`line-clamp-2`, so a title that fits still sits on one line and nothing changes at 1440.
+
+## A filter must not sit in the sort row
+
+`/browse`'s "Rated only" (`?rated=1`) was a chip inside `<FilterRow label="Sort">`, one word from
+"Rated first" and styled identically. It removes every title with no score upstream - 22 of 81 -
+so a reader aiming at a reordering could delete a quarter of the season with no sign of it. It is
+its own facet row now, with a reset chip, and both chips carry counts computed **before** the
+rated filter so they say what they would produce under the reader's other choices: `?genre=Mecha`
+reads "All titles 5, Rated only 4", not the season's 81 and 59.
+
 ## Motion
 
 GSAP + ScrollTrigger via `@gsap/react`'s `useGSAP`, in `components/motion/`. **Do not add a second
