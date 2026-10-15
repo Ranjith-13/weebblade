@@ -67,6 +67,14 @@ didone; its hairlines break up at body size.
 Instrument Serif, which is swapping one generated-site default for the other. Justify a face
 against this product or do not change it.
 
+**A native title is tagged with the language it is in** (`scriptLang()` in `lib/types.ts`, used on
+the title page's secondary line). `<html lang="en">` was the only language declaration on the site,
+so every Japanese and Korean title was announced to a screen reader in English and hyphenated by
+English rules. It is detected from the script, not from the source's metadata, which does not carry
+one. **Han alone is deliberately not claimed**: this catalogue holds Chinese donghua beside Japanese
+titles and kanji cannot tell them apart, so an undeclared string stays undeclared rather than being
+labelled wrongly - `ja` on a Chinese title is worse than the inherited `en`, because it is confident.
+
 Do not add variable-font axes you do not actually vary. Fraunces briefly shipped `SOFT`, `WONK`
 and `opsz` that no rule ever set, costing 82 KB (152 KB to 70 KB) for no visual difference.
 

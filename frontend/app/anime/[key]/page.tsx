@@ -24,6 +24,7 @@ import {
   changeSentence,
   joinSources,
   jstAirdate,
+  scriptLang,
   secondaryTitle,
   sourceMaterialLabel,
   statusLabel,
@@ -419,7 +420,15 @@ async function AnimeDetail({
         <h1 className="font-display text-[clamp(1.9rem,5vw,3.1rem)] font-black leading-[0.95] text-balance">
           {title}
         </h1>
-        {secondary && <p className="mt-2.5 text-ink-soft">{secondary}</p>}
+        {/* lang where the script settles it: a native title sits inside an
+            English document, and without this a screen reader reads Japanese in
+            an English voice and the browser line-breaks it by English rules.
+            scriptLang declines to guess on Han alone - see lib/types.ts. */}
+        {secondary && (
+          <p className="mt-2.5 text-ink-soft" lang={scriptLang(secondary)}>
+            {secondary}
+          </p>
+        )}
 
         {/* THE ONE THING HERE NO OTHER ANIME SITE HAS, and until now the only
             way to find out it existed was to open a title and scroll past the

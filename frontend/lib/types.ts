@@ -320,6 +320,28 @@ export function secondaryTitle(a: Anime): string | null {
   return alt ?? (a.title_native && a.title_native !== primary ? a.title_native : null);
 }
 
+/** The BCP-47 tag for a string, where its script settles the question, and
+ *  undefined where it does not.
+ *
+ *  Every title on this site sits inside `<html lang="en">`, including the
+ *  native ones. A browser given no better information applies English line
+ *  breaking and English font selection to Japanese, and a screen reader reads
+ *  it in an English voice, which is unintelligible rather than merely wrong.
+ *
+ *  THE HAN CASE IS DELIBERATELY LEFT UNLABELLED, and that is the whole reason
+ *  this is a function rather than a hardcoded lang="ja". Kana or Hangul settle
+ *  it: nothing else uses them. Han alone does not - this catalogue holds
+ *  Chinese donghua beside Japanese anime, "Douluo Dalu" and "Wanmei Shijie"
+ *  among them, and tagging those `ja` would tell a screen reader to read
+ *  Chinese in Japanese. Saying nothing leaves the reader where they already
+ *  were; saying the wrong thing is worse than the gap it fills. */
+export function scriptLang(text: string | null | undefined): string | undefined {
+  if (!text) return undefined;
+  if (/[\u3040-\u309f\u30a0-\u30ff]/.test(text)) return "ja"; // hiragana, katakana
+  if (/[\uac00-\ud7af\u1100-\u11ff]/.test(text)) return "ko"; // hangul
+  return undefined; // Han alone cannot be told apart here, so it is not claimed
+}
+
 export function formatAirDate(a: Anime): string | null {
   if (!a.start_year) return null;
   if (!a.start_month) return String(a.start_year);
