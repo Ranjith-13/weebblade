@@ -193,6 +193,24 @@ DAILY = [
     Step("fetch_airing", _fetch_airing),
     Step("resolve_ids", _resolve_ids),
     Step("fetch_status", _fetch_status),
+    # LAST, AND IT HAS TO BE. The weekly list has carried a refresh since it was
+    # written; the daily one did not, because its fetches only ever replaced the
+    # CONTENTS of files the views already described. That held until a fetch
+    # changed a file's SHAPE.
+    #
+    # DuckDB binds a view's column list when the view is created, and these
+    # views are `SELECT l.*` over a parquet file. _ensure_warehouse builds them
+    # before the steps run, from the lake as it was restored; fetch_status then
+    # wrote processed/current/anilist_status.parquet with two more columns, and
+    # the check that reads the warehouse next died on "Contents of view were
+    # altered: types don't match". The fetch had worked perfectly - 281 titles
+    # answered, scores and all - and the run still went red at the end.
+    #
+    # Rebuilding the views after the fetches is both the fix and the honest
+    # description of the daily run: it changes the lake, so what reads the lake
+    # should be re-derived before anything queries it. A second of work, and it
+    # removes the whole class rather than the one column that found it.
+    Step("refresh_catalog", _refresh_catalog),
 ]
 
 
