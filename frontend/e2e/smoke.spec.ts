@@ -313,6 +313,40 @@ test("the masthead toggle flips the page and agrees with the footer", async ({ b
   }
 });
 
+/* A POSTER THAT 404s MUST STILL BE A PLATE. Six of the catalogue's poster URLs
+   are dead at Kitsu's origin - the title keeps a poster_url, so an <Image> was
+   rendered, and because alt="" a failed one draws nothing at all: the reader
+   got an empty bordered box rather than the design's own no-artwork treatment.
+   The name is rendered underneath every poster so a dead one reveals it.
+
+   Asserted as a property of every plate rather than against a named title: the
+   dead six change as Kitsu repairs or breaks things, and a test naming one of
+   them goes red on a week nobody touched this. */
+test("every plate carries its name beneath the artwork", async ({ page }) => {
+  await page.goto("/browse");
+  await page.waitForLoadState("networkidle");
+
+  const plates = await page.evaluate(() => {
+    const holders = [...document.querySelectorAll("a .relative")].filter((d) =>
+      d.querySelector("img"),
+    );
+    return holders.map((d) => {
+      const img = d.querySelector("img")!;
+      const name = d.querySelector("span.absolute");
+      return {
+        named: !!name?.textContent?.trim(),
+        loaded: (img as HTMLImageElement).naturalWidth > 0,
+        covers: getComputedStyle(img).objectFit === "cover",
+      };
+    });
+  });
+
+  expect(plates.length, "there are plates to check").toBeGreaterThan(5);
+  expect(plates.every((p) => p.named), "each has a name under its artwork").toBe(true);
+  // And a poster that did load hides it completely, so nothing shows through.
+  expect(plates.filter((p) => p.loaded).every((p) => p.covers)).toBe(true);
+});
+
 /* COMPONENT FEEL, and the half of it that is easy to ship broken.
  *
  * Section 6 of DESIGN.md is explicit that reduced motion means NO animation

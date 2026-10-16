@@ -351,10 +351,19 @@ async function AnimeDetail({
           className={[
             "relative aspect-[3/4] overflow-hidden border border-ink",
             known ? "plate-known" : "plate-unknown",
-            anime.poster_url ? "" : "plate-empty bg-plate",
+            "bg-plate",
+            anime.poster_url ? "" : "plate-empty",
           ].join(" ")}
         >
-          {anime.poster_url ? (
+          {/* The name under the artwork rather than instead of it: six poster
+              URLs 404 at Kitsu's origin, and this title is one of them, so the
+              largest plate on the site was an empty bordered box. See the note
+              in components/Plate.tsx for why the diagonal rule stays
+              conditional while the plate tone does not. */}
+          <span className="absolute inset-0 flex items-end p-4 font-display text-xl font-bold leading-tight text-ink-soft">
+            {title}
+          </span>
+          {anime.poster_url && (
             <Image
               src={anime.poster_url}
               alt=""
@@ -363,10 +372,6 @@ async function AnimeDetail({
               className="object-cover"
               priority
             />
-          ) : (
-            <span className="absolute inset-0 flex items-end p-4 font-display text-xl font-bold leading-tight text-ink-soft">
-              {title}
-            </span>
           )}
         </ParallaxPoster>
 

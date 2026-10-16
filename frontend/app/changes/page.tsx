@@ -34,7 +34,9 @@ function ChangeRow({ c }: { c: ChangedTitle }) {
   return (
     <li className="border-t border-rule py-2.5">
       <Link href={`/anime/${c.wb_id}`} className="group flex items-center gap-3 focus:outline-none">
-        <span className="relative block h-[3.2rem] w-[2.4rem] shrink-0 overflow-hidden border border-ink plate-known">
+        {/* bg-plate so a dead poster URL is a plate rather than a hole; at 2.4rem
+            there is no room for the name Plate.tsx falls back to. */}
+        <span className="relative block h-[3.2rem] w-[2.4rem] shrink-0 overflow-hidden border border-ink bg-plate plate-known">
           {c.poster_url && <Image src={c.poster_url} alt="" fill sizes="40px" className="object-cover" />}
         </span>
         <span className="min-w-0 flex-1">

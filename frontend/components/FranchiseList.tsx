@@ -67,7 +67,8 @@ function Row({ entry: e }: { entry: FranchiseEntry }) {
         className={[
           "relative block h-[3.2rem] w-[2.4rem] shrink-0 overflow-hidden border border-ink",
           known ? "plate-known" : "plate-unknown plate-fine",
-          e.poster_url ? "" : "plate-empty bg-plate",
+          "bg-plate",
+          e.poster_url ? "" : "plate-empty",
         ].join(" ")}
       >
         {e.poster_url && <Image src={e.poster_url} alt="" fill sizes="40px" className="object-cover" />}

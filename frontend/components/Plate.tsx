@@ -52,10 +52,29 @@ export function Plate({
         className={[
           "relative aspect-[3/4] overflow-hidden border border-ink",
           known ? "plate-known" : "plate-unknown",
-          anime.poster_url ? "" : "plate-empty bg-plate",
+          "bg-plate",
+          anime.poster_url ? "" : "plate-empty",
         ].join(" ")}
       >
-        {anime.poster_url ? (
+        {/* THE NAME SITS UNDER THE ARTWORK, NOT INSTEAD OF IT. Six poster
+            URLs in the catalogue 404 at Kitsu's origin, and a dead one is not
+            the same as an absent one: poster_url is present, so this rendered
+            an Image, and the reader got an empty bordered box. (alt="" is why
+            it was a hole rather than a browser's broken-image icon, which is
+            the better of the two but still not the design.) Rendering the name
+            underneath costs nothing, needs no JavaScript and no liveness check
+            at ingest - 6,359 HEAD requests a week is why that was never done -
+            and a poster that loads covers it completely.
+
+            The diagonal rule stays conditional on purpose. It means "no artwork
+            registered", and laying it under every plate would give it a second
+            meaning, "not arrived yet", which is the objection DESIGN.md already
+            makes to animating the halftone. The plate tone is neutral and says
+            nothing, so that is what every plate gets. */}
+        <span className="absolute inset-0 flex items-end p-2.5 font-display text-[0.95rem] font-bold leading-[1.1] text-ink-soft">
+          {title}
+        </span>
+        {anime.poster_url && (
           <Image
             src={anime.poster_url}
             alt=""
@@ -64,10 +83,6 @@ export function Plate({
             className="object-cover"
             priority={priority}
           />
-        ) : (
-          <span className="absolute inset-0 flex items-end p-2.5 font-display text-[0.95rem] font-bold leading-[1.1] text-ink-soft">
-            {title}
-          </span>
         )}
 
         {/* The tab is the read-at-a-glance signal. Paper-on-flag is 4.91:1, so

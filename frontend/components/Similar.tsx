@@ -47,11 +47,18 @@ export async function SimilarSection({ wbId }: { wbId: string }) {
             <li key={item.wb_id}>
               <Link href={`/anime/${item.wb_id}`} className="group block">
                 <div
-                  className={`relative aspect-[3/4] overflow-hidden border border-ink ${
+                  className={`relative aspect-[3/4] overflow-hidden border border-ink bg-plate ${
                     known ? "plate-known" : "plate-unknown"
                   }`}
                 >
-                  {item.poster_url ? (
+                  {/* The name under the artwork rather than instead of it; see
+                      the note in components/Plate.tsx. The third state - no
+                      artwork at all - is a different gap from no score, so it
+                      is never folded into the halftone. */}
+                  <span className="absolute inset-0 flex items-end p-2 font-display text-sm font-bold leading-tight text-ink-soft">
+                    {item.title ?? "Untitled"}
+                  </span>
+                  {item.poster_url && (
                     <Image
                       src={item.poster_url}
                       alt=""
@@ -59,13 +66,6 @@ export async function SimilarSection({ wbId }: { wbId: string }) {
                       sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 15vw"
                       className="object-cover"
                     />
-                  ) : (
-                    /* The third state: no artwork is a different gap from no
-                       score, so it gets its own treatment rather than being
-                       folded into the halftone. */
-                    <span className="absolute inset-0 flex items-end p-2 font-display text-sm font-bold leading-tight text-ink-soft">
-                      {item.title ?? "Untitled"}
-                    </span>
                   )}
                   <span
                     className={`tnum absolute right-0 top-0 flex h-7 min-w-7 items-center justify-center px-1.5 ${

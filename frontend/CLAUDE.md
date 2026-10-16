@@ -341,6 +341,19 @@ diluted others. The TV column is what `/browse` shows by default.
 | `broadcast_day` / `_time` | 29% | 28% | 85% | The slot line and `NextAiring`, where AniList has no airdate |
 | `cover_url` | **11%** | **32%** | 69% | **Enhancement only. Never reserve space for it** |
 
+**A poster URL being present does not mean there is a poster.** Six of them 404 at Kitsu's
+origin. The title carries a `poster_url`, so an `<Image>` is rendered, and because `alt=""` a
+failed one draws nothing at all - not even a browser's broken-image icon - so the largest plate
+on a title page was an empty bordered box. The name is therefore rendered **underneath** every
+poster rather than instead of it: a poster that loads covers it completely (`object-cover`,
+asserted in the smoke suite), and a dead one reveals the design's own treatment.
+
+Costs nothing and needs no liveness check at ingest, which is 6,359 HEAD requests a week and is
+why it was never done. **The diagonal rule stays conditional on `poster_url` being absent**: it
+means "no artwork registered", and laying it under every plate would give it a second meaning,
+"not arrived yet", which is the same objection DESIGN.md makes to animating the halftone. The
+plate tone is neutral and says nothing, so that is what every plate gets.
+
 Scores are **stored out of 100 and shown out of 10** - `scoreOutOfTen()` and `SCORE_MAX` in
 `lib/types.ts` own that, and the browse plate, the detail page and the search plate all go through
 them. Storage keeps Kitsu's native scale because that is what the warehouse holds and what MAL's

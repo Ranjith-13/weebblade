@@ -258,10 +258,15 @@ export function SearchClient({ total }: { total: number }) {
                         className={[
                           "relative aspect-[3/4] overflow-hidden border border-ink",
                           known ? "plate-known" : "plate-unknown",
-                          result.poster_url ? "" : "plate-empty bg-plate",
+                          "bg-plate",
+                          result.poster_url ? "" : "plate-empty",
                         ].join(" ")}
                       >
-                        {result.poster_url ? (
+                        {/* Under the artwork, not instead of it - see Plate. */}
+                        <span className="absolute inset-0 flex items-end p-2.5 font-display text-[0.95rem] font-bold leading-[1.1] text-ink-soft">
+                          {result.title}
+                        </span>
+                        {result.poster_url && (
                           <Image
                             src={result.poster_url}
                             alt=""
@@ -269,10 +274,6 @@ export function SearchClient({ total }: { total: number }) {
                             sizes="(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 15vw"
                             className="object-cover"
                           />
-                        ) : (
-                          <span className="absolute inset-0 flex items-end p-2.5 font-display text-[0.95rem] font-bold leading-[1.1] text-ink-soft">
-                            {result.title}
-                          </span>
                         )}
                         <span
                           className={[
