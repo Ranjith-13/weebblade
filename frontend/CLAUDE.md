@@ -66,6 +66,14 @@ hydration, because a test that waits for the page to settle passes on a site tha
 The control is an external store, not `useState` + `useEffect` - `localStorage` *is* external
 state, and the `set-state-in-effect` rule objects to the alternative, as it does for `Airing.tsx`.
 
+**The attribute now lands a frame AFTER the click**, because the flip runs inside a View
+Transition and that API snapshots the old state before calling back. `localStorage` and the
+`CHANGED` event are still synchronous, so both controls re-render at once while the page's
+colours cross-fade - which is the intended effect, not a lag. Anything reading `data-theme`
+straight after a click is racing it: the smoke suite did, passed on desktop and failed on
+phone, which is the worst shape a test can have. Use a retrying assertion
+(`toHaveAttribute`), never a single read.
+
 **Dark mode is a palette swap, not a second design.** `@media (prefers-color-scheme: dark)` in
 `globals.css` redefines the same variables; both signal hues are preserved exactly (flag 331°,
 data 227°) and only lightness moves. Dark `--color-ink` is the light palette's paper. No component

@@ -250,9 +250,15 @@ test("an explicit theme survives a reload without a flash", async ({ browser }) 
   const fresh = await state();
   expect(fresh.attr, "untouched follows the system").toBeNull();
 
+  /* AWAITED, NOT READ ONCE. The theme now applies inside a View Transition, so
+     the attribute lands a frame after the click rather than during it - the API
+     snapshots the old state first, which is the whole mechanism. Reading
+     immediately raced it: this passed on desktop and failed on phone, which is
+     the worst shape a test can have. The retrying assertion describes the real
+     behaviour, which is "shortly", not "synchronously". */
   await page.getByRole("button", { name: "dark", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const chosen = await state();
-  expect(chosen.attr).toBe("dark");
   expect(chosen.bg).not.toBe(fresh.bg);
 
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -262,7 +268,7 @@ test("an explicit theme survives a reload without a flash", async ({ browser }) 
 
   // And System is a real choice, not the absence of one.
   await page.getByRole("button", { name: "system", exact: true }).click();
-  expect((await state()).attr).toBeNull();
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.*/);
 
   await context.close();
 });
@@ -292,9 +298,8 @@ test("the masthead toggle flips the page and agrees with the footer", async ({ b
     const before = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     await toggle.click();
 
-    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe(
-      opposite,
-    );
+    // Same wait as above: the flip happens inside a View Transition.
+    await expect(page.locator("html")).toHaveAttribute("data-theme", opposite);
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe(
       before,
     );
