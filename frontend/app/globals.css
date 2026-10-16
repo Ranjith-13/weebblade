@@ -438,6 +438,31 @@ body > * {
   animation-duration: 220ms;
 }
 
+/* A NAV LABEL HOLDS ITS MARKED WIDTH. The current section is semibold, so the
+   row measured 366px with nothing marked and 372px with "Schedule" marked, and
+   reflowed on every navigation. Worse, that variance is what hid the overflow:
+   the row fitted a 390px viewport on some routes and not others, so looking at
+   one page confirmed it was fine.
+
+   The label is rendered twice - once visibly at its real weight, once bold at
+   zero height purely to set the width - so the box is always as wide as its
+   marked state and nothing moves when the marker arrives. content: attr() is
+   the whole mechanism; there is no JavaScript and no second measurement to
+   keep in step. */
+.nav-label {
+  display: inline-block;
+}
+
+.nav-label::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 600;
+  pointer-events: none;
+}
+
 /* WHERE AN ANCHOR LANDED YOU. /changes runs 28,444px on a phone and /schedule
    flows seven days; both open with a line of anchors into their own sections.
    Following one jumped twenty viewports into a page that looked exactly like

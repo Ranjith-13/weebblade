@@ -521,10 +521,25 @@ Two things made it hide. The width **moves with the route** - the active item is
 "Schedule" marked is 6px wider than nothing marked - so it tipped over on one page and not another.
 And "sits on one line" is true of a row that overflows, so the eye confirms it.
 
-`gap-x-3 min-[420px]:gap-x-5 sm:gap-x-7` brings it to 334-340px, inside 350 with the semibold
-variance absorbed. 20px fits again from 412 up, hence the step at 420. Swept 360 to 1440: no
-overflow at any width. **The smoke suite now asserts `scrollWidth <= clientWidth`** on six routes at
-390 and 1440, because a measurement written into a document is not a gate.
+**The variance is gone rather than absorbed** (2026-10-16). Each label reserves its *marked*
+width - the text is rendered a second time, bold, at zero height, purely to size the box
+(`.nav-label::after`, `content: attr(data-label)`) - so the row is one width on every route:
+347px below 440, 387 to 639, 419 above. The weight is kept rather than dropped, because the
+flag bar says where you are and the weight says it again for anyone who cannot see a 2px rule.
+
+That cost 15px and broke both numbers it had just been given. The row went to 355 and hung
+into the right-hand gutter at 390, and 360 - swept clean an hour earlier - overflowed outright.
+`gap-x-2.5 min-[440px]:gap-x-5 sm:gap-x-7` fits the column again, and the step moved from 420
+because at 20px gaps the row needs 427px of viewport rather than 412.
+
+**And it wraps**, which is what stops this being a number to re-derive whenever a label
+changes. Below ~387px no gap helps: five words at 0.875rem do not fit 320px of column, so
+`flex-wrap` makes that two short rows instead of a horizontal scrollbar. Swept 320 to 1440:
+one width per viewport, inside its column, no overflow anywhere.
+
+**The smoke suite asserts `scrollWidth <= clientWidth`** on six routes at 390 and 1440, and
+that the nav is a single width across routes *and* inside its column - the first version of
+this fix cleared the window while hanging into the gutter, and only the column check caught it.
 
 Layout shift 0 at 1440x1000 and 390x844, cold and
 warm, on a production build (2026-09-21), with /schedule measured alongside as a control.

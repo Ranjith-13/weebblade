@@ -537,6 +537,45 @@ test("the season index contains its own scroll", async ({ page }) => {
   ).toBe("contain");
 });
 
+/* THE NAV IS THE SAME WIDTH ON EVERY ROUTE, and that is the property that was
+   missing rather than a tidiness. The current section is semibold, so the row
+   measured 366px with nothing marked and 372px with "Schedule" marked - it
+   reflowed under the cursor on every navigation, and worse, it fitted a 390px
+   viewport on some routes and not others. That variance is exactly why the
+   overflow bug survived: looking at one page confirmed the row was fine.
+
+   Each label now reserves its marked width, so this asserts the invariant that
+   makes the budget meaningful. It also checks the row fits its COLUMN, not just
+   the viewport - a row can clear the window while hanging into the gutter, which
+   is how the first version of the fix passed and still looked wrong. */
+for (const width of [390, 1440]) {
+  test(`the nav keeps one width across routes at ${width}`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width, height: 800 } });
+    const page = await context.newPage();
+    const widths = new Map<string, number>();
+
+    for (const path of ["/", "/browse", "/schedule", "/changes", "/search", "/digest"]) {
+      await page.goto(path);
+      const seen = await page.evaluate(() => {
+        const nav = document.querySelector("header nav")!.getBoundingClientRect();
+        const holder = document.querySelector("header > div")!;
+        const inner =
+          holder.getBoundingClientRect().right -
+          parseFloat(getComputedStyle(holder).paddingRight);
+        return { width: Math.round(nav.width), fitsColumn: nav.right <= inner + 0.5 };
+      });
+      widths.set(path, seen.width);
+      expect(seen.fitsColumn, `${path} at ${width}: the nav stays inside its column`).toBe(true);
+    }
+
+    expect(
+      new Set(widths.values()).size,
+      `the nav is one width everywhere, got ${JSON.stringify([...widths])}`,
+    ).toBe(1);
+    await context.close();
+  });
+}
+
 /* NOTHING MAY PUSH THE PAGE SIDEWAYS. The nav's five sections already take
    352px of a 390px line, which CLAUDE.md records as a measurement and which,
    until this test, nothing enforced: adding the theme toggle beside them gave

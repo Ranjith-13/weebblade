@@ -38,6 +38,26 @@ function itemState(active: boolean) {
   return active ? "border-flag font-semibold text-ink" : "border-transparent text-ink-soft";
 }
 
+/** A nav label that always occupies the width it would have when marked.
+ *
+ *  The current section is semibold, so until now the row was a different width
+ *  on every route - 366px with nothing marked, 372px with "Schedule" marked -
+ *  and it reflowed under the cursor on every navigation. That variance is also
+ *  what hid the overflow bug: the row fit on some pages and not others, so
+ *  looking at one page confirmed it was fine.
+ *
+ *  The bold text is rendered a second time, zero-height and hidden, purely to
+ *  set the width. Reserving it rather than dropping the weight, because the
+ *  weight is a deliberate marker - the flag bar says WHERE you are, the weight
+ *  says it again for anyone who cannot see a 2px pink rule. */
+function Label({ children }: { children: string }) {
+  return (
+    <span className="nav-label" data-label={children}>
+      {children}
+    </span>
+  );
+}
+
 /** Presentational. Rendered with `active={null}` as the Suspense fallback on
  *  routes whose pathname is unknown at prerender (a title, a dated digest). */
 export function NavList({ active }: { active: Section | null }) {
@@ -58,8 +78,27 @@ export function NavList({ active }: { active: Section | null }) {
           in semibold is 6px wider than no marker at all. The budget absorbs
           that now rather than depending on which word is longest.
 
-          20px fits again from 412px up, so the step back to it is at 420. */}
-      <ul className="flex gap-x-3 min-[420px]:gap-x-5 sm:gap-x-7">
+          20px fits again from 412px up, so the step back to it is at 420.
+
+          10px rather than the 12 this first shipped with, because every label
+          now reserves its MARKED width (see Label, above): the row stopped
+          changing size between routes and settled at the widest of them, 355px,
+          which cleared the viewport but hung 5px into the right-hand gutter.
+          Fitting the viewport is not the budget - fitting the column is, or the
+          nav sits closer to the edge than everything above it.
+
+          AND IT WRAPS, which is the part that stops this being a number to
+          re-derive every time the labels change. At 10px gaps the row is 347px
+          and needs a 387px viewport; below that - a 360px phone, which this
+          regressed when the reserved width arrived - no gap small enough helps,
+          because five words at 0.875rem do not fit 320px of column. flex-wrap
+          makes that two short rows instead of a horizontal scrollbar, which is
+          the right answer at any width and needs no breakpoint.
+
+          The step up to 20px moved 420 -> 440 for the same reason: at 20px the
+          row is 387 and needs 427 of viewport, so 420 was spilling into the
+          gutter the day the reservation landed. */}
+      <ul className="flex flex-wrap gap-x-2.5 gap-y-0 min-[440px]:gap-x-5 sm:gap-x-7">
         <li>
           <button
             type="button"
@@ -67,7 +106,7 @@ export function NavList({ active }: { active: Section | null }) {
             aria-current={active === "seasons" ? "page" : undefined}
             className={`season-index-toggle ${item} ${itemState(active === "seasons")}`}
           >
-            Seasons
+            <Label>Seasons</Label>
             <svg
               aria-hidden
               viewBox="0 0 10 10"
@@ -88,7 +127,7 @@ export function NavList({ active }: { active: Section | null }) {
               aria-current={active === link.key ? "page" : undefined}
               className={`${item} ${itemState(active === link.key)}`}
             >
-              {link.label}
+              <Label>{link.label}</Label>
             </Link>
           </li>
         ))}
