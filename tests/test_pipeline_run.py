@@ -82,7 +82,13 @@ def test_the_daily_run_does_the_same(steps, checks, tmp_path):
     checks()
 
     assert runner.run("daily", tmp_path, AT) == 0
-    assert called == ["fetch_airing", "resolve_ids", "fetch_status"]
+    # refresh_catalog LAST, and the order is the assertion. The views are built
+    # from the lake before any step runs, and a fetch that changes a file's
+    # shape - score_100 and user_count arriving in anilist_status - leaves them
+    # describing a source that no longer matches. Re-deriving them before the
+    # check is what stops a run that did all its work from going red on
+    # "Contents of view were altered".
+    assert called == ["fetch_airing", "resolve_ids", "fetch_status", "refresh_catalog"]
 
 
 def test_a_failed_step_does_not_stop_the_run(steps, checks, tmp_path):
