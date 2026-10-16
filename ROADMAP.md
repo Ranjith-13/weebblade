@@ -189,7 +189,7 @@ two places name it and a regenerated token has to update both.
 
 Found by reading the live site at 1440 and 375, against `frontend/DESIGN.md`.
 
-### 6. [~] The best thing on the site is invisible
+### 6. [x] The best thing on the site is invisible
 
 A title page carries a per-source changelog — *"Score 8.2 to 8.1, per AniList"*, *"Premiere
 moved from 1 October to 2 October, per MyAnimeList"*, *"Now on Netflix, per Kitsu and
@@ -219,8 +219,20 @@ A first draft of the sentence cost 142px and was cut in half, because this is th
 `DESIGN.md` already trimmed the digest on to lift the posters up, and spending that back on
 a teaser would have been the same mistake from the other direction.
 
-**Still open:** the grid itself says nothing. A plate whose title changed this week looks
-exactly like one that did not.
+**Closed 2026-10-16 with the grid marker deliberately unbuilt.** The plate still says
+nothing about a title that changed this week, and that is now a decision rather than a
+backlog item.
+
+The entry existed because the changelog was unfindable. It is findable: the title-page line
+and the home-page line both shipped, and both were measured. A marker on each plate was one
+of three routes to that goal, not the goal - keeping it open described the site as having
+unfinished work when what it has is a problem solved a different way.
+
+It is also the worst of the three on its own terms. `changes` is empty on list rows, so it
+needs the API change the other two turned out not to need; the caption is already full at
+`Ep 3 · 15 Oct JST · TV`; and a dot before a label is what `DESIGN.md` bans by name. Three
+objections and no remaining problem. `GROWTH.md` reached this conclusion first, under
+"Deliberately not doing"; this is the roadmap catching up.
 
 ### 7. [x] `/browse` opens with a wall of controls
 
@@ -483,9 +495,12 @@ answers with an empty list and the block does not render.
 
 ## Open — carried over, not urgent
 
-- **Six poster URLs are dead upstream** at Kitsu (404 at origin, confirmed). Currently
-  ignored narrowly in the smoke suite so it does not go permanently red. A liveness check
-  at ingest would cost 6,359 HEAD requests a week, which is why it has not been done.
+- **Six poster URLs are dead upstream** at Kitsu (404 at origin, confirmed), and still are:
+  a liveness check at ingest would cost 6,359 HEAD requests a week, which is why it has not
+  been done. **The site no longer shows a hole for them** (2026-10-16): the title sits under
+  every poster rather than instead of it, so a dead URL reveals the no-artwork treatment the
+  design already had, and one that dies between runs is covered too. The gap that remains is
+  upstream data, not rendering.
 - ~~**Romaji search recall is 24/40**~~ — **fixed 2026-10-16, and the 24/40 was not
   reproducible.** See item 13.
 - **533 titles have no synopsis anywhere** (2026-10-14; 26 were fillable when checked).
