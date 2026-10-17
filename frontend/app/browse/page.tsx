@@ -15,6 +15,7 @@ import {
   SORTS,
   sourceMaterialLabel,
   type SortKey,
+  isFrozenSeason,
   startedSeason,
 } from "@/lib/types";
 
@@ -319,6 +320,30 @@ async function BrowseResults({
           </>
         )}
       </p>
+
+      {/* WHAT A FINISHED SEASON'S NUMBERS ARE AS OF. The weekly run refetches
+          the current season and the next one; every older season holds whatever
+          its sources said on the day it was captured, and a 2017 score will not
+          move again. That is the right trade - finished shows' scores barely
+          move, which is why backfilling is a command rather than weekly work -
+          but it was nowhere on the site, on a project whose stated claim is not
+          pretending the data is more complete than it is.
+
+          No date, deliberately: the API hands every title the catalogue's
+          run_date, the week it was last consolidated rather than the day its
+          season was last asked about, so Fall 2021 and Fall 2026 both read the
+          same day. Printing that as "last checked" would be worse than saying
+          nothing. The rule is true and checkable; the number would not be.
+
+          A sentence rather than a banner, in the line that already qualifies
+          these counts, because it qualifies them rather than warning about
+          them. */}
+      {!current.studio && isFrozenSeason(current.season, seasons) && (
+        <p className="meta mt-1.5 max-w-[62ch] !leading-[1.6]">
+          This season is no longer refetched, so its scores and facts are as of when it was
+          captured. Only the current season and the one after it are refreshed each week.
+        </p>
+      )}
 
       {/* FOLDED AWAY, BECAUSE IT WAS A SCREEN AND A HALF OF CONTROLS BEFORE A
           SINGLE POSTER. Measured on the live site: at 390x844 the first plate

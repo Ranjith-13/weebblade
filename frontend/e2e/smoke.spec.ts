@@ -542,6 +542,42 @@ test("the season index contains its own scroll", async ({ page }) => {
   ).toBe("contain");
 });
 
+/* A FINISHED SEASON SAYS ITS NUMBERS ARE FROZEN. The weekly run refetches the
+   current season and the next one; everything older holds whatever its sources
+   said the day it was captured, and a 2017 score will not move again. True
+   since the first backfill and stated nowhere until now.
+
+   The seasons are read off the page rather than named, because naming one is a
+   test that goes red the week Summer becomes Fall - the same rule the rest of
+   this suite follows. The oldest season in the index must carry the line; the
+   default view, which is the current season, must not. */
+test("an old season says it is no longer refetched", async ({ page }) => {
+  const frozen = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll("p")].some((e) =>
+        (e.textContent ?? "").includes("no longer refetched"),
+      ),
+    );
+
+  await page.goto("/browse");
+  expect(await frozen(), "the current season is still being refetched").toBe(false);
+
+  /* From the season index specifically, not any link carrying season=. Every
+     genre chip and format chip carries one too, and the first attempt read the
+     last of those: it picked an UPCOMING season, which is refetched, and failed
+     saying "2027-WINTER is older than the current season". */
+  const keys = await page.evaluate(() =>
+    [...document.querySelectorAll('.season-index a[href*="season="]')]
+      .map((a) => new URL((a as HTMLAnchorElement).href).searchParams.get("season"))
+      .filter((k): k is string => !!k),
+  );
+  const oldest = keys.at(-1);
+  test.skip(!oldest, "no season links on the page to read");
+
+  await page.goto(`/browse?season=${oldest}`);
+  expect(await frozen(), `${oldest} is older than the current season`).toBe(true);
+});
+
 /* THE NAV IS THE SAME WIDTH ON EVERY ROUTE, and that is the property that was
    missing rather than a tidiness. The current section is semibold, so the row
    measured 366px with nothing marked and 372px with "Schedule" marked - it

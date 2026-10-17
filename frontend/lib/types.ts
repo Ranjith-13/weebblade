@@ -434,6 +434,38 @@ export function startedSeason<T extends { upcoming: boolean }>(seasons: T[]): T 
   return seasons.find((s) => !s.upcoming) ?? seasons[0];
 }
 
+/** Whether a season is still being re-asked, or was frozen when it was captured.
+ *
+ *  THE WEEKLY RUN REFETCHES THE CURRENT SEASON AND THE NEXT ONE, and nothing
+ *  else (`ingestion/seasons.capture_both`). Every older season holds whatever
+ *  its sources said on the day it was fetched - a 2017 score is as of the
+ *  afternoon it was backfilled and will not move again. That is the right trade
+ *  for finished shows, whose scores barely move, and it is why backfilling is a
+ *  command rather than something the weekly run does. But it is also a fact
+ *  about the data that the site has never stated, on a project whose whole
+ *  claim is not pretending the data is more complete than it is.
+ *
+ *  Position in the list rather than a date: the API hands every title the
+ *  CATALOGUE's run_date, which is the week it was last consolidated, not the
+ *  day its season was last asked about - Fall 2021, Fall 2024 and Fall 2026 all
+ *  read 2026-10-12. There is no per-season fetch date to print, so this states
+ *  the rule instead of inventing a number for it.
+ *
+ *  And position rather than a second quarter comparator: getSeasons already
+ *  sorts newest first, and a copy of that ordering is a copy that will disagree
+ *  (backend/app/seasons.py makes the same argument about its CASE expression). */
+export function isFrozenSeason<T extends { key: string; upcoming: boolean }>(
+  key: string | null | undefined,
+  seasons: T[],
+): boolean {
+  if (!key) return false;
+  const current = startedSeason(seasons);
+  if (!current) return false;
+  const at = seasons.findIndex((s) => s.key === key);
+  const live = seasons.findIndex((s) => s.key === current.key);
+  return at > live; // older than the season still being refetched
+}
+
 /** The em-dash, and the ONLY place this site is allowed to print one.
  *
  *  DESIGN.md bans em-dashes in visible copy because it is the single most
