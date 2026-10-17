@@ -24,7 +24,13 @@ jobs:
     # is 6,349 titles through a sentence-transformers model on CPU - 54s on a
     # laptop. The timeout is a stop, not a budget: a run that hangs should cost
     # an hour of the month's 2,000 minutes, not all of them.
-    timeout-minutes: 60
+    # 60 was not enough. The run of 2026-10-17, the first over 40 seasons, took
+    # 59m17s - forty-three seconds of headroom - and the catalogue only grows.
+    # Where it goes: MAL's related titles spend ~19 minutes at their rate limit
+    # (1,959 of a 2,000 cap, 41 failed), the embedding rebuild 5m30s over 11,989
+    # titles, and build_similar 4m20s. A stop is not a budget, and the stop was
+    # about to start cutting off real work.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -111,6 +117,13 @@ jobs:
         if: always()
         continue-on-error: true
         env:
+          # BOTH tokens. The mirror reads the state out of its GitHub release
+          # before pushing it to GitLab, so it shells out to `gh` - and without
+          # GH_TOKEN that call dies with "could not find any host
+          # configurations". Every other step here that touches a release sets
+          # it; this one did not, and the manual mirror workflow DID, which is
+          # why the hand-run passed and the first scheduled run failed.
+          GH_TOKEN: ${{ github.token }}
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: python -m pipeline.mirror --run-date "$(date -u +%Y-%m-%d)"
 
