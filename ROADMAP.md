@@ -510,6 +510,22 @@ answers with an empty list and the block does not render.
 - **The repo is private**, so the API needs a token to read its own warehouse. Making it
   public removes that dependency and the 2027 expiry with it. The history scan was clean.
 
+  **It also decides whether this project can hold more than 22 seasons**, which is not obvious
+  and is the reason it is written here rather than left as a preference. The API downloads the
+  whole 40 MB warehouse at startup and serves from a 512 MB box whose embedder already holds
+  ~406 MB; five times the catalogue does not fit. The way out is to stop holding the file -
+  DuckDB can `ATTACH` a database over HTTPS and read byte ranges. Measured on the real
+  published warehouse with an 80 ms stand-in for the round trip: **1.08 s to the first answer
+  against ~32 s today, 4.5 MB of 41.7 MB read (10.7%), nothing on disk, and the same queries
+  free afterwards** - with bytes per query set by what the query touches rather than by how big
+  the catalogue is.
+
+  That needs a plain URL. A private release asset answers 302 to a signed
+  `objects.githubusercontent.com` link the token must not follow (see the redirect handler in
+  `backend/app/warehouse.py`), and those links expire, so a long-lived `ATTACH` to one breaks
+  mid-serve. **So "go public" and "backfill to 2000" are one decision.** Measured on DuckDB
+  1.5.6 while the API pins 1.1.3; confirm there before relying on it.
+
 ---
 
 ## Cost
