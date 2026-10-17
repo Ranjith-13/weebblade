@@ -493,6 +493,28 @@ answers with an empty list and the block does not render.
 
 ---
 
+### 14. [~] 40 seasons, as the measurement the depth question needed
+
+Backfilled 2026-10-17 from 22 seasons to 40 - 2017-SPRING through 2027-WINTER - in two
+batches through a new manual workflow. 10,806 source rows across 54 snapshots, roughly 7,500
+titles once merged, about 13 minutes of fetching. The state tarball went 39 MB to 47 MB.
+
+**Not the full depth, and that is the point.** Item 13's note gates a backfill to 2000 on the
+range-read change, because the API downloads the whole warehouse on every container wake and
+a hundred seasons makes that a two-minute cold start. 40 needs nothing: it roughly doubles the
+catalogue while leaving the cold start in the tens of seconds. Doing it now turns an argument
+about a ceiling into a reading of where the ceiling actually is.
+
+**What to measure after the first weekly run that includes it** (Sunday 2026-10-18, since a
+backfill writes snapshots and the weekly run is what consolidates them into titles): the
+published warehouse's size, the API's cold start, and how long the weekly run itself takes -
+`build_search_index` embeds every title and `build_similar` scores every title against every
+other, and both just doubled their input. Recent weeklies ran 10-14 minutes against a
+60-minute timeout.
+
+`ai/search/similar.py` says "6,359 x 6,359 at 384 dimensions is a few seconds" in a docstring.
+That number is about to be wrong; re-measure it on Sunday rather than guessing a new one.
+
 ## Open — carried over, not urgent
 
 - **Six poster URLs are dead upstream** at Kitsu (404 at origin, confirmed), and still are:
