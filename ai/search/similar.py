@@ -212,9 +212,17 @@ def _neighbours(rows, vectors, families, neighbours: int) -> list[dict[str, Any]
     """Every title's nearest others, excluding its own franchise and the formats
     nobody is asking for.
 
-    Brute force, one row at a time against the whole matrix: 6,359 x 6,359 at 384
-    dimensions is a few seconds, it runs once a week, and an approximate index
-    would be another artifact to keep in step with the catalogue for no gain.
+    Brute force, one row at a time against the whole matrix, which runs once a
+    week - an approximate index would be another artifact to keep in step with
+    the catalogue for no gain.
+
+    It is not "a few seconds" any more, and the number is written here rather
+    than the adjective because the adjective was already wrong once. At 6,359
+    titles it was seconds; at 11,989, after the backfill to 40 seasons on
+    2026-10-17, it was 4m20s for 10,920 related titles and 87,265 pairs. The
+    cost is quadratic in the catalogue, so doubling it again is around twenty
+    minutes - which is the point at which an approximate index stops being
+    pointless. Re-measure before assuming it is still fine.
     """
     import numpy as np
 
