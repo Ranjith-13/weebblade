@@ -123,6 +123,7 @@ export type Anime = {
    *  `changes`: only a single title carries it. Usually flat - see scoreArc,
    *  which is the only thing that should render it. */
   score_history: ScorePoint[];
+  source_scores: SourceScore[];
 };
 
 /** Mirrors backend/app/schemas.py:Change - something a source reports
@@ -562,6 +563,60 @@ export type SimilarTitle = {
 export const SCORE_MAX = 10;
 
 export type ScorePoint = { run_date: string; score_100: number };
+
+export type SourceScore = { source: string; score_100: number; user_count: number | null };
+
+/** The sources' scores, best first, only where they actually disagree.
+ *
+ *  THE PAGE PRINTS ONE NUMBER AND THE WAREHOUSE HOLDS THREE. Measured over this
+ *  catalogue, 4,138 titles are scored by two or more sources and only 2.9% of
+ *  them agree: 36% differ by 0.2 to 0.3, 24% by 0.4 to 0.5, 21% by 0.6 to 1.0
+ *  and 325 titles by more than a point. The merged figure is a choice, and the
+ *  readings it beat are data this project collected and then discarded at
+ *  render time - on the one page element every visitor looks at.
+ *
+ *  BELOW 0.4 IT SAYS NOTHING, deliberately. Two decimal places apart is two
+ *  crowds of different size landing in the same place, not a disagreement, and
+ *  printing three near-identical numbers on a third of titles would teach
+ *  people to skip the block on the titles where it matters. The rule DESIGN.md
+ *  already follows: say it where there is something to say.
+ *
+ *  Vote counts travel with the scores because the gap is usually a population
+ *  rather than a verdict. One real title reads MyAnimeList 8.7 from 204,162
+ *  votes, AniList 8.5 from 99,660, and Kitsu 8.4 from 1,447 - and the page
+ *  shows 8.4, because Kitsu won the merge. Without the denominators that looks
+ *  like three opinions; with them it is one crowd of 1,447 outvoting one of
+ *  204,162 on which number a reader sees. */
+export const SPREAD_WORTH_SHOWING = 0.4;
+
+export function disagreeingSources(
+  scores: SourceScore[] | null | undefined,
+): SourceScore[] {
+  const rated = (scores ?? []).filter((s) => s.score_100 != null);
+  if (rated.length < 2) return [];
+  const shown = rated.map((s) => Number(scoreOutOfTen(s.score_100)));
+  const spread = Math.max(...shown) - Math.min(...shown);
+  // Rounded, because the comparison has to happen at the precision the site
+  // prints: 0.39999 is this rule's own floating-point noise, not a reading.
+  return Math.round(spread * 10) / 10 >= SPREAD_WORTH_SHOWING ? rated : [];
+}
+
+/** "204k", "1.4k", "860" - a vote count at a glance, in a 15rem rail.
+ *
+ *  Hand-rolled rather than Intl.NumberFormat's compact notation for the reason
+ *  jstAirdate is hand-rolled: this renders on the server and hydrates in the
+ *  browser, and two ICU builds that abbreviate differently are a hydration
+ *  mismatch waiting on somebody else's upgrade. */
+export function compactCount(n: number | null | undefined): string | null {
+  if (n == null || n < 0) return null;
+  if (n < 1_000) return String(n);
+  if (n < 1_000_000) {
+    const k = n / 1_000;
+    return `${k < 10 ? k.toFixed(1) : Math.round(k)}k`;
+  }
+  const m = n / 1_000_000;
+  return `${m < 10 ? m.toFixed(1) : Math.round(m)}m`;
+}
 
 /** What a title's score has done, in one clause, or null where it has done
  *  nothing worth printing.

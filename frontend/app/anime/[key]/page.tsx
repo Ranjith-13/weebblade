@@ -24,7 +24,10 @@ import {
   changeSentence,
   joinSources,
   jstAirdate,
+  compactCount,
+  disagreeingSources,
   scoreRevisions,
+  sourceLabel,
   scriptLang,
   secondaryTitle,
   sourceMaterialLabel,
@@ -157,6 +160,7 @@ async function AnimeDetail({
   const known = isKnown(anime);
   const arc = scoreArc(anime.score_history);
   const revisions = scoreRevisions(anime.changes);
+  const disagree = disagreeingSources(anime.source_scores);
 
   /* Every link out of this page stays in the title's own season. They used to
      drop it, and /browse without a season is the newest one - so on any title
@@ -430,6 +434,38 @@ async function AnimeDetail({
                   Attributed, and that is not politeness: the figure quoted here
                   is one source's, while the score above is the merged winner,
                   and the two legitimately differ. See scoreRevisions. */}
+              {/* WHAT THE OTHER SOURCES SAY, where they say something else.
+                  The number above is the merge winner's, and 4,138 titles in
+                  this catalogue are scored by two or more sources with only
+                  2.9% agreeing. On the title this was built against the page
+                  prints 8.4 because Kitsu won on 1,447 votes, while
+                  MyAnimeList's 204,162 say 8.7 - and nothing on the page said
+                  so. This is the provenance the project is for, on the one
+                  element every visitor reads.
+
+                  The vote counts are the point rather than decoration: three
+                  bare numbers read as three opinions, and with denominators
+                  they read as one crowd outvoting another on which figure a
+                  reader sees. See disagreeingSources for why under 0.4 shows
+                  nothing. */}
+              {disagree.length > 0 && (
+                <dl className="mt-3 border-t border-rule pt-2">
+                  {disagree.map((s) => (
+                    <div key={s.source} className="flex items-baseline justify-between gap-2">
+                      <dt className="meta">{sourceLabel(s.source)}</dt>
+                      <dd className="meta tnum text-ink">
+                        {scoreOutOfTen(s.score_100)}
+                        {compactCount(s.user_count) && (
+                          <span className="ml-1.5 text-ink-soft">
+                            {compactCount(s.user_count)}
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+
               {revisions && (
                 /* text-balance because this wraps to two lines in a 15rem rail
                    and left "Kitsu" alone on the second, which is a widow on a

@@ -467,3 +467,98 @@ def test_a_warehouse_built_before_the_table_existed_still_answers(tmp_path):
 
     assert response.status_code == 200
     assert response.json()["results"] == []
+
+
+# --- what each source says, not just the one that won --------------------
+#
+# The score a title page prints is the merge winner's. Over the live catalogue
+# 4,138 titles are scored by two or more sources and only 2.9% of them agree:
+# 53% differ by 0.4 or more, 325 by over a point. One real title reads
+# MyAnimeList 8.7 from 204,162 votes, AniList 8.5 from 99,660, and Kitsu 8.4
+# from 1,447 - and the page shows 8.4, because Kitsu won the merge.
+
+
+@pytest.fixture
+def sourced_client(tmp_path):
+    """A warehouse where one title is scored by three sources, each differently,
+    and one source has two dated readings of it."""
+    from processing import identity
+
+    data = tmp_path / "data"
+    ids, reg, _ = identity.assign([["kitsu:1", "mal:2", "anilist:3"]], identity.Registry(), "2026-09-07")
+    identity.save(data, reg)
+    _write_parquet(
+        data / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-09-07" / "part-0.parquet",
+        [{"source": "kitsu", "source_id": "1", "title_english": "Contested", "wb_id": ids[0],
+          "score_100": 84.0, "format": "TV", "season": "SUMMER", "season_year": 2026,
+          "run_date": "2026-09-07"}],
+    )
+    for source, sid, rows in [
+        # Kitsu read twice: the newer reading has more votes and a higher score.
+        ("kitsu", "1", [{"average_score": 82.0, "user_count": 1_300},
+                        {"average_score": 84.0, "user_count": 1_447}]),
+        ("mal", "2", [{"average_score": 87.0, "user_count": 204_162}]),
+        ("anilist", "3", [{"average_score": 85.0, "user_count": 99_660}]),
+    ]:
+        for i, r in enumerate(rows):
+            _write_parquet(
+                data / "processed" / f"{source}_media" / "2026-SUMMER" / f"2026-09-0{7 + i}.parquet",
+                [{"source": source, "source_id": sid, **r}],
+            )
+    db = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data, db)
+
+    def override():
+        con = duckdb.connect(str(db), read_only=True)
+        try:
+            yield con
+        finally:
+            con.close()
+
+    app.dependency_overrides[get_db] = override
+    with TestClient(app) as test_client:
+        yield test_client, ids[0]
+    app.dependency_overrides.clear()
+
+
+def test_a_title_reports_what_each_source_scores_it(sourced_client):
+    client, wb_id = sourced_client
+
+    got = client.get(f"/anime/{wb_id}").json()["source_scores"]
+
+    assert [(s["source"], s["score_100"]) for s in got] == [
+        ("mal", 87.0), ("anilist", 85.0), ("kitsu", 84.0)
+    ], "best-rated first, one row per source"
+    assert [s["user_count"] for s in got] == [204_162, 99_660, 1_447]
+
+
+def test_only_the_newest_reading_of_each_source_is_reported(sourced_client):
+    """These views are SELECT * over a glob of dated parquet files and the date
+    is in the FILENAME, not a column, so there is no run_date to order by.
+    Without a rule this returned every snapshot. Votes only accumulate, so the
+    largest is the latest: Kitsu's 1,300-vote 8.2 must lose to its 1,447-vote
+    8.4, which is the figure the catalogue itself carries."""
+    client, wb_id = sourced_client
+
+    kitsu = [s for s in client.get(f"/anime/{wb_id}").json()["source_scores"] if s["source"] == "kitsu"]
+
+    assert len(kitsu) == 1
+    assert kitsu[0]["score_100"] == 84.0
+
+
+def test_a_warehouse_missing_a_source_still_answers(tmp_path):
+    """A source that was down when the warehouse was built has no view at all,
+    and a UNION naming it would fail the whole query rather than return the
+    sources that did answer."""
+    import duckdb
+    from backend.app.routers.anime import _source_scores
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE anime_identity AS SELECT 'kitsu:1' AS source_key, 'wb_x' AS wb_id")
+    con.execute("CREATE TABLE anime_media_kitsu AS "
+                "SELECT 'kitsu' AS source, '1' AS source_id, 84.0 AS average_score, 10 AS user_count")
+
+    got = _source_scores(con, "wb_x")
+
+    assert [(s.source, s.score_100) for s in got] == [("kitsu", 84.0)]
+    con.close()

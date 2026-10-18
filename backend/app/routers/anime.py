@@ -10,6 +10,7 @@ from ..schemas import (
     Franchise,
     FranchiseEntry,
     ScorePoint,
+    SourceScore,
     SimilarTitle,
     SimilarTitles,
 )
@@ -159,7 +160,77 @@ def _with_airing(con: duckdb.DuckDBPyConnection, row: dict) -> Anime:
         title.upcoming_episodes = upcoming_episodes(con, title.wb_id)
         title.changes = title_changes(con, title.wb_id)
         title.score_history = _score_history(con, title.wb_id)
+        title.source_scores = _source_scores(con, title.wb_id)
     return title
+
+
+# The per-source tables, which exist only for sources the pipeline has fetched.
+# Named rather than discovered so a typo is a missing source rather than a
+# silently wider query, and checked against the catalogue before use because a
+# warehouse built when a source was down does not carry its view at all.
+_SOURCE_VIEWS = {"kitsu": "anime_media_kitsu", "mal": "anime_media_mal",
+                 "anilist": "anime_media_anilist"}
+
+
+def _source_scores(con: duckdb.DuckDBPyConnection, wb_id: str) -> list[SourceScore]:
+    """What each source says this title scores, best-rated first.
+
+    THE SITE PRINTS ONE NUMBER AND HOLDS THREE. The score on a title page is the
+    merge winner's, and over this catalogue 4,138 titles are scored by two or
+    more sources while only 2.9% of them agree: 53% differ by 0.4 or more, 325
+    by over a point, the widest 4.2 against 6.7. Dropping the losers made the
+    page state a contested figure as if it were the figure.
+
+    Read from the per-source views rather than from anime_media, and that is the
+    correction that made this possible at all: anime_media is CONSOLIDATED, one
+    winning row per title per run. Measuring disagreement there finds only
+    titles whose winner changed between runs - 99 of them, 80% "identical" -
+    which is a measurement of the merge, not of the sources.
+
+    Each view is checked for existence first. A source that was down when the
+    warehouse was built has no view, and a UNION naming it would fail the whole
+    query rather than return the two that answered.
+    """
+    present = {
+        r[0] for r in con.execute(
+            "SELECT table_name FROM duckdb_tables() UNION "
+            "SELECT view_name FROM duckdb_views()"
+        ).fetchall()
+    }
+    usable = {s: v for s, v in _SOURCE_VIEWS.items() if v in present}
+    if not usable:
+        return []
+
+    union = " UNION ALL ".join(
+        f"SELECT '{source}' AS source, source_id, average_score, user_count FROM {view}"
+        for source, view in usable.items()
+    )
+    # ONE READING PER SOURCE, AND THE NEWEST, which these views cannot say
+    # directly: they are SELECT * over a glob of dated parquet files and the
+    # date lives in the FILENAME, not in a column, so there is no run_date to
+    # order by. Without a rule this returned every snapshot - fourteen rows for
+    # a title with three sources, the same score repeated five times.
+    #
+    # Vote counts only accumulate, so the largest is the latest. Checked against
+    # the live warehouse: Kitsu's readings of one title run 1,327 votes at 8.2,
+    # 1,352 at 8.3, 1,419 at 8.4, 1,447 at 8.4, and picking the most votes picks
+    # the 8.4 the site shows. A source that ever pruned votes would break this,
+    # which is the thing to re-check if a figure here disagrees with the source.
+    rows = _optional(
+        con,
+        f"SELECT x.source, x.average_score AS score_100, x.user_count "
+        f"FROM ({union}) x "
+        "JOIN anime_identity i ON i.source_key = x.source || ':' || CAST(x.source_id AS VARCHAR) "
+        "WHERE i.wb_id = ? AND x.average_score IS NOT NULL "
+        "QUALIFY ROW_NUMBER() OVER ("
+        "  PARTITION BY x.source ORDER BY x.user_count DESC NULLS LAST, x.average_score DESC) = 1 "
+        "ORDER BY x.average_score DESC",
+        [wb_id],
+    )
+    return [
+        SourceScore(source=r["source"], score_100=r["score_100"], user_count=r["user_count"])
+        for r in rows
+    ]
 
 
 def _score_history(con: duckdb.DuckDBPyConnection, wb_id: str) -> list[ScorePoint]:

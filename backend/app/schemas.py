@@ -151,6 +151,8 @@ class Anime(BaseModel):
     against 2% of a year ago and 0% of Fall 2025.
     """
     score_history: list[ScorePoint] = []
+    # What each source says, where more than the winner has an opinion.
+    source_scores: list[SourceScore] = []
     # `status` above is checked against AniList: where the sources call a title
     # airing and AniList's daily check says it has finished or not yet aired,
     # status says so. merged_status is what the sources said. The rest is
@@ -290,6 +292,27 @@ class ScorePoint(BaseModel):
 
     run_date: str
     score_100: float
+
+
+class SourceScore(BaseModel):
+    """What one source says this title scores, and how many people it asked.
+
+    The score a title page prints is the merge winner's: one number standing in
+    for up to three. Measured over this catalogue, 4,138 titles carry a score
+    from two or more sources and only 2.9% of them agree - 53% differ by 0.4 or
+    more and 325 by over a full point, the widest being 4.2 against 6.7. The
+    merged figure is a choice, and the ones it beat are data the warehouse holds
+    and the API used to drop.
+
+    `user_count` because the gap is usually a population rather than a verdict:
+    120,000 voters and 3,000 voters disagreeing by half a point is a different
+    statement from two crowds of equal size doing it, and a reader cannot tell
+    which without the denominator.
+    """
+
+    source: str
+    score_100: float
+    user_count: int | None = None
 
 
 class SeasonSettling(BaseModel):
