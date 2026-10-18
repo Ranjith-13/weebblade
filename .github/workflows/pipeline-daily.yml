@@ -3,10 +3,30 @@ name: Pipeline (daily)
 # The anilist_airing DAG, run by GitHub instead of by Airflow on a server that
 # costs money. Same steps, same order, same check - see pipeline/run.py.
 #
-# 06:00 UTC is mid-afternoon in Tokyo, before the evening's broadcasts, and
-# clear of the weekly run at midnight Sunday; the two share AniList's 30
-# requests a minute. GitHub's cron is best-effort and can be minutes late, which
-# a daily catalogue does not care about.
+# 06:00 UTC was chosen as mid-afternoon in Tokyo, before the evening's
+# broadcasts, and clear of the weekly run at midnight Sunday; the two share
+# AniList's 30 requests a minute.
+#
+# THE FIRST HALF OF THAT HAS NOT BEEN TRUE SINCE IT WAS WRITTEN. The note said
+# GitHub's cron "can be minutes late, which a daily catalogue does not care
+# about". Measured over the six scheduled runs to 2026-10-18, it is between
+# 4h22m and 8h53m late, median 5h29m - so the run lands at 19:22 to 23:53 JST,
+# during or after the evening's broadcasts rather than before them. The cron
+# says 06:00 and the schedule it was reasoned about is not the schedule it runs
+# on.
+#
+# Left at 06:00 anyway, and that is a decision rather than neglect. Nothing here
+# actually depends on the hour: fetch_airing lands every episode in the next six
+# weeks PLUS the day behind, so an episode that aired while the run was queued
+# is still collected, and the status and score fetches do not care what time it
+# is. Moving the cron earlier to compensate would be tuning against a delay that
+# varies by four and a half hours.
+#
+# What it is still clear of is the weekly run, which drifts the same way - 00:00
+# Sunday landed at 02:35 on 2026-10-18 and finished by 03:32, well before the
+# daily's window. If either ever stops being clear of the other they will
+# contend for AniList's rate limit, and that is the thing to check rather than
+# the clock.
 on:
   schedule:
     - cron: "0 6 * * *"
