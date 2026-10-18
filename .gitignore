@@ -58,5 +58,3 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
 
-# Local working notes on where this goes next; ROADMAP.md is the tracked list.
-GROWTH.md
