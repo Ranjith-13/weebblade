@@ -545,8 +545,21 @@ That number is about to be wrong; re-measure it on Sunday rather than guessing a
   That needs a plain URL. A private release asset answers 302 to a signed
   `objects.githubusercontent.com` link the token must not follow (see the redirect handler in
   `backend/app/warehouse.py`), and those links expire, so a long-lived `ATTACH` to one breaks
-  mid-serve. **So "go public" and "backfill to 2000" are one decision.** Measured on DuckDB
-  1.5.6 while the API pins 1.1.3; confirm there before relying on it.
+  mid-serve. Measured on DuckDB 1.5.6 while the API pins 1.1.3; confirm there before relying
+  on it.
+
+  **This said "go public" and "backfill to 2000" are one decision, and that was an
+  overstatement.** What needs a plain URL is the 80 MB warehouse file, not the source. A
+  SECOND, PUBLIC repository carrying only `warehouse.duckdb` releases answers it with the code
+  staying private - verified 2026-10-18 against a public GitHub release asset, which serves
+  `HTTP 206` with `accept-ranges: bytes` straight through the redirect. What would be published
+  is a file derived from public anime APIs: every score and airdate in it is already on three
+  websites, and the one real secret lives in `.env` and never enters the lake.
+
+  **Decided 2026-10-18: the repository stays private for now.** So this is not blocked on a
+  decision any more, it is just not built. The token the API reads releases with still expires
+  2027-10-13 and `pipeline/token_expiry.py` warns a month out, alongside the mirror's GitLab
+  token three days later.
 
 ---
 
