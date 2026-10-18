@@ -3,7 +3,14 @@ import { Suspense } from "react";
 import Markdown from "react-markdown";
 import { PlateGrid, PlateGridSkeleton } from "@/components/Plate";
 import { ProvenanceLines } from "@/components/Provenance";
-import { getChanges, getLatestDigest, getSeason, getSeasons, getWeekEpisodes } from "@/lib/api";
+import {
+  getCatalogueSummary,
+  getChanges,
+  getLatestDigest,
+  getSeason,
+  getSeasons,
+  getWeekEpisodes,
+} from "@/lib/api";
 import { MastheadScroll } from "@/components/motion/MastheadScroll";
 import { PinnedAside } from "@/components/motion/PinnedAside";
 import { RegisterReveal } from "@/components/motion/RegisterReveal";
@@ -45,14 +52,20 @@ function HomeSkeleton() {
 }
 
 async function Home() {
-  const [digest, season, seasons, week, changes] = await Promise.all([
+  const [digest, season, seasons, week, changes, summary] = await Promise.all([
     getLatestDigest(),
     getSeason(),
     getSeasons(),
     getWeekEpisodes(),
     getChanges(),
+    // Already fetched by getSeasons through the same cached call, so this
+    // costs nothing upstream.
+    getCatalogueSummary(),
   ]);
   const changed = changeSummary(changes.changes);
+  // Absent on a warehouse built before this existed, or one carrying a single
+  // source: nothing can disagree with itself.
+  const contested = summary.contested ?? null;
 
   /* TV only, matching what /browse defaults to. Ranking the whole season put
      music videos and shorts in a list headed "rated highest", which they can
@@ -137,6 +150,53 @@ async function Home() {
         </dl>
       </ScrollReveal>
 
+      {/* WHAT NOBODY ELSE IS COUNTING, ABOVE THE PART ANYONE COULD GENERATE.
+          This page used to open with the digest: ~700 words an LLM wrote from
+          the warehouse, which is good and is also the single most replaceable
+          thing here. The two sentences below were in that section's margin.
+
+          They are the opposite: nothing else watches three databases at once
+          and records where they differ, so neither of these can be asked of a
+          model. The first is what the sources did this week, counted from the
+          feed rather than written down. The second is a standing fact about
+          the catalogue, and the more uncomfortable one, since it says the
+          number printed beside most titles is contested.
+
+          The digest keeps its place directly below. The change is the order,
+          not the content: a site should not introduce itself with its least
+          distinctive asset. */}
+      <section className="border-b border-rule py-8">
+        {changed && (
+          <p className="max-w-[68ch] text-[1.05rem] leading-[1.65]">
+            <Link
+              href="/changes"
+              className="border-b-2 border-flag pb-0.5 font-medium transition-colors hover:text-flag"
+            >
+              The sources changed their minds{" "}
+              <span className="tnum">{changed.total}</span> times this week
+            </Link>
+            {": "}
+            {changed.kinds.map((kind, i) => (
+              <span key={kind.label}>
+                {i > 0 && (i === changed.kinds.length - 1 ? " and " : ", ")}
+                <span className="tnum">{kind.count}</span> {kind.label}
+              </span>
+            ))}
+            , each with the source that reported it.
+          </p>
+        )}
+
+        {contested && (
+          <p className="meta mt-3 max-w-[68ch] !leading-[1.7]">
+            They do not agree now either. Of the{" "}
+            <span className="tnum">{contested.rated_by_two.toLocaleString()}</span> titles that
+            two or more of them have scored,{" "}
+            <span className="tnum">{contested.differ.toLocaleString()}</span> print a different
+            number depending on which one you ask. Every title page says which.
+          </p>
+        )}
+      </section>
+
       {/* THE MARGIN. At 1440 this section ran a 470px column of prose with nine
           hundred pixels of empty paper beside it, and the three notes that
           qualify the digest - what it is, that its figures are point-in-time,
@@ -204,35 +264,6 @@ async function Home() {
               </p>
             )}
 
-            {/* WHAT THE PIPELINE ACTUALLY DOES, SAID ON THE PAGE PEOPLE LAND ON.
-                Every title keeps a per-source history - a score moving 8.2 to
-                8.1 per AniList, a premiere sliding a day per MyAnimeList - and
-                until now the only way to find out was to open a title and
-                scroll, or to already know /changes was in the nav. It is the one
-                thing here no other anime site has, and it was invisible.
-
-                Counted from the feed, never written down: a number in the copy
-                is wrong within a week, which is the mistake the provenance line
-                exists to end. */}
-            {changed && (
-              <p className="meta mt-5 max-w-[46ch] !leading-[1.6]">
-                <Link
-                  href="/changes"
-                  className="underline decoration-rule underline-offset-4 transition-colors hover:text-flag"
-                >
-                  The sources changed their minds{" "}
-                  <span className="tnum">{changed.total}</span> times this week
-                </Link>
-                {": "}
-                {changed.kinds.map((kind, i) => (
-                  <span key={kind.label}>
-                    {i > 0 && (i === changed.kinds.length - 1 ? " and " : ", ")}
-                    <span className="tnum">{kind.count}</span> {kind.label}
-                  </span>
-                ))}
-                , each with the source that reported it
-              </p>
-            )}
           </aside>
         </div>
       </section>

@@ -220,6 +220,10 @@ export type CatalogueSummary = {
   total: number;
   sources: string[];
   seasons: { season: string; season_year: number; count: number; upcoming?: boolean }[];
+  /** How often two sources that both scored a title print different numbers.
+   *  Absent on a warehouse built before this existed, or one carrying a single
+   *  source, which is a state rather than a fault. */
+  contested?: { rated_by_two: number; differ: number } | null;
 };
 
 /** The catalogue's shape - its seasons, sources and size - without its titles.

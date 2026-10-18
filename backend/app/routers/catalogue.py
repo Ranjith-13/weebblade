@@ -4,7 +4,7 @@ import duckdb
 from fastapi import APIRouter, Depends
 
 from ..db import get_db, run_query
-from ..schemas import CatalogueSummary
+from ..schemas import CatalogueSummary, Contested
 from ..seasons import QUARTER, SEASON_START
 
 router = APIRouter(prefix="/catalogue", tags=["catalogue"])
@@ -46,4 +46,61 @@ def catalogue(con: duckdb.DuckDBPyConnection = Depends(get_db)) -> CatalogueSumm
         "WHERE season IS NOT NULL AND season_year IS NOT NULL "
         f"GROUP BY season, season_year ORDER BY season_year DESC, {QUARTER} DESC NULLS LAST, season",
     )
-    return CatalogueSummary(total=total, sources=_sources(con), seasons=seasons)
+    return CatalogueSummary(
+        total=total, sources=_sources(con), seasons=seasons, contested=_contested(con)
+    )
+
+
+_CONTESTED = """
+WITH raw AS (
+  SELECT i.wb_id AS wb_id, x.src AS src, x.average_score AS a, x.user_count AS u
+  FROM (%s) x
+  JOIN anime_identity i ON i.source_key = x.src || ':' || CAST(x.source_id AS VARCHAR)
+), per AS (
+  SELECT wb_id, src, a FROM raw
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY wb_id, src ORDER BY u DESC NULLS LAST) = 1
+), spread AS (
+  SELECT wb_id, ROUND(MAX(a) / 10, 1) - ROUND(MIN(a) / 10, 1) AS sp
+  FROM per GROUP BY 1 HAVING COUNT(*) >= 2
+)
+SELECT COUNT(*) AS rated_by_two, COUNT(*) FILTER (WHERE sp >= 0.2) AS differ FROM spread
+"""
+
+_SOURCE_VIEWS = {"kitsu": "anime_media_kitsu", "mal": "anime_media_mal",
+                 "anilist": "anime_media_anilist"}
+
+
+def _contested(con: duckdb.DuckDBPyConnection) -> Contested | None:
+    """How often two sources that both scored a title print different numbers.
+
+    Read from the per-source views rather than anime_media, which is
+    CONSOLIDATED - one winning row per title per run - so measuring it there
+    finds only titles whose winner changed between runs and reports 80%
+    agreement about nothing.
+
+    One reading per source, the most-voted, because these views are SELECT *
+    over a glob of dated files whose date is in the FILENAME and not a column:
+    there is no run_date to order by, and vote counts only accumulate.
+
+    12 ms warm over 40 seasons, against a response the frontend caches for an
+    hour, so it is paid about once a visit rather than once a page.
+    """
+    present = {
+        r[0] for r in con.execute(
+            "SELECT table_name FROM duckdb_tables() UNION SELECT view_name FROM duckdb_views()"
+        ).fetchall()
+    }
+    usable = [(s, v) for s, v in _SOURCE_VIEWS.items() if v in present]
+    if len(usable) < 2:
+        return None  # nothing can disagree with itself
+
+    union = " UNION ALL ".join(
+        f"SELECT '{source}' AS src, source_id, average_score, user_count "
+        f"FROM {view} WHERE average_score IS NOT NULL"
+        for source, view in usable
+    )
+    try:
+        row = con.execute(_CONTESTED % union).fetchone()
+    except duckdb.Error:
+        return None
+    return Contested(rated_by_two=row[0], differ=row[1]) if row and row[0] else None

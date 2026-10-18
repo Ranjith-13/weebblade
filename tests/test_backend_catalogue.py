@@ -117,3 +117,77 @@ def test_a_season_the_sources_list_but_that_has_not_started_says_so(catalogue_fo
     seasons = {(s["season"], s["season_year"]): s["upcoming"] for s in client.get("/catalogue").json()["seasons"]}
 
     assert seasons == {("WINTER", 2099): True, ("SUMMER", 2026): False}
+
+
+# --- how often the sources disagree about a score ------------------------
+
+
+def _two_sources(con, kitsu, mal):
+    """A warehouse with one title both sources have scored. Each row is
+    (source_id, average_score, user_count)."""
+    con.execute("CREATE TABLE anime_identity AS SELECT 'kitsu:1' AS source_key, 'wb_x' AS wb_id "
+                "UNION ALL SELECT 'mal:2', 'wb_x'")
+    for name, rows in (("anime_media_kitsu", kitsu), ("anime_media_mal", mal)):
+        con.execute(f"CREATE TABLE {name} (source_id VARCHAR, average_score DOUBLE, user_count BIGINT)")
+        for r in rows:
+            con.execute(f"INSERT INTO {name} VALUES (?, ?, ?)", list(r))
+
+
+def test_disagreement_is_counted_at_the_precision_the_site_prints():
+    """84.0 against 87.0 is 8.4 against 8.7, which a reader can see. Anything
+    under 0.2 out of ten is two crowds of a different size landing in the same
+    place."""
+    import duckdb
+    from backend.app.routers.catalogue import _contested
+
+    con = duckdb.connect()
+    _two_sources(con, kitsu=[("1", 84.0, 1_447)], mal=[("2", 87.0, 204_162)])
+
+    got = _contested(con)
+
+    assert (got.rated_by_two, got.differ) == (1, 1)
+    con.close()
+
+
+def test_sources_that_agree_are_counted_but_not_as_differing():
+    import duckdb
+    from backend.app.routers.catalogue import _contested
+
+    con = duckdb.connect()
+    _two_sources(con, kitsu=[("1", 84.0, 1_000)], mal=[("2", 84.0, 90_000)])
+
+    got = _contested(con)
+
+    assert (got.rated_by_two, got.differ) == (1, 0)
+    con.close()
+
+
+def test_only_the_most_voted_reading_of_each_source_counts():
+    """These views hold every dated snapshot and carry no run_date - the date is
+    in the filename - so without a rule a title compares against its own past.
+    Kitsu's older 82.0 must lose to its newer 84.0, leaving no visible gap
+    against MyAnimeList's 84.0."""
+    import duckdb
+    from backend.app.routers.catalogue import _contested
+
+    con = duckdb.connect()
+    _two_sources(con, kitsu=[("1", 82.0, 1_300), ("1", 84.0, 1_447)], mal=[("2", 84.0, 90_000)])
+
+    got = _contested(con)
+
+    assert (got.rated_by_two, got.differ) == (1, 0)
+    con.close()
+
+
+def test_a_single_source_catalogue_reports_nothing_rather_than_zero():
+    """Nothing can disagree with itself, and "0 of 0 differ" would read as
+    agreement that was never tested."""
+    import duckdb
+    from backend.app.routers.catalogue import _contested
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE anime_identity AS SELECT 'kitsu:1' AS source_key, 'wb_x' AS wb_id")
+    con.execute("CREATE TABLE anime_media_kitsu AS SELECT '1' AS source_id, 84.0 AS average_score, 9 AS user_count")
+
+    assert _contested(con) is None
+    con.close()

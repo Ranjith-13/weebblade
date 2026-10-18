@@ -256,6 +256,26 @@ class CatalogueSummary(BaseModel):
     sources: list[str]
     # Newest first: by year, then the broadcast quarter, not the alphabet.
     seasons: list[SeasonCount]
+    # How often the sources actually agree about a score. Null on a warehouse
+    # built before this was added, or one carrying a single source, which is a
+    # state rather than a fault: a catalogue nothing can disagree in.
+    contested: Contested | None = None
+
+
+class Contested(BaseModel):
+    """How much the sources differ about the scores they both hold.
+
+    The catalogue's most distinctive fact and the one it never stated. A score
+    on a page is the merge winner's, and of the titles two or more sources have
+    rated, 79% print a different number depending on who is asked - measured
+    at the one decimal the site shows, so this counts disagreements a reader
+    could actually see rather than arithmetic noise.
+    """
+
+    # Titles at least two sources have scored; the denominator.
+    rated_by_two: int
+    # Of those, how many differ by 0.2 or more out of ten.
+    differ: int
 
 
 class ScheduledEpisode(BaseModel):
