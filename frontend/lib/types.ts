@@ -927,6 +927,54 @@ export function dayKeyLabel(key: string): { weekday: string; date: string } {
   };
 }
 
+/** How often the sources have revised this score, or null where they have not.
+ *
+ *  WHY THIS IS NOT COMPUTED FROM score_history, which is right there and would
+ *  be easier. Those points carry a run_date and a score and no vote count, so a
+ *  pair reading the same value twice is indistinguishable between "asked again,
+ *  unchanged" and "carried forward untouched" - and most rows in most runs are
+ *  carried forward. Counting them is exactly the mistake /scores was built
+ *  after making: it produced a clean, wrong table measuring the refetch
+ *  schedule. A change entry exists only where a source reported something
+ *  different, so counting those cannot invent a revision.
+ *
+ *  ATTRIBUTED, because an unattributed figure here contradicts the number above
+ *  it. Dragon Ball Super shows 8.3 while its newest score change reads 8.0 to
+ *  8.1: the first is the merged winner, the second is what AniList did to its
+ *  own. Printed bare that is the site disagreeing with itself; with the source
+ *  named it is provenance, which is the thing this project is for.
+ *
+ *  Says nothing when nothing moved, and that silence is load-bearing. The
+ *  weekly run refetches only the current season, so an older title has been
+ *  asked once: no change entries means "never re-asked", not "settled", and
+ *  only 498 of 7,229 scored titles have any history at all. Among titles
+ *  currently airing it is 66 of 76, which is where a reader is deciding.
+ *
+ *  What it cannot say is that a score HAS settled - that needs the vote count
+ *  to tell a re-ask from a copy, which the detail response does not carry. The
+ *  half that works is the actionable half: this number is still moving. */
+export function scoreRevisions(changes: Change[] | null | undefined): string | null {
+  const moves = (changes ?? []).filter((c) => c.field === "score" && c.old != null);
+  if (moves.length === 0) return null;
+
+  // changes arrive newest first (processing/changes.py), so the oldest entry's
+  // `since` is when the sources were last agreed, and the newest is the latest
+  // word on it.
+  const newest = moves[0];
+  const oldest = moves[moves.length - 1];
+  const from = oldest.since ?? oldest.run_date;
+  const COUNT: Record<number, string> = { 1: "once", 2: "twice", 3: "three times" };
+  const times = COUNT[moves.length] ?? `${moves.length} times`;
+  const who = joinSources(newest.sources ?? []);
+
+  // A non-breaking space inside the date: balanced across two lines in a 15rem
+  // rail this otherwise broke as "11 / October", and a date split over a line
+  // end reads as two facts. U+00A0 only - the narrow no-break space the digest
+  // normaliser strips is a different character and is not wanted here.
+  const when = calendarDate(from).replace(" ", "\u00a0");
+  return `Revised ${times} since ${when}, last by ${who}`;
+}
+
 /** "14 September", for a YYYY-MM-DD date. */
 export function calendarDate(key: string): string {
   const d = new Date(`${key}T00:00:00Z`);

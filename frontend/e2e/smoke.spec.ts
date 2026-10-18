@@ -542,6 +542,51 @@ test("the season index contains its own scroll", async ({ page }) => {
   ).toBe("contain");
 });
 
+/* THE SCORE SAYS WHETHER IT HAS STOPPED MOVING, and says who moved it.
+ *
+ * The number itself is a commodity - three other sites print it. What this one
+ * can say is that its sources revised it twice last week, measured against
+ * 30.9% of re-asked readings of an airing season changing against 0.8% of a
+ * finished one.
+ *
+ * ATTRIBUTION IS THE ASSERTION. The figure in this line is one source's while
+ * the score above it is the merged winner, and the two legitimately differ -
+ * Dragon Ball Super shows 8.3 beside a newest change of 8.0 to 8.1. Unattributed
+ * that is the site contradicting itself on one screen, so a line without a
+ * source name is a bug rather than a cosmetic miss.
+ *
+ * Asserted as an invariant over whatever titles the season holds, never against
+ * a named one: which shows are airing changes every week. */
+test("a score that moved says so, and names who moved it", async ({ page }) => {
+  await page.goto("/browse");
+  const hrefs = await page.evaluate(() =>
+    [...document.querySelectorAll('a[href^="/anime/"]')]
+      .map((a) => a.getAttribute("href")!)
+      .slice(0, 6),
+  );
+  expect(hrefs.length, "titles to open").toBeGreaterThan(0);
+
+  const SOURCES = ["Kitsu", "MyAnimeList", "AniList"];
+  let seen = 0;
+  for (const href of hrefs) {
+    await page.goto(href);
+    await page.waitForLoadState("networkidle");
+    const line = await page.evaluate(() => {
+      const el = [...document.querySelectorAll("p")].find((e) =>
+        (e.textContent ?? "").trim().startsWith("Revised "),
+      );
+      return el?.textContent?.trim() ?? null;
+    });
+    if (!line) continue; // nothing re-asked yet, which is a real state
+    seen += 1;
+    expect(line, `"${line}" names the source that revised it`).toMatch(
+      new RegExp(SOURCES.join("|")),
+    );
+    expect(line, `"${line}" says when`).toMatch(/since \d/);
+  }
+  test.skip(seen === 0, "no title in this season has a recorded score revision");
+});
+
 /* A FINISHED SEASON SAYS ITS NUMBERS ARE FROZEN. The weekly run refetches the
    current season and the next one; everything older holds whatever its sources
    said the day it was captured, and a 2017 score will not move again. True

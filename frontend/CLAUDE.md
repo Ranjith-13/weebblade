@@ -552,6 +552,29 @@ this fix cleared the window while hanging into the gutter, and only the column c
 Layout shift 0 at 1440x1000 and 390x844, cold and
 warm, on a production build (2026-09-21), with /schedule measured alongside as a control.
 
+**A title page says whether its score has stopped moving** (`scoreRevisions` in `lib/types.ts`,
+under the arc in the score rail): *"Revised twice since 11 October, last by Kitsu"*. The number
+itself is a commodity - three other sites print it - and what this one can add is how much it is
+worth yet: the printed score of a season still on air changes on 30.9% of re-asked readings
+against 0.8% of one already over.
+
+**Counted from `changes`, never from `score_history`.** Those points carry a run_date and a score
+and no vote count, so a pair reading the same value twice cannot be told apart from a row carried
+forward - and most rows in most runs are carried forward. Counting them is the mistake `/scores`
+exists because of. A change entry is written only where a source reported something different, so
+it cannot invent a revision.
+
+**It names the source, and that is correctness rather than courtesy.** The figure quoted is one
+source's while the score above is the merged winner, and they legitimately differ: Dragon Ball
+Super shows 8.3 beside a newest change of 8.0 to 8.1. Unattributed, that is the site contradicting
+itself on one screen. The smoke suite asserts the line always carries a source name.
+
+**Silence means never re-asked, not settled.** The weekly run refetches only the current season, so
+an older title was asked once: 498 of 7,229 scored titles have any history at all, but 66 of the 76
+airing TV titles do, which is where a reader is deciding. Saying "unchanged" about a 2017 title
+would be the clean, wrong claim. What this cannot say is that a score HAS settled - that needs the
+vote count to tell a re-ask from a copy, which the detail response does not carry.
+
 ## How a score settles
 
 `/scores` is the only page here that reads the warehouse **down the dates** rather than across

@@ -24,6 +24,7 @@ import {
   changeSentence,
   joinSources,
   jstAirdate,
+  scoreRevisions,
   scriptLang,
   secondaryTitle,
   sourceMaterialLabel,
@@ -155,6 +156,7 @@ async function AnimeDetail({
   const secondary = secondaryTitle(anime);
   const known = isKnown(anime);
   const arc = scoreArc(anime.score_history);
+  const revisions = scoreRevisions(anime.changes);
 
   /* Every link out of this page stays in the title's own season. They used to
      drop it, and /browse without a season is the newest one - so on any title
@@ -413,6 +415,26 @@ async function AnimeDetail({
                     {arc}
                   </Link>
                 </p>
+              )}
+
+              {/* WHETHER THE NUMBER ABOVE HAS STOPPED MOVING, which is the one
+                  thing a reader cannot get anywhere else and the arc does not
+                  say. "down from 8.7 since 4 October" is a direction; it does
+                  not tell you the sources revised it twice last week and may
+                  again. Measured over this catalogue, the printed score of a
+                  season still on air changes on 30.9% of re-asked readings
+                  against 0.8% of one already over, so on an airing title this
+                  is the difference between a number and a number worth acting
+                  on.
+
+                  Attributed, and that is not politeness: the figure quoted here
+                  is one source's, while the score above is the merged winner,
+                  and the two legitimately differ. See scoreRevisions. */}
+              {revisions && (
+                /* text-balance because this wraps to two lines in a 15rem rail
+                   and left "Kitsu" alone on the second, which is a widow on a
+                   page that balances its h1 for the same reason. */
+                <p className="meta mt-1 text-right text-balance">{revisions}</p>
               )}
             </>
           ) : (
