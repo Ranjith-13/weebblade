@@ -22,11 +22,11 @@ def test_build_prompt_includes_all_sections():
     prompt = build_prompt(stats)
 
     assert "Demon Slayer" in prompt
-    assert "84.0/100" in prompt
+    assert "8.4 out of 10" in prompt, "the scale a reader sees, not the one it is stored at"
     assert "Action, Fantasy" in prompt
     assert "Action: 12 titles" in prompt
     assert "TV: 20 titles" in prompt
-    assert "SUMMER 2026: 140 titles, average score 68.5" in prompt
+    assert "SUMMER 2026: 140 titles, average score 6.8 out of 10" in prompt
 
 
 def test_build_prompt_handles_missing_titles_and_genres():
@@ -157,3 +157,69 @@ def test_a_tenth_either_way_is_counted_not_named():
     assert "- 2 score moves under 0.3 out of 10, not listed" in prompt
     assert "- Big Mover: score 6.8 to 7.4 out of 10" in prompt
     assert "- Newly Scored: score none to 7.1 out of 10" in prompt
+
+
+# --- the scale the digest quotes ----------------------------------------
+#
+# Scores are stored out of 100 and shown out of 10 everywhere a reader can see
+# one. The prompt handed the model "83.63/100" and the model used what it was
+# given, so the digest printed "an 83.63 rating" on a page whose every other
+# element said 8.4 - and after the home page was reordered on 2026-10-18 the
+# two sat a paragraph apart.
+
+
+def _stats(score_100, avg=None):
+    return {
+        "top_rated": [{"title_english": "A Show", "title_romaji": None, "score_100": score_100,
+                       "genres": ["Action"], "source": "kitsu"}],
+        "genre_counts": [{"genre": "Action", "title_count": 1}],
+        "format_counts": [{"format": "TV", "title_count": 1}],
+        "season_summary": [{"season": "FALL", "season_year": 2026, "title_count": 1,
+                            "avg_score": avg if avg is not None else score_100}],
+        "total_titles": 1,
+    }
+
+
+def test_the_prompt_never_shows_the_storage_scale():
+    prompt = build_prompt(_stats(83.63))
+
+    assert "83.63" not in prompt, "two decimals of precision the product never prints"
+    assert "/100" not in prompt
+    assert "8.4 out of 10" in prompt
+
+
+def test_the_season_table_uses_the_same_scale_as_the_titles():
+    """Both were /100 while score CHANGES a few lines above were already out of
+    ten, so one prompt could carry both scales and one paragraph could quote
+    both."""
+    prompt = build_prompt(_stats(84.0, avg=72.5))
+
+    assert "average score 7.3 out of 10" in prompt
+    assert "72.5" not in prompt
+
+
+def test_the_model_is_told_the_scale_as_well_as_given_it():
+    """Belt and braces: a model handed 8.4 can still write 84% or 8.36 if it
+    decides to be helpful, and the digest sits directly beneath the site's own
+    numbers."""
+    from ai.digest.prompt import SYSTEM_INSTRUCTION
+
+    assert "out of 10 to one decimal" in SYSTEM_INSTRUCTION
+    assert "percentage" in SYSTEM_INSTRUCTION
+
+
+def test_the_rounding_matches_the_site_rather_than_python():
+    """scoreOutOfTen is (score100 / 10).toFixed(1). Python's round() rounds
+    halves to even, so 72.5 gives 7.2 where the site shows 7.3 - fixing the
+    scale and leaving the rounding would have put the digest 0.1 from the page
+    on every exact tie. Values checked against node."""
+    from ai.digest.prompt import _out_of_ten
+
+    assert _out_of_ten(72.5) == "7.3", "round() would say 7.2"
+    # And NOT decimal-string rounding: 83.5 / 10 is 8.34999999999999964, which
+    # is what toFixed sees, so both answer 8.3 where Decimal("8.35") says 8.4.
+    assert _out_of_ten(83.5) == "8.3"
+    assert [_out_of_ten(v) for v in (86.5, 83.63, 84.0, 68.5, 79.95)] == [
+        "8.7", "8.4", "8.4", "6.8", "8.0"
+    ]
+    assert _out_of_ten(None) is None

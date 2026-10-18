@@ -121,6 +121,19 @@ nothing. Any em-dash in JSX text, a string or a template under `app/`, `componen
 lint error. The one legitimate use, the null marker in tabular data, is `NULL_MARKER` from
 `lib/types.ts`. Comments are not matched. The en-dash in `A–Z` is a range and is fine.
 
+**The digest quotes scores at the scale the site prints**, which it did not until 2026-10-18.
+`ai/digest/prompt.py` handed the model `83.63/100` straight out of the warehouse, so the prose
+said "an 83.63 rating" on a page whose every other element said 8.4: two numbers for one thing,
+and two decimal places this product uses nowhere. The prompt was inconsistent with itself as
+well, since score *changes* were already described "out of 10" a few lines above.
+
+`_out_of_ten()` matches `scoreOutOfTen` exactly, and that is finer than it looks. The site is
+`(score100 / 10).toFixed(1)`; Python's `round()` rounds halves to even and gives 7.2 where the
+site shows 7.3. It quantizes the **float** rather than its string, because `83.5 / 10` is
+8.34999999999999964 and `toFixed` sees that too, so both answer 8.3 where `Decimal("8.35")`
+would answer 8.4. Checked against node for seven values. The model is also told the rule, since
+one handed 8.4 can still decide to write 84% or 8.36.
+
 **The digest is repunctuated on the way out of `lib/api.ts`** (`plainPunctuation`), because it is
 the one block of prose here nobody wrote and the home page prints its lead. Punctuation only, never
 words. The e2e suite asserts the rendered `.digest-prose` carries no em-dash, non-breaking hyphen

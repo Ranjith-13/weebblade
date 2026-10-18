@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 SYSTEM_INSTRUCTION = (
@@ -7,7 +8,12 @@ SYSTEM_INSTRUCTION = (
     "trend-tracking site. Use only the data given below - don't invent titles, scores, "
     "studios, or facts not present here. Write 3-5 short paragraphs in a casual but "
     "informative tone, covering standout/highly-rated titles this season, genre trends, "
-    "and anything notable about format breakdown. Plain prose, no markdown headers."
+    "and anything notable about format breakdown. Plain prose, no markdown headers. "
+    # Said as well as fixed. The figures below are now all out of ten, but a
+    # model handed 8.4 can still write "84%" or "8.36" if it decides to be
+    # precise, and the digest sits directly beneath the site's own numbers.
+    "Quote every score exactly as given, out of 10 to one decimal, like 8.4. "
+    "Never rescale one, add a decimal place to one, or turn one into a percentage."
 )
 
 # Only when there is a changes section. The model is told what the lines are
@@ -26,6 +32,38 @@ _PER_KIND = 12
 # The smallest score move a digest names, in tenths of a point out of 10 - in
 # whole tenths because 7.3 - 7.0 is 0.2999... in floating point.
 _SCORE_NEWS_TENTHS = 3
+
+
+def _out_of_ten(score_100: float | None) -> str | None:
+    """A stored score as the site prints it: out of ten, one decimal.
+
+    THE PROMPT WAS HANDING THE MODEL THE STORAGE SCALE. Scores are stored out of
+    100 and displayed out of 10 everywhere a reader can see one
+    (frontend/lib/types.scoreOutOfTen), and the top-rated list here passed
+    "83.63/100" straight through. The model used what it was given, so the
+    digest printed "an 83.63 rating" on a page whose every other element said
+    8.4 - two numbers for one thing on one screen, and two decimal places of
+    precision this product does not use anywhere.
+
+    The prompt was also inconsistent with itself: score CHANGES were already
+    described "out of 10" a few lines above, so the same paragraph could carry
+    both scales.
+
+    MATCHES scoreOutOfTen EXACTLY, which is the whole point of a shared scale.
+    That function is `(score100 / 10).toFixed(1)`, and Python's round() is not
+    the same operation: it rounds halves to even, so 72.5 became 7.2 where the
+    site shows 7.3. Fixing the scale while leaving the rounding would have put
+    the digest 0.1 away from the page on every exact tie, which is the same
+    "two numbers for one thing" defect in a quieter form.
+
+    Decimal over the FLOAT rather than over its string: 83.5 / 10 is not 8.35
+    but 8.34999999999999964, and toFixed sees that too, so both answer 8.3.
+    Quantizing Decimal("8.35") instead would answer 8.4 and disagree. Checked
+    against node for 72.5, 83.5, 86.5, 83.63, 84.0, 68.5 and 79.95.
+    """
+    if score_100 is None:
+        return None
+    return str(Decimal(float(score_100) / 10).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
 
 
 def _move(c: dict[str, Any]) -> int:
@@ -108,7 +146,8 @@ def build_prompt(stats: dict[str, list[dict[str, Any]]], changes: list[dict[str,
         title = row["title_english"] or row["title_romaji"] or "Untitled"
         genres = ", ".join(row["genres"]) if row["genres"] else "unlisted genres"
         lines.append(
-            f"- {title}: {row['score_100']}/100, genres: {genres} (source: {row['source']})"
+            f"- {title}: {_out_of_ten(row['score_100'])} out of 10, "
+            f"genres: {genres} (source: {row['source']})"
         )
 
     genres_heading = (
@@ -129,7 +168,7 @@ def build_prompt(stats: dict[str, list[dict[str, Any]]], changes: list[dict[str,
     for row in stats["season_summary"]:
         lines.append(
             f"- {row['season']} {row['season_year']}: {row['title_count']} titles, "
-            f"average score {row['avg_score']}"
+            f"average score {_out_of_ten(row['avg_score'])} out of 10"
         )
 
     if changes:
