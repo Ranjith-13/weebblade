@@ -469,6 +469,17 @@ does. Two places use it:
   sources, the Status fact says "Finished, per AniList", naming the source, because every other
   field still comes from the ones that disagree. The first check hid 34 slots, Yu-Gi-Oh! Go
   Rush!! (finished March 2025) among them; 80 of the 1,100 remain.
+- **A title page also lists what has already aired**, from `aired_episodes`. That is a
+  *different read* from the countdown above it: `anime_airing` holds only the current fetch,
+  so an episode left the site the morning after it went out and a show seven episodes into a
+  twelve episode season could say when episode eight was due and nothing whatever about the
+  seven anyone had watched. `anime_airing_history` globs the dated files instead - they were
+  always being written and kept, and nothing read them. 1,198 episodes against the current
+  fetch's 719, and **544 already aired against 67** (2026-10-19). An episode is listed once,
+  **as the schedule last had it**: a broadcast that slips is corrected at the next daily check
+  and 87 of the first month's episodes were rescheduled, so keeping the earliest reading would
+  archive the schedule as announced rather than as it happened. Shown whether or not the title
+  is still airing, because a finale's date is a fact about a finished show too.
 - **`/schedule`** is the next seven days of `GET /schedule`, one column per day in Japan. Each row
   is the time in Tokyo with its countdown under it, then the title, episode, format and the
   reader's own time. Shows the catalogue does not hold (One Piece, Detective Conan, long-runners
@@ -623,6 +634,49 @@ is balanced both ways (122 up / 113 down while airing), so there is no decay sto
   throwing took the whole production build down the first time this page was added.
 - It is reached from the score arc on a title page and from `/changes`, **not from the nav**: the
   five sections already fill the nav's width budget at 390 (see above).
+
+## What a week did to a score
+
+`components/ScoreDaily.tsx`, from `GET /scores/daily/{wb_id}`, under the airdates on a title
+page. **The dense half of `/scores`**: everything else here reads a weekly snapshot, so a score
+that moves on Tuesday and again on Friday is one move and a score that moves and moves back is
+none. The daily AniList status check already asks about exactly the titles the catalogue calls
+airing, so these readings cost no new fetch and were being written and kept with nothing
+reading them.
+
+**An endpoint, not a field on the title, which is the opposite call from `score_history`.**
+That series was attached because it is small and already in hand; this one reads a dated glob
+that gains a file every morning, so attaching it would make all 11,992 title pages pay a
+growing scan for an answer only the ~199 airing ones have. The page asks for it only where
+`isAiring()` is true, in its own Suspense boundary with the footer guard.
+
+**The unit is a re-ask, the same as `/scores`.** The check writes a row every morning whether
+or not anything moved, so a pair counts only where the vote count moved. "Asked five times"
+would be a statement about the pipeline's schedule.
+
+**And a printed move is mostly arithmetic, which is what this block had to be designed
+around.** A score stored out of 100 and shown out of 10 flips on the single vote that crosses
+.05. Of the nine printed moves in the first day of readings (2026-10-17, 199 titles), one rode
+**521** new votes and one rode **two**. Printing those the same way reports rounding as news,
+which is exactly what `/scores` exists to avoid doing with snapshots. So a move is only called
+one above `VOTES_WORTH_CALLING_A_MOVE` (20) new votes, the weight is printed beside it, and the
+rest are counted off as a rounding boundary being crossed.
+
+**It names AniList, and that is correctness rather than courtesy** - the same rule the
+revisions line in the rail follows. The score above the block is the merged winner of three
+sources and these readings are one source's, so they legitimately differ: on the title this was
+built against the rail printed 7.5 from MyAnimeList while these said 6.9. Unattributed, that is
+the site contradicting itself on one screen. The caption also says the readings are daily while
+the score above is the weekly published figure, so it can run a few days ahead of it.
+
+**Nothing is shown where there is nothing to say**: under two readings there is no pair, a
+title with no re-ask had only copies, a finished show is never asked about, and a warehouse
+published before the score columns existed has none. All four render nothing rather than a flat
+line, which is the rule `/scores` follows for a season nobody re-asked.
+
+**The series cannot be backfilled.** `score_100` entered the status schema on 2026-10-16, so it
+starts there and grows a day at a time; the airdate archive, by contrast, was recoverable in
+full because the files were always kept.
 
 ## Long pages say what is on them
 

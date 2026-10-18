@@ -100,6 +100,11 @@ export type Anime = {
    *  a single title carries them (GET /anime/{wb_id}); lists leave it empty.
    *  Several rather than one so a cached copy can skip those that have aired. */
   upcoming_episodes: AiringEpisode[];
+  /** The episodes that have already aired, newest first, from the archive of
+   *  every schedule fetched rather than the current one. Before it existed an
+   *  episode left the site the morning after it aired, so a show mid-season
+   *  could say when the next one was due and nothing about any that had been. */
+  aired_episodes: AiringEpisode[];
   /** `status` is checked against AniList in the warehouse: where the sources
    *  call a title airing and AniList's daily check says it has finished or not
    *  yet aired, `status` says so. `merged_status` is what the sources said.
@@ -711,6 +716,61 @@ export type ScoreSettling = {
   bands: SettlingBand[];
   arrival: { season: string; season_year: number; points: ArrivalPoint[] } | null;
 };
+
+/** Mirrors backend/app/schemas.py:DailyScorePoint. */
+export type DailyScorePoint = {
+  fetched_on: string;
+  score_100: number;
+  user_count: number | null;
+};
+
+/** Mirrors backend/app/schemas.py:PrintedMove.
+ *
+ *  `votes_gained` is the field that keeps this printable. A score stored out of
+ *  100 and shown out of 10 crosses a rounding boundary on a single vote, so two
+ *  readings a day apart can both be real and only one be news: on 2026-10-17
+ *  one title moved 6.8 to 6.9 on two new votes while another moved 6.9 to 7.0
+ *  on 521. Never print a move without the weight behind it. */
+export type PrintedMove = {
+  on: string;
+  was: number;
+  now: number;
+  votes_gained: number | null;
+};
+
+/** Mirrors backend/app/schemas.py:DailyScores - a title's score as asked every
+ *  morning, oldest first. Only airing titles have readings. */
+export type DailyScores = {
+  wb_id: string;
+  points: DailyScorePoint[];
+  /** Pairs of consecutive readings where the vote count moved. The unit; a
+   *  reading that returns the same vote count cannot be told from a copy. */
+  reasks: number;
+  moves: PrintedMove[];
+  votes_gained: number | null;
+};
+
+/** How few new votes make a printed move arithmetic rather than news.
+ *
+ *  A score out of 100 shown out of 10 flips on the vote that crosses .05, so
+ *  the question is never "did the number change" but "did enough people
+ *  change it". Measured over the first day of daily readings (2026-10-17, 199
+ *  titles): of nine printed moves, four rode fewer than twenty new votes and
+ *  one rode two. Those four are a rounding boundary being crossed and the
+ *  page says so rather than reporting them as opinion shifting.
+ *
+ *  Twenty rather than a rounder hundred because this is a floor on arithmetic,
+ *  not a judgement about significance: at 20 votes against a base of several
+ *  hundred the average itself can genuinely have moved a point. */
+export const VOTES_WORTH_CALLING_A_MOVE = 20;
+
+/** The printed moves big enough to be about opinion rather than rounding. */
+export function realMoves(daily: DailyScores | null): PrintedMove[] {
+  if (!daily) return [];
+  return daily.moves.filter(
+    (m) => m.votes_gained !== null && m.votes_gained >= VOTES_WORTH_CALLING_A_MOVE,
+  );
+}
 
 /** What a phase is called on the page. The data's own words are for the data. */
 export const PHASE_LABEL: Record<SeasonPhase, string> = {

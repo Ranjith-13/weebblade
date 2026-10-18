@@ -134,6 +134,11 @@ class Anime(BaseModel):
     # on a single title only (GET /anime/{wb_id}); empty in lists. Several, not
     # one, so a client holding a cached copy can skip the ones that have aired.
     upcoming_episodes: list[AiringEpisode] = []
+    # The episodes that have already aired, newest first, from the archive of
+    # every schedule fetched rather than from the current one - which holds the
+    # coming weeks only, so an episode vanished the morning after it aired.
+    # Capped at the recent few; see schedule.aired_episodes.
+    aired_episodes: list[AiringEpisode] = []
     # What its sources have said differently from one fetch to the next, newest
     # first. Filled on a single title only; empty in lists.
     changes: list[Change] = []
@@ -371,6 +376,55 @@ class SettlingBand(BaseModel):
     median_change: float
     up: int
     down: int
+
+
+class DailyScorePoint(BaseModel):
+    """One morning's reading of a title's score and vote count."""
+
+    fetched_on: str
+    score_100: float
+    user_count: int | None = None
+
+
+class PrintedMove(BaseModel):
+    """A pair of readings where the score the SITE shows changed.
+
+    `votes_gained` is what keeps this honest. A score stored out of 100 and
+    printed out of 10 crosses a rounding boundary on a single vote: measured on
+    2026-10-17, Xian Ni went 6.8 to 6.9 on two new votes while Toaru Anbu no
+    ITEM went 6.9 to 7.0 on 521. Those are not the same event and a page that
+    prints them identically is reporting arithmetic as news - the mistake
+    /scores exists to avoid. So the votes behind a move travel with it.
+    """
+
+    on: str
+    was: float
+    now: float
+    votes_gained: int | None = None
+
+
+class DailyScores(BaseModel):
+    """A title's score as asked every morning, oldest first.
+
+    THE DENSE HALF OF /scores. The weekly run records a score that moved twice
+    in a week as one move; this is the same series at a day's resolution, and
+    it costs no new fetch because the daily AniList status check already asks
+    about exactly the airing titles.
+
+    Only airing titles have readings at all - 199 of 11,992 on 2026-10-19 -
+    because those are the ones the check asks about. An empty series on a
+    finished title is a correct answer, not a gap.
+    """
+
+    wb_id: str
+    points: list[DailyScorePoint] = []
+    # Pairs of consecutive readings where the vote count moved. The unit, for
+    # the reason set out at length above backend/app/routers/scores._REASKS: a
+    # reading that returns an identical vote count cannot be told from a copy.
+    reasks: int = 0
+    # Of those, the ones that changed the score this site prints.
+    moves: list[PrintedMove] = []
+    votes_gained: int | None = None
 
 
 class ArrivalPoint(BaseModel):

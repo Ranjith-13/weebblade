@@ -15,7 +15,7 @@ from ..schemas import (
     SimilarTitles,
 )
 from .changes import title_changes
-from .schedule import upcoming_episodes
+from .schedule import aired_episodes, upcoming_episodes
 
 router = APIRouter(prefix="/anime", tags=["anime"])
 
@@ -153,11 +153,13 @@ def get_anime_by_identity(
 
 
 def _with_airing(con: duckdb.DuckDBPyConnection, row: dict) -> Anime:
-    """One title, with its next episodes from AniList's schedule, what its
-    sources have changed about it, and what its score has done over time."""
+    """One title, with the episodes either side of now from AniList's schedule,
+    what its sources have changed about it, and what its score has done over
+    time."""
     title = Anime(**row)
     if title.wb_id:
         title.upcoming_episodes = upcoming_episodes(con, title.wb_id)
+        title.aired_episodes = aired_episodes(con, title.wb_id)
         title.changes = title_changes(con, title.wb_id)
         title.score_history = _score_history(con, title.wb_id)
         title.source_scores = _source_scores(con, title.wb_id)

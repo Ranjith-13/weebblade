@@ -4,6 +4,7 @@ import { notFound, permanentRedirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { EpisodeCountdown } from "@/components/Airing";
 import { FranchiseSection } from "@/components/Franchise";
+import { ScoreDailySection } from "@/components/ScoreDaily";
 import { SimilarSection } from "@/components/Similar";
 import { ParallaxPoster } from "@/components/motion/ParallaxPoster";
 import { NextAiring } from "@/components/NextAiring";
@@ -25,6 +26,7 @@ import {
   joinSources,
   jstAirdate,
   compactCount,
+  NULL_MARKER,
   disagreeingSources,
   scoreRevisions,
   sourceLabel,
@@ -304,6 +306,13 @@ async function AnimeDetail({
   // markup and the browser's first render agree on it.
   const airdates = (anime.upcoming_episodes ?? []).map((e) => ({ ...e, label: jstAirdate(e.airing_at) }));
   const checked = anime.upcoming_episodes?.[0]?.fetched_on;
+  // What has already gone out, newest first. A separate read from the countdown
+  // above and not a slice of it: anime_airing holds the coming weeks, so until
+  // the archive was served an episode left the site the morning after it aired
+  // and a show seven episodes in could say nothing about any of the seven.
+  // Shown whether or not the title is still airing - a finale's date is a fact
+  // about a finished show too.
+  const aired = (anime.aired_episodes ?? []).map((e) => ({ ...e, label: jstAirdate(e.airing_at) }));
   const changes = anime.changes ?? [];
   const shownChanges = changes.slice(0, CHANGES_SHOWN);
 
@@ -635,6 +644,47 @@ async function AnimeDetail({
               This is the regular broadcast slot, not a confirmed airdate
             </p>
           </div>
+        )}
+
+        {aired.length > 0 && (
+          /* Already broadcast, from the archive of every schedule fetched. The
+             rule is the data's own: an episode is listed once, as the schedule
+             last had it, because a broadcast that slips is corrected at the next
+             daily check and 87 of the first month's episodes were rescheduled.
+
+             A listing rather than a grid, like /schedule and the franchise: the
+             date is the column the eye runs down. Capped by the API at the
+             recent few, because this grows for as long as the pipeline runs. */
+          <div className="mt-5">
+            <p className="meta">Already aired</p>
+            <ol className="mt-1">
+              {aired.map((e) => (
+                <li
+                  key={`${e.episode}-${e.airing_at}`}
+                  className="flex gap-3 border-t border-rule py-1 text-[0.8rem]"
+                >
+                  <span className="tnum w-[4.5rem] shrink-0 font-semibold">
+                    {e.episode === null ? NULL_MARKER : `Ep ${e.episode}`}
+                  </span>
+                  <span className="tnum text-ink-soft">{e.label}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="meta mt-1 max-w-[46ch] !leading-[1.6]">
+              Japan&apos;s time, as AniList&apos;s schedule last had it.
+            </p>
+          </div>
+        )}
+
+        {/* The score asked every morning, where anyone is still rating it. Its
+            own boundary because it is a second request and the page must not
+            wait on it; only where the show is airing, because those are the
+            only titles the daily check asks about and so the only ones with
+            anything to report. See components/ScoreDaily.tsx. */}
+        {anime.wb_id && isAiring(anime) && (
+          <Suspense fallback={<span data-footer-waits hidden />}>
+            <ScoreDailySection wbId={anime.wb_id} />
+          </Suspense>
         )}
 
         {/* What the sources have said differently week to week, per source.

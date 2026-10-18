@@ -72,6 +72,7 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
         created += _franchise_views(con, data_dir)
         created += _change_view(con, data_dir, has_registry)
         created += _airing_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
+        created += _airing_history_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
         created += _score_daily_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
         created += _prose_views(con, data_dir)
     finally:
@@ -330,6 +331,54 @@ def _airing_view(
     return _current_placed(
         con, "anime_airing", "anilist_airing", data_dir, has_registry, mapped, resolved
     )
+
+
+def _airing_history_view(
+    con: duckdb.DuckDBPyConnection, data_dir: Path, has_registry: bool, mapped: bool, resolved: bool
+) -> list[str]:
+    """Every episode airdate the schedule has ever carried, aired ones included.
+
+    THE DATED GLOB, for the same reason _score_daily_view reads one and on the
+    opposite trade-off from anime_airing beside it. That view reads
+    processed/current/ because /schedule and every title page's countdown query
+    it, and the glob would cost those a file more each day. Here the history IS
+    the subject, the dated files were already being written and kept by
+    ingestion.storage.write_daily - 30 of them by 2026-10-19, back to the
+    daily DAG's first run on 09-14 - and nothing but this reads it.
+
+    Which means the site has been throwing this away on every page load. A
+    finished episode leaves processed/current/ the next morning, so the site
+    could say an episode is coming and never that one had been: "Episode 7 of
+    12 airs Monday" became silence the day after it aired, on a show mid-season.
+
+    NEWEST READING PER EPISODE, not the first. A broadcast slips - that is why
+    the fetch is daily rather than weekly - and the last thing AniList said
+    about an episode is the accurate one. Keeping the earliest would preserve
+    the schedule as first announced, which is a different and much less useful
+    question.
+
+    Per (anilist_id, episode) rather than per (wb_id, episode): a row no
+    identity places has a null wb_id and is still kept, exactly as anime_airing
+    keeps One Piece whether or not the catalogue holds it. Grouping those
+    together under one null would collapse every unplaced show into a single
+    series.
+    """
+    # NOT gated on the registry, unlike the score series below and like
+    # anime_airing beside it: a row no identity places keeps a null wb_id and is
+    # still served, which is how One Piece reaches /schedule whether or not the
+    # catalogue holds it. A warehouse built before identities therefore still
+    # has this view, with nothing placed - the same shape anime_airing has.
+    files = data_dir / "processed" / "anilist_airing"
+    if not list(files.glob("*.parquet")):
+        return []
+    rows = f"read_parquet('{files}/*.parquet', union_by_name=true)"
+    con.execute(
+        "CREATE OR REPLACE VIEW anime_airing_history AS SELECT * FROM ("
+        f"  {_placed_sql(rows, has_registry, mapped, resolved)}"
+        ") QUALIFY ROW_NUMBER() OVER ("
+        "  PARTITION BY anilist_id, episode ORDER BY fetched_on DESC) = 1"
+    )
+    return ["anime_airing_history"]
 
 
 def _anilist_status_view(

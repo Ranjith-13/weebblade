@@ -150,6 +150,52 @@ def test_a_title_placed_by_its_mal_id_carries_its_episodes_too_and_lists_carry_n
     assert all(t["upcoming_episodes"] == [] for t in client.get("/anime?limit=10").json()["items"])
 
 
+def test_a_title_carries_the_episodes_that_have_already_aired_newest_first(world):
+    """The whole point of the archive: before it, an episode left the site the
+    morning after it aired and a show mid-season could say nothing about any
+    episode anyone had actually watched."""
+    client, ids, _ = world
+
+    aired = client.get(f"/anime/{ids[0]}").json()["aired_episodes"]
+
+    # 4 and 5 are behind us at 21:00 on the 14th; 6 onwards are not.
+    assert [e["episode"] for e in aired] == [5, 4]
+    assert aired[0] == {"episode": 5, "airing_at": "2026-09-13T17:00:00Z", "fetched_on": "2026-09-14"}
+
+
+def test_an_aired_episode_is_kept_as_the_schedule_last_had_it_not_as_first_announced(world):
+    """Yesterday's fetch put episode 5 at 03:00 and today's corrects it to 02:00.
+    A broadcast slipping is why the fetch is daily, so the newest reading wins -
+    keeping the earliest would archive the schedule as announced, which is a
+    different question and a less useful one."""
+    client, ids, _ = world
+
+    aired = client.get(f"/anime/{ids[0]}").json()["aired_episodes"]
+
+    five = [e for e in aired if e["episode"] == 5]
+    assert len(five) == 1, "one row per episode, not one per fetch that mentioned it"
+    assert five[0]["airing_at"] == "2026-09-13T17:00:00Z"  # today's 02:00, not yesterday's 03:00
+
+
+def test_the_current_schedule_alone_could_not_answer_what_had_aired(world):
+    """The archive reads the dated files; anime_airing holds only the newest
+    fetch. Proof the two are different reads: a day whose fetch drops an
+    episode still has it in the history."""
+    client, ids, data = world
+    _write_airing(data, "2026-09-15", [_episode(1, 6, _at(21, 2), fetched_on="2026-09-15")])
+
+    body = client.get(f"/anime/{ids[0]}").json()
+
+    assert [e["episode"] for e in body["aired_episodes"]] == [5, 4]
+    assert [e["episode"] for e in body["upcoming_episodes"]] == [6]
+
+
+def test_lists_carry_no_aired_episodes(world):
+    client, _, _ = world
+
+    assert all(t["aired_episodes"] == [] for t in client.get("/anime?limit=10").json()["items"])
+
+
 def test_before_any_schedule_is_fetched_nothing_breaks(tmp_path, monkeypatch):
     monkeypatch.setattr(schedule_module, "now", lambda: NOW.timestamp())
     data = tmp_path / "data"

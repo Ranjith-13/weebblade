@@ -6,6 +6,9 @@ from fastapi import APIRouter, Depends
 from ..db import get_db, run_query
 from ..schemas import (
     ArrivalPoint,
+    DailyScorePoint,
+    DailyScores,
+    PrintedMove,
     ScoreArrival,
     ScoreSettling,
     SeasonSettling,
@@ -168,6 +171,85 @@ def settling(con: duckdb.DuckDBPyConnection = Depends(get_db)) -> ScoreSettling:
         bands=[SettlingBand(**row) for row in bands],
         arrival=_arrival(con),
     )
+
+
+@router.get("/daily/{wb_id}", response_model=DailyScores)
+def daily(wb_id: str, con: duckdb.DuckDBPyConnection = Depends(get_db)) -> DailyScores:
+    """One title's score as it was asked every morning, oldest first.
+
+    THE DENSE HALF OF /settling ABOVE, AND THE ONLY SERIES HERE THAT IS NOT
+    WEEKLY. Everything else on this router reads anime_media, which the pipeline
+    writes once a week: a score that moves on Tuesday and again on Friday is one
+    move there, and a score that moves and moves back is none. The daily AniList
+    status check already asks about exactly the titles the catalogue calls
+    airing, so the readings were being written and kept and nothing read them.
+
+    AN ENDPOINT RATHER THAN A FIELD ON THE TITLE RESPONSE, which is the opposite
+    call from score_history and for a reason that one did not have:
+    anime_score_daily reads a DATED GLOB that gains a file every morning, so
+    attaching it would make all 11,992 title pages pay a growing scan for an
+    answer only the ~199 airing ones have. The frontend asks for this only where
+    isAiring() is true, which is also the only place it would print anything.
+
+    THE UNIT IS A RE-ASK, exactly as it is for /settling, and the reasoning
+    above _REASKS applies here unchanged - a pair counts only where the vote
+    count moved. It matters less than it does weekly, because every row here
+    comes from a real fetch rather than a carry-forward, but the rule is the
+    same rule and two different definitions of "a reading changed" on one router
+    would be worse than either.
+
+    Empty rather than 404 for a title with no readings: a finished show is not
+    asked about, a warehouse published before the score columns existed carries
+    none, and both are ordinary states of a catalogue. See DailyScores.
+    """
+    points = _series(con, wb_id)
+    moves, reasks = [], 0
+    for was, now in zip(points, points[1:]):
+        if was["user_count"] is None or now["user_count"] is None:
+            continue
+        if now["user_count"] == was["user_count"]:
+            continue
+        reasks += 1
+        # Printed, not stored: 83.41 to 83.36 is not a change anyone can see on
+        # a site that shows one decimal out of ten. Same test as _REASKS.
+        if round(now["score_100"] / 10, 1) != round(was["score_100"] / 10, 1):
+            moves.append(
+                PrintedMove(
+                    on=now["fetched_on"],
+                    was=was["score_100"],
+                    now=now["score_100"],
+                    votes_gained=now["user_count"] - was["user_count"],
+                )
+            )
+    gained = None
+    if len(points) > 1 and points[0]["user_count"] is not None and points[-1]["user_count"] is not None:
+        gained = points[-1]["user_count"] - points[0]["user_count"]
+    return DailyScores(
+        wb_id=wb_id,
+        points=[DailyScorePoint(**row) for row in points],
+        reasks=reasks,
+        moves=moves,
+        votes_gained=gained,
+    )
+
+
+def _series(con: duckdb.DuckDBPyConnection, wb_id: str) -> list[dict]:
+    """The readings themselves, or nothing where the view does not exist.
+
+    anime_score_daily appears only once a dated status file carries score_100
+    (processing/duckdb_catalog._score_daily_view), so a warehouse published
+    before that has no such view and this is not an error - unlike the 503
+    run_query would raise, which would take a title page's block down on every
+    older warehouse the separately-deployed API might be serving.
+    """
+    try:
+        return con.execute(
+            "SELECT fetched_on, score_100, user_count FROM anime_score_daily "
+            "WHERE wb_id = ? ORDER BY fetched_on",
+            [wb_id],
+        ).fetch_arrow_table().to_pylist()
+    except (duckdb.CatalogException, duckdb.BinderException):
+        return []
 
 
 def _arrival(con: duckdb.DuckDBPyConnection) -> ScoreArrival | None:

@@ -13,6 +13,7 @@ import {
   type ChangeFeed,
   type Anime,
   type AnimeListResponse,
+  type DailyScores,
   type Digest,
   type Franchise,
   type Schedule,
@@ -291,6 +292,35 @@ export async function getScoreSettling(): Promise<ScoreSettling | null> {
   cacheLife("hours");
   try {
     return await getJson<ScoreSettling>(buildUrl("/scores/settling"));
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 503)) return null;
+    throw err;
+  }
+}
+
+/** One title's score as asked every morning: GET /scores/daily/{wb_id}.
+ *
+ *  THE DENSE HALF OF /scores. Everything else here reads a weekly snapshot, so
+ *  a score that moves on Tuesday and again on Friday is one move and a score
+ *  that moves and moves back is none. The daily AniList status check already
+ *  asks about exactly the airing titles, so these readings cost no new fetch.
+ *
+ *  An endpoint rather than a field on the title, which is the opposite call
+ *  from score_history: it reads a dated glob that gains a file every morning,
+ *  so attaching it would make every title page pay a growing scan for an
+ *  answer only airing titles have. Ask for it where isAiring() is true.
+ *
+ *  Null rather than a throw on 404 or 503, like getScoreSettling: the site and
+ *  the API deploy separately, so a build can reach a container serving a
+ *  warehouse published before this existed, and a block is not worth a page.
+ */
+export async function getDailyScores(wbId: string): Promise<DailyScores | null> {
+  "use cache";
+  cacheLife("hours");
+  try {
+    return await getJson<DailyScores>(
+      buildUrl(`/scores/daily/${encodeURIComponent(wbId)}`),
+    );
   } catch (err) {
     if (err instanceof ApiError && (err.status === 404 || err.status === 503)) return null;
     throw err;

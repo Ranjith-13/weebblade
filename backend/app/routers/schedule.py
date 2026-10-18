@@ -28,10 +28,10 @@ def iso(epoch: int) -> str:
 
 
 def _airing(con: duckdb.DuckDBPyConnection, sql: str, params: list) -> list[dict]:
-    """A query against anime_airing, which exists only once the schedule has been
-    fetched. Before that there is nothing airing to report: an empty answer, not
-    an error. Anything else wrong with the query is raised - an empty schedule
-    would hide it."""
+    """A query against one of the airing views, which exist only once the
+    schedule has been fetched. Before that there is nothing airing to report:
+    an empty answer, not an error. Anything else wrong with the query is raised
+    - an empty schedule would hide it."""
     try:
         return con.execute(sql, params).fetch_arrow_table().to_pylist()
     except duckdb.CatalogException:
@@ -54,6 +54,42 @@ def upcoming_episodes(con: duckdb.DuckDBPyConnection, wb_id: str, limit: int = 4
         logger.warning("Could not read upcoming episodes for %s", wb_id, exc_info=True)
         return []
     return [AiringEpisode(episode=r["episode"], airing_at=iso(r["airing_at"]), fetched_on=r["fetched_on"]) for r in rows]
+
+
+def aired_episodes(
+    con: duckdb.DuckDBPyConnection, wb_id: str, limit: int = 6
+) -> list[AiringEpisode]:
+    """A title's episodes that have already aired, newest first.
+
+    The counterpart to upcoming_episodes, and it reads a different view for a
+    reason given in full at processing/duckdb_catalog._airing_history_view:
+    anime_airing holds only the current fetch, so an episode disappears from
+    the site the morning after it airs. A show seven episodes into a twelve
+    episode season could say when episode eight was due and nothing whatever
+    about the seven people had actually watched.
+
+    Newest first and capped, because this grows for as long as the pipeline
+    runs - a weekly show gains an episode a week forever, and what a reader
+    wants on a title page is the last few, not a broadcast log back to the
+    archive's first day.
+
+    Same failure rule as the countdown above: a title page must never go down
+    over its schedule, so anything wrong here costs the block and is logged.
+    """
+    try:
+        rows = _airing(
+            con,
+            "SELECT DISTINCT episode, airing_at, fetched_on FROM anime_airing_history "
+            "WHERE wb_id = ? AND airing_at <= ? ORDER BY airing_at DESC LIMIT ?",
+            [wb_id, int(now()), limit],
+        )
+    except duckdb.Error:
+        logger.warning("Could not read aired episodes for %s", wb_id, exc_info=True)
+        return []
+    return [
+        AiringEpisode(episode=r["episode"], airing_at=iso(r["airing_at"]), fetched_on=r["fetched_on"])
+        for r in rows
+    ]
 
 
 @router.get("", response_model=Schedule)
