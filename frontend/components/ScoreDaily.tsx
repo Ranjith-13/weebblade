@@ -124,8 +124,8 @@ export async function ScoreDailySection({ wbId }: { wbId: string }) {
           </>
         ) : null}{" "}
         A score is stored out of 100 and shown out of 10, so only a change this site
-        would print counts as a move. These readings are daily and the score above is
-        the weekly published figure, so this can run a few days ahead of it.
+        would print counts as a move. These readings are taken daily and the score above
+        is from the weekly refetch, so this can run a few days ahead of it.
       </p>
     </div>
   );

@@ -6,7 +6,9 @@ features on real pipeline infrastructure, not a one-off notebook.
 
 Live: **[weebblade.vercel.app](https://weebblade.vercel.app)** · API:
 [weebblade-api.onrender.com](https://weebblade-api.onrender.com) — both free, serving the warehouse
-the pipeline publishes weekly. See [Where it runs](#where-it-runs).
+the pipeline publishes. The catalogue is refetched weekly; the warehouse is published daily,
+so the schedule and the daily score readings reach a reader the morning after they are taken. See
+[Where it runs](#where-it-runs).
 
 ## What it does
 

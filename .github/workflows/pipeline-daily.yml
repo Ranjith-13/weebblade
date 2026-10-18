@@ -103,6 +103,61 @@ jobs:
           s.prune()
           "
 
+      # WHAT MAKES THE DAILY WORTH PUBLISHING, and it is new.
+      #
+      # The warehouse used to be a weekly artifact, because rebuilding it meant
+      # embedding every title again - 5m30s for the search index and 4m20s for
+      # the neighbours, neither of which this job has the dependencies to do.
+      # So readers saw Sunday's file all week, and the daily score series, whose
+      # whole claim is that it asks every morning, reached them up to eight days
+      # late. On 2026-10-19 production was serving readings two days old with a
+      # third already sitting unpublished in the state.
+      #
+      # Both tables are now kept in the lake and restored by refresh_catalog,
+      # the daily pipeline's last step, in about a second and with nothing but
+      # duckdb. So this job can publish what it just built.
+      #
+      # THE CHECK GATES THE PUBLISH, and that is the whole safety of it.
+      # refresh_catalog skips a vector file it cannot find rather than inventing
+      # an empty table, which is correct and also silent: an artifact with no
+      # anime_embedding looks perfectly healthy and answers every search with
+      # nothing. The republish workflow nearly shipped exactly that once. So the
+      # artifact is interrogated before it goes anywhere, and the publish runs
+      # only if that step passed - `always()` on the publish alone would hand
+      # readers the very file the check just rejected.
+      - name: Check what the artifact holds
+        id: artifact
+        if: always()
+        run: |
+          python -c "
+          import sys, duckdb
+          con = duckdb.connect('data/warehouse.duckdb', read_only=True)
+          titles = con.execute('SELECT count(*) FROM anime_media_latest').fetchone()[0]
+          vectors = con.execute('SELECT count(*) FROM anime_embedding').fetchone()[0]
+          print('titles ', titles)
+          print('vectors', vectors)
+          if not titles or not vectors:
+              sys.exit('An artifact with no catalogue or no vectors is not worth serving')
+          "
+
+      # Onto the release this run's state just went to, so the two always
+      # describe the same day. That the tag moves daily also fixes something
+      # the republish of 2026-10-19 exposed: the API skips the download when the
+      # tag it already holds matches the newest, so an asset replaced under an
+      # unchanged tag is invisible to a container that is already warm. A new
+      # tag every day cannot be missed that way.
+      - name: Publish the warehouse
+        if: always() && steps.artifact.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c "
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import pipeline.state as s
+          print(s.publish_warehouse(Path('data'), datetime.now(timezone.utc).strftime('%Y-%m-%d')))
+          "
+
       # A line per run, committed. Two jobs at once: it is the history of what
       # the pipeline did, readable without opening Actions - and it is repository
       # activity, which is what stops GitHub disabling a scheduled workflow after

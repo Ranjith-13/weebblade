@@ -100,7 +100,7 @@ jobs:
           python -c "
           from pathlib import Path
           from ai.search.build_index import build_index
-          print('indexed', build_index(Path('data/warehouse.duckdb')), 'titles')
+          print('indexed', build_index(Path('data/warehouse.duckdb'), data_dir=Path('data')), 'titles')
           "
 
       # The neighbours behind "More like this", a table for the same reason and
@@ -114,7 +114,7 @@ jobs:
           python -c "
           from pathlib import Path
           from ai.search.similar import build_similar
-          print('related', build_similar(Path('data/warehouse.duckdb')), 'titles')
+          print('related', build_similar(Path('data/warehouse.duckdb'), data_dir=Path('data')), 'titles')
           "
 
       # What a reader would get, checked before anyone can get it. Before the

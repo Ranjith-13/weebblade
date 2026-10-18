@@ -425,7 +425,9 @@ exits 1, same stub. `lib/api.ts` is `server-only`, so none of this runs in a rea
 
 The API limits per client IP (60/min, 20/min on `/search`) and on Vercel every visitor shares the
 app's egress addresses. Server reads use `'use cache'` + `cacheLife('hours')`; the pipeline
-publishes weekly so this costs nothing in freshness.
+publishes daily and refetches the catalogue weekly, so an hour of cache sits well inside the
+interval anything actually moves in. (It published weekly until 2026-10-19, which is why the
+freshest daily score reading a reader could see was sometimes eight days old.)
 
 **`/search` deliberately runs client-side** so each visitor spends their own budget on their own
 queries. Do not move it to the server. Results carry no artwork from the API, so the server passes
@@ -667,7 +669,7 @@ revisions line in the rail follows. The score above the block is the merged winn
 sources and these readings are one source's, so they legitimately differ: on the title this was
 built against the rail printed 7.5 from MyAnimeList while these said 6.9. Unattributed, that is
 the site contradicting itself on one screen. The caption also says the readings are daily while
-the score above is the weekly published figure, so it can run a few days ahead of it.
+the score above is from the weekly refetch, so it can run a few days ahead of it.
 
 **Nothing is shown where there is nothing to say**: under two readings there is no pair, a
 title with no re-ask had only copies, a finished show is never asked about, and a warehouse

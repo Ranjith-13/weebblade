@@ -151,7 +151,10 @@ def anime_seasonal_pipeline():
     def build_search_index():
         from ai.search.build_index import build_index
 
-        count = build_index(DATA_DIR / "warehouse.duckdb")
+        # data_dir so the vectors are kept in the lake: only the titles whose
+        # document changed are embedded, and a later run can restore the table
+        # without a model at all. See ai/search/build_index.LAKE_PATH.
+        count = build_index(DATA_DIR / "warehouse.duckdb", data_dir=DATA_DIR)
         logger.info("Indexed %s titles", count)
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
@@ -163,7 +166,7 @@ def anime_seasonal_pipeline():
         cannot answer this."""
         from ai.search.similar import build_similar as _build_similar
 
-        count = _build_similar(DATA_DIR / "warehouse.duckdb")
+        count = _build_similar(DATA_DIR / "warehouse.duckdb", data_dir=DATA_DIR)
         logger.info("Related %s titles", count)
 
     @task(trigger_rule=TriggerRule.ALL_DONE)

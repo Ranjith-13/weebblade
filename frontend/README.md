@@ -21,8 +21,9 @@ on `http://localhost:8000`).
 **Caching isn't a performance nicety here, it's a rate-limit boundary.** The API limits requests
 per client IP (60/min, 20/min on `/search`), and on Vercel every visitor shares this app's egress
 IPs — uncached passthrough would spend one shared budget on behalf of the whole audience. Every
-server-side read in `lib/api.ts` is therefore wrapped in `use cache` + `cacheLife('hours')`, which
-costs nothing in freshness because the pipeline only publishes weekly.
+server-side read in `lib/api.ts` is therefore wrapped in `use cache` + `cacheLife('hours')` — an
+hour sits well inside the interval anything moves in, since the pipeline publishes daily and
+refetches the catalogue weekly.
 
 **Search is the deliberate exception.** `app/search/SearchClient.tsx` fetches from the browser, so
 each visitor spends their own rate-limit budget on their own unique queries. Server-side caching

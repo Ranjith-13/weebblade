@@ -6,11 +6,20 @@ machine is gone, and the thing replacing it - a free container rebuilt from its
 image on every wake, with no persistent disk at all - cannot work that way. So
 the API fetches what it serves.
 
-What it fetches is processing/publish.materialise's output, published by the
-weekly run as a release asset (pipeline/state.publish_warehouse): one 37 MB
-DuckDB file holding the catalogue and the 6,349 embedding vectors as tables
-rather than views, so it depends on nothing outside itself. That artifact was
-built for exactly this and had no reader until now.
+What it fetches is processing/publish.materialise's output, published as a
+release asset (pipeline/state.publish_warehouse): one 37 MB DuckDB file holding
+the catalogue and the embedding vectors as tables rather than views, so it
+depends on nothing outside itself. That artifact was built for exactly this and
+had no reader until now.
+
+PUBLISHED DAILY SINCE 2026-10-19, and it used to be weekly. Rebuilding it meant
+embedding every title again, which the daily job has neither the time nor the
+dependencies for, so readers saw Sunday's file all week - and the daily score
+series, whose whole claim is that it asks every morning, reached them up to
+eight days late. The vectors are kept in the lake now and restored in about a
+second (processing/duckdb_catalog._vector_tables), so the daily run publishes
+what it just built. The catalogue itself is still only refetched weekly; what
+got fresher is everything the daily fetches.
 
 WHY THE GITHUB API AND NOT A PLAIN URL
 

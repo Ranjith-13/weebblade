@@ -93,6 +93,52 @@ SCHEMA = pa.schema(
 )
 
 
+# How long after its last episode a title is still worth asking about daily.
+#
+# THE SEASON JUST ENDED IS WHERE SCORES MOVE MOST, and until this it was the one
+# cohort nobody asked about. Measured over the catalogue's own history: 51% of
+# the airing season's TV titles had visibly moved their score, against 71% of
+# the season just ended - the votes keep arriving for weeks after a finale and
+# the average is still settling. Asking only about titles the sources call
+# current stopped watching each show at exactly the point it moves fastest.
+#
+# Defined by the archive rather than by season arithmetic. "The season just
+# ended" is a human phrase and a nuisance to compute - seasons are quarters, a
+# show can be filed under the quarter it began and finish two quarters later -
+# while "an episode went out recently" is a fact anime_airing_history already
+# holds, per title, with no calendar reasoning at all.
+#
+# 45 days because that is where it stops adding anyone: measured on 2026-10-19,
+# 30 days brings 49 extra titles, 45 brings 58 and 60 brings the same 58. It is
+# 58 against the 347 already asked about, which at AniList's 50 ids a page is
+# one more request on a daily run that spends seven.
+RECENT_DAYS = 45
+
+
+def _recently_aired(con: duckdb.DuckDBPyConnection, wb_id: str) -> str:
+    """The predicate that keeps a just-finished show in the cohort, or a
+    constant false where it cannot be evaluated.
+
+    anime_airing_history arrived with the episode archive and is absent from any
+    warehouse built before it, and a title with no identity has no wb_id to be
+    matched on. Either way the answer is the cohort as it always was: the titles
+    the sources call current. A missing view must not take the status check
+    down - it is the only thing correcting a finished show's status, and 986
+    finished titles once counted down to a slot for a series that was over.
+    """
+    if wb_id == "NULL":
+        return "FALSE"
+    try:
+        con.execute("SELECT 1 FROM anime_airing_history LIMIT 1")
+    except duckdb.Error:
+        logger.info("No episode archive yet - asking only about titles the sources call current")
+        return "FALSE"
+    return (
+        "wb_id IN (SELECT wb_id FROM anime_airing_history WHERE wb_id IS NOT NULL "
+        f"AND to_timestamp(airing_at) BETWEEN now() - INTERVAL {RECENT_DAYS} DAY AND now())"
+    )
+
+
 def candidates(data_dir: Path) -> tuple[list[int], list[int]]:
     """AniList ids, and MAL ids for titles with no AniList id, of every title the
     sources call airing. Read-only: the warehouse is only looked at.
@@ -112,7 +158,8 @@ def candidates(data_dir: Path) -> tuple[list[int], list[int]]:
         status = "merged_status" if "merged_status" in columns else "status"
         wb_id = "wb_id" if "wb_id" in columns else "NULL"
         rows = con.execute(
-            f"SELECT {wb_id}, source_keys, mal_id FROM anime_media_latest WHERE {status} = 'current'"
+            f"SELECT {wb_id}, source_keys, mal_id FROM anime_media_latest "
+            f"WHERE {status} = 'current' OR {_recently_aired(con, wb_id)}"
         ).fetchall()
     finally:
         con.close()

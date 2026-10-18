@@ -53,12 +53,25 @@ from typing import Any
 
 import duckdb
 import pyarrow as pa
+import pyarrow.parquet as pq
 
 from .embed import embed_texts
 
 logger = logging.getLogger(__name__)
 
 TABLE_NAME = "anime_similar"
+
+# The same lake file build_index keeps, and for the same reason: this table is
+# computed here and backed by no parquet, so every warehouse rebuild paid 4m20s
+# to work it out again. Persisted, refresh_catalog materialises it in about a
+# second and a run can publish without a model.
+#
+# THE PAIRS, NOT THE VECTORS. Neighbours are not incremental the way embeddings
+# are - one new title can change who every other title's nearest are - so there
+# is nothing here to reuse selectively, and this file is a cache of the ANSWER
+# rather than of the work. The weekly run recomputes it in full; everything
+# else reads it.
+LAKE_PATH = Path("processed") / TABLE_NAME / "index.parquet"
 
 # How many to store. The page shows fewer; the slack is so that a later change
 # to what is displayed does not need the pipeline to run again.
@@ -130,8 +143,13 @@ def text_for_similarity(row: dict[str, Any]) -> str:
     return genres or synopsis or "Untitled"
 
 
-def build_similar(db_path: Path, neighbours: int = NEIGHBOURS) -> int:
+def build_similar(
+    db_path: Path, neighbours: int = NEIGHBOURS, data_dir: Path | None = None
+) -> int:
     """(Re)build the neighbour table. Returns how many titles got neighbours.
+
+    With data_dir the pairs are also written to the lake, so a later run can
+    restore the table without embedding anything. See LAKE_PATH.
 
     Same failure rule as build_index: everything slow happens before the
     database is touched, so a failure leaves the previous table serving. And the
@@ -171,6 +189,19 @@ def build_similar(db_path: Path, neighbours: int = NEIGHBOURS) -> int:
         con.unregister("_new_similar")
     finally:
         con.close()
+
+    # After the table and best-effort, exactly as build_index persists its own:
+    # the table is what serves, this is what saves the next run the work.
+    if data_dir is not None:
+        try:
+            path = data_dir / LAKE_PATH
+            path.parent.mkdir(parents=True, exist_ok=True)
+            staged = path.with_suffix(".parquet.part")
+            pq.write_table(table, staged)
+            staged.replace(path)
+            logger.info("Persisted %s pairs to %s", table.num_rows, path)
+        except Exception:
+            logger.warning("Could not persist neighbours to the lake", exc_info=True)
 
     related = len({pair["wb_id"] for pair in pairs})
     logger.info("Related %s titles, %s pairs", related, len(pairs))

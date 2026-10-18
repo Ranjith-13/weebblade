@@ -5,8 +5,8 @@ const nextConfig: NextConfig = {
   // read is cached server-side, which matters here beyond plain performance: the
   // upstream API rate-limits per client IP, and all visitors share this app's
   // egress IPs. Without caching, one shared 60/min budget would be spent on
-  // behalf of everyone. The pipeline only publishes weekly, so hour-scale caching
-  // costs nothing in freshness.
+  // behalf of everyone. The pipeline publishes daily and refetches the catalogue
+  // weekly, so an hour of cache is well inside the interval anything moves in.
   cacheComponents: true,
 
   images: {

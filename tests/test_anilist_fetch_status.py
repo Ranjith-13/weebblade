@@ -177,3 +177,75 @@ def test_a_title_nobody_has_rated_yet_carries_no_score_rather_than_a_zero():
 
     assert row["score_100"] is None
     assert row["user_count"] == 3
+
+
+# THE SEASON JUST ENDED IS WHERE SCORES MOVE MOST
+#
+# Measured over the catalogue's own history: 51% of the airing season's TV
+# titles had visibly moved their score against 71% of the season just ended -
+# votes keep arriving for weeks after a finale and the average is still
+# settling. Asking only about titles the sources call current stopped watching
+# each show at the point it moves fastest.
+#
+# Defined by the episode archive rather than by season arithmetic, because "the
+# season just ended" is a nuisance to compute - a show is filed under the
+# quarter it began and may finish two quarters later - while "an episode went
+# out recently" is a fact anime_airing_history already holds per title.
+
+
+def _with_archive(data_dir, episodes):
+    """Add the episode archive the cohort is widened by: (wb_id, days_ago)."""
+    con = duckdb.connect(str(data_dir / "warehouse.duckdb"))
+    con.execute("CREATE TABLE h (wb_id VARCHAR, airing_at BIGINT, episode INTEGER)")
+    for wb_id, days_ago in episodes:
+        con.execute(
+            "INSERT INTO h VALUES (?, epoch(now() - INTERVAL (?) DAY)::BIGINT, 1)",
+            [wb_id, days_ago],
+        )
+    con.execute("CREATE VIEW anime_airing_history AS SELECT * FROM h")
+    con.close()
+    return data_dir
+
+
+def test_a_title_that_finished_recently_is_still_asked_about(tmp_path):
+    data_dir = _warehouse(tmp_path, [
+        ("wb_1", ["anilist:1"], 10, "current"),
+        ("wb_2", ["anilist:2"], 20, "finished"),   # finished, but aired this month
+    ])
+    _with_archive(data_dir, [("wb_1", 2), ("wb_2", 10)])
+
+    assert fs.candidates(data_dir) == ([1, 2], [])
+
+
+def test_a_title_whose_last_episode_is_long_past_is_left_alone(tmp_path):
+    """The window has to end somewhere, or the cohort grows without limit and
+    the check spends its requests on shows nobody is still rating."""
+    data_dir = _warehouse(tmp_path, [
+        ("wb_1", ["anilist:1"], 10, "current"),
+        ("wb_2", ["anilist:2"], 20, "finished"),
+    ])
+    _with_archive(data_dir, [("wb_1", 2), ("wb_2", fs.RECENT_DAYS + 5)])
+
+    assert fs.candidates(data_dir) == ([1], [])
+
+
+def test_a_future_episode_does_not_pull_a_title_in(tmp_path):
+    """The archive holds the weeks ahead as well as behind. A title whose only
+    episode is scheduled rather than aired has nothing to have moved yet."""
+    data_dir = _warehouse(tmp_path, [("wb_2", ["anilist:2"], 20, "finished")])
+    _with_archive(data_dir, [("wb_2", -7)])
+
+    assert fs.candidates(data_dir) == ([], [])
+
+
+def test_without_the_archive_the_cohort_is_what_it_always_was(tmp_path):
+    """A warehouse built before the archive existed has no such view, and the
+    check must not go down over it: it is the only thing correcting a finished
+    show's status, and 986 finished titles once counted down to a slot for a
+    series that was over."""
+    data_dir = _warehouse(tmp_path, [
+        ("wb_1", ["anilist:1"], 10, "current"),
+        ("wb_2", ["anilist:2"], 20, "finished"),
+    ])
+
+    assert fs.candidates(data_dir) == ([1], [])

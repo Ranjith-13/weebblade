@@ -75,8 +75,77 @@ def refresh_catalog(data_dir: Path, db_path: Path) -> list[str]:
         created += _airing_history_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
         created += _score_daily_view(con, data_dir, has_registry, bool(mapped), bool(resolved))
         created += _prose_views(con, data_dir)
+        created += _vector_tables(con, data_dir)
     finally:
         con.close()
+    return created
+
+
+# The two artifacts the search needs that are computed rather than fetched, and
+# the file each is kept in. Named here rather than imported from ai.search to
+# keep the dependency pointing one way: ai/ reads the catalogue this builds, and
+# nothing here should need to know how a vector is made to put one back.
+#
+# (ai.search.embed would in fact import cleanly on a runner with no model - it
+# loads one lazily, inside the functions that embed - so this is a layering
+# choice rather than a packaging constraint. An earlier version of this comment
+# claimed the import would drag the model in, which is not true.)
+_VECTOR_TABLES = {
+    "anime_embedding": "processed/anime_embedding/index.parquet",
+    "anime_similar": "processed/anime_similar/index.parquet",
+}
+
+
+def _vector_tables(con: duckdb.DuckDBPyConnection, data_dir: Path) -> list[str]:
+    """Restore the search index and the neighbour table from the lake.
+
+    TABLES, NOT VIEWS, AND THAT IS THE WHOLE TRICK. Every other thing here is a
+    view over parquet, but a vector read back out of parquet is a LIST, and
+    array_cosine_similarity takes only a fixed-size ARRAY: queried through a
+    plain view it raises BinderException rather than ranking anything. The cast
+    is what makes the round trip work, and materialising means every search pays
+    for it once per build instead of once per query.
+
+    THE WIDTH IS PROBED, NOT IMPORTED, so the file describes itself. A vector
+    file written by a different model restores at that model's width rather than
+    being forced into this one's, and there is no second copy of 384 to keep in
+    step with ai.search.embed.DIM. A genuine mismatch between the stored vectors
+    and the query embedder then surfaces at query time, which is where it is
+    legible, instead of as a truncated cast here.
+
+    These are rebuilt by ai/search/build_index.py and ai/search/similar.py and
+    are absent until one has run, which is an ordinary state: the first build of
+    a warehouse restores nothing and then writes both. A missing file is
+    skipped, never fabricated empty - an empty anime_embedding would publish an
+    API whose every search answers nothing while looking perfectly healthy.
+    """
+    created = []
+    for table, relative in _VECTOR_TABLES.items():
+        path = data_dir / relative
+        if not path.exists():
+            logger.info("No %s persisted yet (%s), leaving it to be built", table, path)
+            continue
+        try:
+            if table == "anime_embedding":
+                width = con.execute(
+                    f"SELECT len(embedding) FROM read_parquet('{path}') LIMIT 1"
+                ).fetchone()
+                if not width or not width[0]:
+                    logger.warning("%s holds no usable vectors, skipping", path)
+                    continue
+                con.execute(
+                    f"CREATE OR REPLACE TABLE {table} AS SELECT * REPLACE "
+                    f"(embedding::FLOAT[{int(width[0])}] AS embedding) "
+                    f"FROM read_parquet('{path}')"
+                )
+            else:
+                con.execute(
+                    f"CREATE OR REPLACE TABLE {table} AS SELECT * FROM read_parquet('{path}')"
+                )
+            created.append(table)
+            logger.info("Restored table %s <- %s", table, path)
+        except duckdb.Error:
+            logger.warning("Could not restore %s from %s", table, path, exc_info=True)
     return created
 
 
