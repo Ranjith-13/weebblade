@@ -575,11 +575,18 @@ export type SourceScore = { source: string; score_100: number; user_count: numbe
  *  readings it beat are data this project collected and then discarded at
  *  render time - on the one page element every visitor looks at.
  *
- *  BELOW 0.4 IT SAYS NOTHING, deliberately. Two decimal places apart is two
- *  crowds of different size landing in the same place, not a disagreement, and
- *  printing three near-identical numbers on a third of titles would teach
- *  people to skip the block on the titles where it matters. The rule DESIGN.md
- *  already follows: say it where there is something to say.
+ *  BELOW 0.2 IT SAYS NOTHING: a single decimal step is where rounding and a
+ *  crowd of a different size land, not a disagreement.
+ *
+ *  THE THRESHOLD WAS 0.4 AND THAT WAS MEASURING THE WRONG THING. It was set
+ *  from the spread distribution alone, and it hid the title this feature was
+ *  built from: MyAnimeList 8.7, AniList 8.5, Kitsu 8.4 is a spread of 0.3, so
+ *  the rule excluded its own motivating example. What makes that title worth a
+ *  block is not the size of the gap but who is on each side of it - the 8.4 the
+ *  page prints comes from 1,447 votes and the 8.7 it hides comes from 204,162.
+ *  A pure spread cutoff cannot see that, and set high enough to filter noise it
+ *  also filters the cases where a tiny crowd is outvoting a huge one. 0.2 keeps
+ *  them and still drops the 10.6% that agree to within a decimal.
  *
  *  Vote counts travel with the scores because the gap is usually a population
  *  rather than a verdict. One real title reads MyAnimeList 8.7 from 204,162
@@ -587,7 +594,7 @@ export type SourceScore = { source: string; score_100: number; user_count: numbe
  *  shows 8.4, because Kitsu won the merge. Without the denominators that looks
  *  like three opinions; with them it is one crowd of 1,447 outvoting one of
  *  204,162 on which number a reader sees. */
-export const SPREAD_WORTH_SHOWING = 0.4;
+export const SPREAD_WORTH_SHOWING = 0.2;
 
 export function disagreeingSources(
   scores: SourceScore[] | null | undefined,
