@@ -139,6 +139,33 @@ jobs:
               sys.exit('An artifact with no catalogue or no vectors is not worth serving')
           "
 
+      # AND KEEP WHAT IT JUST COMPUTED. This job has the model and spends ten
+      # minutes using it, and until the vectors were persisted that work was
+      # thrown away with the runner. Now it lands in processed/, which is inside
+      # pipeline.state.KEPT, so publishing the state back carries it forward -
+      # and that is what lets the DAILY run, which has no model, rebuild a
+      # warehouse whose search works.
+      #
+      # ONTO THE SAME TAG the state was restored from, like the warehouse below.
+      # Publishing under today's date instead would create a release holding a
+      # state the warehouse beside it was not built from.
+      #
+      # Which also makes this the seeding step for a fresh clone of the idea: a
+      # lake that has never been through a run with the model has no vector
+      # cache, the daily's artifact check refuses to publish, and this is the
+      # short path to fixing that without waiting for Sunday.
+      - name: Publish the state, now carrying the vectors
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c "
+          import os
+          from pathlib import Path
+          import pipeline.state as s
+          run_date = os.environ['STATE_TAG'].removeprefix(s.TAG_PREFIX)
+          print('state published to', s.publish_state(Path('data'), run_date))
+          "
+
       - name: Materialise and publish it, onto the release its state came from
         env:
           GH_TOKEN: ${{ github.token }}

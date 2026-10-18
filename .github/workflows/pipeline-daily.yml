@@ -132,12 +132,30 @@ jobs:
           python -c "
           import sys, duckdb
           con = duckdb.connect('data/warehouse.duckdb', read_only=True)
-          titles = con.execute('SELECT count(*) FROM anime_media_latest').fetchone()[0]
-          vectors = con.execute('SELECT count(*) FROM anime_embedding').fetchone()[0]
+
+          def count(table):
+              'None where the table is absent, which is a different fault from empty.'
+              try:
+                  return con.execute('SELECT count(*) FROM ' + table).fetchone()[0]
+              except duckdb.CatalogException:
+                  return None
+
+          titles, vectors = count('anime_media_latest'), count('anime_embedding')
           print('titles ', titles)
           print('vectors', vectors)
-          if not titles or not vectors:
-              sys.exit('An artifact with no catalogue or no vectors is not worth serving')
+          if not titles:
+              sys.exit('An artifact with no catalogue is not worth serving')
+          if vectors is None:
+              sys.exit(
+                  'No anime_embedding to restore: the vector cache under '
+                  'processed/anime_embedding is written by a run that HAS the model - the '
+                  'weekly, or the republish workflow - and no such run has happened since '
+                  'the cache was introduced. Until one has, this job can rebuild the '
+                  'catalogue but not the search, and publishing would ship an API whose '
+                  'every query answers nothing. Nothing is wrong with this run.'
+              )
+          if not vectors:
+              sys.exit('anime_embedding restored empty - not worth serving')
           "
 
       # Onto the release this run's state just went to, so the two always
