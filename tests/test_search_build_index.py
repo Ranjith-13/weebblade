@@ -185,7 +185,16 @@ def test_a_restored_vector_can_actually_be_searched(warehouse, tmp_path):
     """THE ONE THAT MATTERS. A vector read back out of parquet is a LIST, and
     array_cosine_similarity takes only a fixed-size ARRAY - restored without the
     cast the table looks perfectly healthy and every query raises
-    BinderException. Checked by ranking, not by reading the type."""
+    BinderException. Checked by ranking, not by reading the type.
+
+    The probe is taken FROM the table rather than built here, because a vector
+    is nearest to itself whatever else is in the index. The first version of
+    this asked for the stub's second axis and expected kitsu:1, which assumed
+    anime_media_latest hands its rows back in key order - the stub assigns an
+    axis per position in the batch, so the title holding axis 1 is whichever one
+    came second. It does on DuckDB 1.5.6 and does not on the pinned 1.1.3, so
+    the test passed here and failed in CI.
+    """
     data = tmp_path / "data"
     db = warehouse(3)
     build_index(db, data_dir=data)
@@ -194,15 +203,15 @@ def test_a_restored_vector_can_actually_be_searched(warehouse, tmp_path):
 
     con = duckdb.connect(str(db), read_only=True)
     try:
-        wanted = [1.0 if j == 1 else 0.0 for j in range(DIM)]
+        key, probe = con.execute(f"SELECT key, embedding FROM {TABLE_NAME} LIMIT 1").fetchone()
         best = con.execute(
             f"SELECT key FROM {TABLE_NAME} "
             f"ORDER BY array_cosine_similarity(embedding, ?::FLOAT[{DIM}]) DESC LIMIT 1",
-            [wanted],
+            [probe],
         ).fetchone()
     finally:
         con.close()
-    assert best[0] == "kitsu:1"
+    assert best[0] == key
 
 
 def test_an_unchanged_title_is_not_embedded_again(warehouse, tmp_path):
@@ -251,7 +260,11 @@ def test_editing_the_document_rebuilds_every_vector(warehouse, tmp_path, monkeyp
     calls = []
     build_index(warehouse(3, embed=_counting(calls)), data_dir=data)
 
-    assert calls == [["rewritten 0", "rewritten 1", "rewritten 2"]]
+    # Sorted: what is being asserted is that all three were re-embedded, not the
+    # order anime_media_latest happens to return them in, which is not promised
+    # and differs between DuckDB versions.
+    assert len(calls) == 1
+    assert sorted(calls[0]) == ["rewritten 0", "rewritten 1", "rewritten 2"]
 
 
 def test_a_title_that_left_the_catalogue_leaves_the_index(warehouse, tmp_path):
