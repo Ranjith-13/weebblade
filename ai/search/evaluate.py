@@ -161,6 +161,26 @@ def _rank_of(results: list[dict[str, Any]], case: Case) -> int | None:
     return None
 
 
+def unsatisfiable(cases: list[Case]) -> list[str]:
+    """Cases whose query another case also asks, wanting a different title.
+
+    THE SCORE HAS A CEILING AND IT IS NOT ALWAYS THE CASE COUNT. Demon Slayer's
+    film and its TV re-cut carry literally identical title_romaji, and both sit
+    in the 40 most-held titles, so the set contains one query with two different
+    right answers. Whichever ranks first, the other is counted a miss: 39/40 is
+    full marks there, and reading it as a defect sends somebody looking for a
+    bug in the ranking.
+
+    Reported rather than filtered out. Dropping them would quietly change the
+    denominator between runs, and the collision is a real property of the
+    catalogue worth seeing.
+    """
+    seen: dict[str, list[str]] = {}
+    for c in cases:
+        seen.setdefault(loosen(c.query), []).append(c.shown_as)
+    return [f"{q}: {' / '.join(t)}" for q, t in seen.items() if len(t) > 1]
+
+
 def by_name(
     con: duckdb.DuckDBPyConnection, column: str, limit: int, typed: str = "exact"
 ) -> dict[str, Any]:
@@ -168,12 +188,17 @@ def by_name(
     how = {"exact": lambda n: n, "loose": loosen, "mistyped": mistype}[typed]
     cases = _cases(con, column, limit)
     ranks = [_rank_of(find_similar(con, how(c.query), TOP_N), c) for c in cases]
+    clashes = unsatisfiable(cases)
     return {
         "cases": len(cases),
         "first": sum(1 for r in ranks if r == 1),
         "top5": sum(1 for r in ranks if r is not None and r <= 5),
         "found": sum(1 for r in ranks if r is not None),
         "misses": [c.shown_as for c, r in zip(cases, ranks) if r is None][:8],
+        # The best "first" achievable: each clashing query can satisfy one of
+        # the titles that share it, never both.
+        "ceiling": len(cases) - sum(c.count("/") for c in clashes),
+        "clashes": clashes,
     }
 
 
@@ -205,10 +230,14 @@ def evaluate(con: duckdb.DuckDBPyConnection, limit: int = 40) -> dict[str, Any]:
 def _print(report: dict[str, Any]) -> None:
     for key in ("romaji", "romaji, loose", "romaji, mistyped", "native"):
         r = report[key]
+        ceiling = r.get("ceiling", r["cases"])
+        cap = "" if ceiling == r["cases"] else f"  (ceiling {ceiling})"
         print(
             f"  by {key:14} name   first {r['first']:>3}/{r['cases']}   "
-            f"top5 {r['top5']:>3}/{r['cases']}   found {r['found']:>3}/{r['cases']}"
+            f"top5 {r['top5']:>3}/{r['cases']}   found {r['found']:>3}/{r['cases']}{cap}"
         )
+        for clash in r.get("clashes", []):
+            print(f"    one query, two right answers: {clash}")
         if r["misses"]:
             print(f"    never found: {', '.join(r['misses'])}")
     v = report["vague"]

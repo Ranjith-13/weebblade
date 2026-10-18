@@ -408,6 +408,43 @@ in step rather than a term in an ORDER BY, and it is not done.
 The row that matters most is the last one: unchanged. A vague query equals no title's name,
 so every row scores the same and the ordering is the distance ordering it has always been.
 
+**Re-measured at 40 seasons (2026-10-19), and the table above had already decayed.** 11,992
+titles rather than 6,359, and the two numbers that read 40/40 above read **38/40** - because a
+bigger catalogue is a harder one in exactly one way: more titles means more titles sharing a
+name. Both losses were real collisions, not drift. Demon Slayer's film and its TV re-cut carry
+*literally identical* `title_romaji`. And "Kakegurui" matched both seasons, because season two
+is `Kakegurui××` and the normaliser strips `××` as punctuation, so the two normalise to the
+same string.
+
+A match flag alone cannot separate those, so the tie fell to cosine distance, which picked the
+TV arc over the film and season two over season one. **Votes break it**, and only inside the
+matched tiers so a vague query is untouched: where two names cannot be told apart, the title
+more people hold is the one more people mean - the film has 239,419 against 91,964, Kakegurui's
+first season 74,924 against 36,026. A third tier puts a *literal* match above a normalised one,
+because normalising is a concession to how people type and not a claim that two names are the
+same.
+
+| | at 22 seasons | at 40, before | at 40, after |
+|---|---|---|---|
+| romaji, as stored | 40/40 | 38/40 | **39/40** |
+| romaji, typed loosely | 40/40 | 38/40 | **39/40** |
+| romaji, two letters swapped | 7/40 | 8/40 | 8/40 |
+| native (Japanese) | 37/40 | 38/40 | **40/40** |
+| on-genre, twelve vague queries | 92/120 | 96/120 | 96/120 |
+
+**39/40 is full marks there, and the harness now says so rather than leaving it to be
+rediscovered.** Both Demon Slayer entries are in the 40 most-held titles and their romaji is
+the same string, so the case set contains one query with two different right answers; whichever
+ranks first, the other is counted a miss. `evaluate.unsatisfiable` reports those pairs and
+prints the achievable ceiling beside the score. Reported rather than filtered out, because
+dropping them would quietly move the denominator between runs.
+
+The last row is the one to keep watching, and it is unchanged: the vote tiebreak is gated on the
+match tier, so for a query that names no title every row still scores the same and the ordering
+is the distance ordering. Cases are drawn from the catalogue, so **two warehouses of different
+sizes are not comparable** - the columns above are three readings of the same question, not a
+trend.
+
 It is a **query-side change**, so it needed no re-embedding and took effect on deploy rather
 than on the next weekly run. It also fixed a latent outage: the first version named all three
 title columns unconditionally, and a warehouse built from a snapshot older than one of them

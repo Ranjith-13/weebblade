@@ -277,16 +277,18 @@ def test_the_ranking_term_only_names_columns_the_view_actually_has(tmp_path):
 
     Asserted on the generated SQL rather than through a client, because the
     thing being checked is which columns are named."""
-    from ai.search.query import _order_by
+    from ai.search.query import _name_rank
 
     con = duckdb.connect()
     con.execute("CREATE VIEW anime_media_latest AS SELECT 'a' AS title_english, 'b' AS title_romaji")
-    order, params = _order_by(con)
-    assert "title_english" in order and "title_romaji" in order
-    assert "title_native" not in order
-    assert params == 2
+    rank, params = _name_rank(con)
+    assert "title_english" in rank and "title_romaji" in rank
+    assert "title_native" not in rank
+    # Three: the normalised query twice and the literal once.
+    assert params == 3
 
-    # And with no name at all, the ordering it has always had.
+    # And with no name at all, a constant "no match", so the caller still
+    # orders by it and still falls through to distance.
     con.execute("CREATE OR REPLACE VIEW anime_media_latest AS SELECT 1 AS wb_id")
-    assert _order_by(con) == ("ORDER BY distance", 0)
+    assert _name_rank(con) == ("2", 0)
     con.close()
