@@ -803,6 +803,33 @@ export type Mover = {
   on: string;
 };
 
+/** Mirrors backend/app/schemas.py:Gaining - a title that picked up an audience.
+ *
+ *  A DIFFERENT QUESTION FROM Mover, not a variation. "Whose score moved" and
+ *  "who is finding an audience" mostly name different titles: over 2026-10-16
+ *  to 10-19, 37 of 243 re-asked titles moved their printed score while 78% of
+ *  the week's 65,841 new votes landed on titles that did not. */
+export type Gaining = {
+  wb_id: string;
+  title: string | null;
+  poster_url: string | null;
+  format: string | null;
+  season: string | null;
+  season_year: number | null;
+  /** AniList's own first and last readings. Its own, because the merged count
+   *  may be another source's entirely and a gain measured against it subtracts
+   *  two sources from each other. */
+  started: number;
+  ended: number;
+  gained: number;
+  /** Growth against the baseline: what separates 2,665 new people on a 98,000
+   *  base from 3,978 on a 36,000 one. */
+  share: number;
+  score_100: number | null;
+  /** Whether this title is in the movers list too. */
+  moved: boolean;
+};
+
 /** Mirrors backend/app/schemas.py:Moving - what the season's scores have done
  *  lately, read across titles rather than down one of them. */
 export type Moving = {
@@ -815,6 +842,11 @@ export type Moving = {
    *  that makes the movers worth reading: most of them do not move. */
   steady: number;
   movers: Mover[];
+  gaining: Gaining[];
+  /** Every new vote in the window, and the share of it that landed on a title
+   *  whose printed score held - why the movers list is not the whole week. */
+  votes_total: number;
+  votes_on_steady: number;
 };
 
 /** Which way a score went, as a word rather than a glyph.

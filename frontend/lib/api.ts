@@ -342,7 +342,20 @@ export async function getMoving(): Promise<Moving | null> {
   "use cache";
   cacheLife("hours");
   try {
-    return await getJson<Moving>(buildUrl("/scores/moving"));
+    const body = await getJson<Moving>(buildUrl("/scores/moving"));
+    // FILLED IN HERE, BECAUSE THE API MAY BE OLDER THAN THIS FILE. The two
+    // deploy separately, so a build routinely renders against a container
+    // running the previous commit - and an endpoint that exists without a
+    // field added since is the shape that causes: `gaining` came back
+    // undefined and `.length` took the whole production build down at
+    // prerender, which is how this was found. A missing list is an empty one.
+    return {
+      ...body,
+      movers: body.movers ?? [],
+      gaining: body.gaining ?? [],
+      votes_total: body.votes_total ?? 0,
+      votes_on_steady: body.votes_on_steady ?? 0,
+    };
   } catch (err) {
     if (err instanceof ApiError && (err.status === 404 || err.status === 503)) return null;
     throw err;

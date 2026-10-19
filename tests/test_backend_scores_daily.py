@@ -348,3 +348,83 @@ def test_a_warehouse_with_no_daily_series_is_empty_rather_than_an_error(tmp_path
 
     assert response.status_code == 200
     assert response.json()["movers"] == []
+
+
+# WHO IS FINDING AN AUDIENCE, which is a different question from whose score
+# moved and mostly names different titles. Over 2026-10-16 to 10-19, 37 of 243
+# re-asked titles moved their printed score while 78% of the week's 65,841 new
+# votes landed on titles that did not - so a page built only on movers leaves
+# most of the week on the floor.
+
+
+def test_a_title_that_gained_an_audience_is_listed_even_if_its_score_held(season):
+    """The whole point. Steady never moved its printed score and picked up more
+    people than anything else here."""
+    client, _ = season
+
+    gaining = {g["title"]: g for g in client.get("/scores/moving").json()["gaining"]}
+
+    assert "Steady" in gaining
+    assert gaining["Steady"]["gained"] == 1000
+    assert gaining["Steady"]["moved"] is False
+
+
+def test_growth_is_measured_against_anilists_own_first_reading(season):
+    """Never against the merged count on anime_media_latest, which may be
+    another source's number entirely. The fixture's merged user_count is 500
+    while AniList's first reading is 1000, so a share computed from the wrong
+    one reads 180% where the truth is 90% - which is the shape of the real
+    mistake this guards: a first draft reported +892% for a title that had
+    grown 10.8%."""
+    client, _ = season
+
+    climber = next(g for g in client.get("/scores/moving").json()["gaining"]
+                   if g["title"] == "Climber")
+
+    assert (climber["started"], climber["ended"]) == (1000, 1900)
+    assert climber["share"] == 90.0
+
+
+def test_the_overlap_between_the_two_lists_is_marked(season):
+    """A title can both move its score and gain an audience, and saying so is
+    better than hiding it from one list or the other."""
+    client, _ = season
+    body = client.get("/scores/moving").json()
+
+    gaining = {g["title"]: g["moved"] for g in body["gaining"]}
+    assert gaining["Climber"] is True
+    assert gaining["Steady"] is False
+    assert "Climber" in [m["title"] for m in body["movers"]]
+
+
+def test_they_are_ranked_by_how_many_people_not_by_the_rate(season):
+    """Volume first, with the rate printed beside it: that is what separates a
+    big show ticking over from a small one breaking out, without needing a
+    second ranking to justify. Slider grew 12% and Steady 100%, but Steady
+    brought eight times as many people."""
+    client, _ = season
+
+    gaining = client.get("/scores/moving").json()["gaining"]
+
+    assert [g["title"] for g in gaining][0] == "Steady"
+    assert [g["gained"] for g in gaining] == sorted(
+        [g["gained"] for g in gaining], reverse=True
+    )
+
+
+def test_the_share_of_attention_the_movers_list_cannot_show_is_counted(season):
+    """Stated rather than left to be noticed. Wanderer and Steady between them
+    took 1,900 of the 2,920 new votes and neither appears among the movers."""
+    client, _ = season
+    body = client.get("/scores/moving").json()
+
+    assert body["votes_total"] == 2920
+    assert body["votes_on_steady"] == 1900
+
+
+def test_a_title_that_lost_votes_is_not_a_gainer(season, tmp_path):
+    """AniList's count can fall - a list is a thing people remove a title from.
+    Negative growth is not news and is not printed as if it were."""
+    client, _ = season
+
+    assert all(g["gained"] > 0 for g in client.get("/scores/moving").json()["gaining"])

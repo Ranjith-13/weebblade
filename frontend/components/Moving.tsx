@@ -47,8 +47,10 @@ export async function MovingSection() {
   const movers = weightedMovers(data);
   // Nothing to show is a real answer on a quiet week, and on a warehouse
   // published before the series existed. Both render nothing rather than an
-  // empty heading, which is the rule the rest of this page follows.
-  if (!data || movers.length === 0) return null;
+  // empty heading, which is the rule the rest of this page follows. Either
+  // list alone is worth the section: a week where no score moved but four
+  // thousand people picked something up is still a week with news in it.
+  if (!data || (movers.length === 0 && data.gaining.length === 0)) return null;
 
   const quiet = data.movers.length - movers.length;
 
@@ -67,6 +69,12 @@ export async function MovingSection() {
         before. These are the ones that do not.
       </p>
 
+      {movers.length === 0 ? (
+        <p className="mt-4 max-w-[62ch] leading-[1.7] text-ink-soft">
+          None of them moved the score this site prints, which is an ordinary week: a score is an
+          average over tens of thousands of votes and a few days rarely shift one.
+        </p>
+      ) : (
       <ol className="mt-5">
         {movers.map((m) => {
           const direction = moveDirection(m);
@@ -101,8 +109,59 @@ export async function MovingSection() {
           );
         })}
       </ol>
+      )}
 
-      <p className="meta mt-3 max-w-[62ch] !leading-[1.6]">
+      {/* THE OTHER QUESTION, and on this data the bigger one. A score moving is
+          the rarer event: 37 of the 243 titles re-asked in the first window,
+          while 78% of the week's votes landed on titles whose score held. A
+          page built only on movers leaves most of the week on the floor, and
+          "four thousand people picked this up" is a thing no rating says. */}
+      {data.gaining.length > 0 && (
+        <>
+          <h3 className="mt-9 font-display text-[1.2rem] font-black leading-none">
+            Who found an audience
+          </h3>
+          <p className="mt-3 max-w-[62ch] leading-[1.7] text-ink-soft">
+            The same readings answer a second question, and mostly about different titles. A score
+            is an average and moves slowly; the number of people holding a title moves every day.
+            Of <span className="tnum">{compactCount(data.votes_total)}</span> new votes in this
+            window, <span className="tnum">{compactCount(data.votes_on_steady)}</span> went to
+            titles whose printed score did not budge, so they appear nowhere above.
+          </p>
+          <ol className="mt-4">
+            {data.gaining.map((g) => (
+              <li
+                key={g.wb_id}
+                className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-rule py-2"
+              >
+                <Link href={titleHref(g)} className="font-semibold hover:text-flag">
+                  {g.title}
+                </Link>
+                {/* Where the two lists overlap, said rather than hidden. */}
+                {g.moved && <span className="meta">score moved too</span>}
+                <span className="tnum ml-auto text-[0.95rem]">
+                  <span className="font-semibold">+{compactCount(g.gained)}</span>{" "}
+                  <span className="meta">people</span>
+                </span>
+                {/* The rate beside the volume: what separates a big show
+                    ticking over from a small one breaking out. */}
+                <span className="meta w-full text-right tnum sm:w-auto sm:text-left">
+                  {g.share}% more than it had
+                </span>
+              </li>
+            ))}
+          </ol>
+          <p className="meta mt-3 max-w-[62ch] !leading-[1.6]">
+            Ranked by how many people rather than by the rate, with the rate beside it. Counted
+            from AniList&rsquo;s own readings, never against the score above, which may be a
+            different source&rsquo;s number: subtracting two sources from each other reported a
+            title as having grown 892% where it had grown 10.8%.
+          </p>
+        </>
+      )}
+
+      {movers.length > 0 && (
+      <p className="meta mt-9 max-w-[62ch] !leading-[1.6]">
         Ranked by the votes behind the move rather than its size, because a score stored out of 100
         and shown out of 10 crosses a rounding boundary on a single vote.
         {quiet > 0 && (
@@ -116,6 +175,7 @@ export async function MovingSection() {
         Only titles the catalogue calls airing are asked daily, so this is the current season by
         construction rather than by a filter.
       </p>
+      )}
     </section>
   );
 }

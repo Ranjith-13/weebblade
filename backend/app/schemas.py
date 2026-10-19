@@ -448,6 +448,37 @@ class Mover(BaseModel):
     on: str
 
 
+class Gaining(BaseModel):
+    """One title that picked up an audience over the window.
+
+    A DIFFERENT QUESTION FROM Mover, not a variation on it. "Whose score moved"
+    and "who is finding an audience" answer different things and mostly name
+    different titles: over 2026-10-16 to 10-19, 37 of 243 re-asked titles moved
+    their printed score while 78% of the week's 65,841 new votes landed on
+    titles that did not. `moved` says where the two lists overlap.
+    """
+
+    wb_id: str
+    title: str | None = None
+    poster_url: str | None = None
+    format: str | None = None
+    season: str | None = None
+    season_year: int | None = None
+    # AniList's own first and last readings in the window. Its own, because the
+    # merged count on anime_media_latest may be another source's entirely, and
+    # a gain measured against it is two sources subtracted from each other - the
+    # first draft of this did exactly that and reported +892% where the truth
+    # was +10.8%.
+    started: int
+    ended: int
+    gained: int
+    # Growth against the baseline, which is what separates 2,665 new people on a
+    # 98,000 base from 3,978 on a 36,000 one.
+    share: float
+    score_100: float | None = None
+    moved: bool = False
+
+
 class Moving(BaseModel):
     """What the season's scores have done lately, across titles rather than down
     one of them - the live instance of what /scores/settling explains.
@@ -467,6 +498,13 @@ class Moving(BaseModel):
     # the ones that did worth reading.
     steady: int = 0
     movers: list[Mover] = []
+    # The other question. See Gaining.
+    gaining: list[Gaining] = []
+    # Every new vote in the window, and the share of it that landed on a title
+    # whose printed score did not move - the figure that says why `movers`
+    # alone is not the whole week.
+    votes_total: int = 0
+    votes_on_steady: int = 0
 
 
 class ArrivalPoint(BaseModel):

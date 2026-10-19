@@ -11,6 +11,7 @@ from ..schemas import (
     ArrivalPoint,
     DailyScorePoint,
     DailyScores,
+    Gaining,
     Mover,
     Moving,
     PrintedMove,
@@ -328,6 +329,49 @@ def moving(
         """,
         [_since()],
     )
+    # THE OTHER QUESTION, over the same readings. FIRST and LAST of the vote
+    # count rather than the sum of the re-asked pairs: the audience a title has
+    # is a level, not a flow, and summing pairs would miss a day the check could
+    # not run. Measured against AniList's own first reading, never the merged
+    # count on anime_media_latest - that may be another source's number
+    # entirely, and subtracting two sources gave +892% where the truth was
+    # +10.8%.
+    gaining = _optional(
+        con,
+        """
+        WITH f AS (
+          SELECT wb_id,
+                 FIRST(user_count ORDER BY fetched_on) AS started,
+                 LAST(user_count ORDER BY fetched_on) AS ended,
+                 FIRST(score_100 ORDER BY fetched_on) AS was,
+                 LAST(score_100 ORDER BY fetched_on) AS now
+          FROM anime_score_daily WHERE fetched_on > ? GROUP BY wb_id
+        )
+        SELECT f.wb_id, f.started, f.ended, f.ended - f.started AS gained,
+               ROUND((f.ended - f.started) * 100.0 / NULLIF(f.started, 0), 1) AS share,
+               f.now AS score_100,
+               ROUND(f.now / 10, 1) <> ROUND(f.was / 10, 1) AS moved,
+               COALESCE(m.title_english, m.title_romaji) AS title,
+               m.poster_url, m.format, m.season, m.season_year
+        FROM f JOIN anime_media_latest m ON m.wb_id = f.wb_id
+        WHERE f.ended > f.started
+        ORDER BY gained DESC, f.wb_id
+        LIMIT ?
+        """,
+        [_since(), limit],
+    )
+    totals = _optional(
+        con,
+        _MOVING + """
+        SELECT SUM(votes_gained) AS votes_total,
+               SUM(votes_gained) FILTER (WHERE ROUND(now / 10, 1) = ROUND(was / 10, 1))
+                 AS votes_on_steady
+        FROM moved
+        """,
+        [_since()],
+    )
+    counted = totals[0] if totals else {}
+
     head = window[0] if window else {}
     return Moving(
         first_day=head.get("first_day"),
@@ -337,6 +381,9 @@ def moving(
         titles_reasked=head.get("titles_reasked") or 0,
         steady=head.get("steady") or 0,
         movers=[Mover(**row) for row in rows],
+        gaining=[Gaining(**row) for row in gaining],
+        votes_total=counted.get("votes_total") or 0,
+        votes_on_steady=counted.get("votes_on_steady") or 0,
     )
 
 
