@@ -89,23 +89,46 @@ def test_the_limit_can_be_moved_without_a_deploy(warehouse, monkeypatch):
         importlib.reload(db)
 
 
-def test_running_out_of_memory_is_a_503_not_a_500(warehouse):
+class _OutOfMemory:
+    """A connection that has run out of memory, which is the only reliable way
+    to be one.
+
+    An earlier version of this test provoked a real exhaustion with a sort too
+    big for a 16MB limit. It passed here and failed in CI: on the pinned DuckDB
+    1.1.3 that query completed - after two and a half minutes - where 1.5.6
+    raises. Whether a given query crosses a given limit on a given version is
+    not what is under test, and tying the assertion to it made the suite both
+    slow and wrong.
+    """
+
+    def execute(self, sql, params):
+        raise duckdb.OutOfMemoryException(
+            "Out of Memory Error: could not allocate block of size 256.0 KiB"
+        )
+
+
+def test_running_out_of_memory_is_a_503_not_a_500():
     """The limit stops the container being killed; this makes hitting it
     survivable. 503 is what the frontend already treats as "this block has
-    nothing to say" (getScoreSettling), so the heavy endpoint goes quiet and the
-    page stays up. As a 500 it would be an error boundary instead."""
+    nothing to say" (getScoreSettling), so the heavy endpoint goes quiet and
+    the page stays up. As a 500 it would be an error boundary instead."""
+    with pytest.raises(HTTPException) as raised:
+        db.run_query(_OutOfMemory(), "SELECT 1")
+
+    assert raised.value.status_code == 503
+    assert "memory" in raised.value.detail.lower()
+
+
+def test_a_missing_view_is_still_its_own_503(warehouse):
+    """The two 503s say different things and must not collapse into one: an
+    empty warehouse is the pipeline not having run, and an exhausted one is a
+    query needing more than the container has."""
     con = duckdb.connect(str(warehouse), read_only=True)
-    con.execute("SET memory_limit='16MB'")
-    con.execute("SET threads=2")
     try:
         with pytest.raises(HTTPException) as raised:
-            # Wide enough to not fit: a self-join over a generated range.
-            # Smallest shape that reliably exceeds 16MB: a sort it cannot
-            # stream. Tuned down from 400000x400, which took 20s to fail.
-            db.run_query(con, "SELECT a.range, b.range FROM range(200000) a, range(50) b "
-                              "ORDER BY a.range DESC, b.range DESC")
+            db.run_query(con, "SELECT * FROM a_view_that_does_not_exist")
     finally:
         con.close()
 
     assert raised.value.status_code == 503
-    assert "memory" in raised.value.detail.lower()
+    assert "pipeline" in raised.value.detail.lower()

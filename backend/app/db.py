@@ -34,12 +34,16 @@ DB_PATH = DATA_DIR / "warehouse.duckdb"
 # against a 512 MB limit. Seven megabytes, and the input to the last one grows
 # every week. Bounded to the values below the same path peaks at 402 MB.
 #
-# NOT AS LOW AS IT WILL GO. Under real pressure DuckDB raises rather than
-# quietly spilling: /scores/settling completes at 64 MB and fails at 16. The
-# limit is therefore set at about three times what the heaviest query needs
-# today, so growth has somewhere to go - and run_query turns the failure into a
-# 503 if it ever arrives, because one endpoint degrading is a far better outcome
-# than the container being killed with no error anyone can trace to a query.
+# NOT AS LOW AS IT WILL GO, because a limit is not a promise of spilling. On
+# DuckDB 1.5.6 a query that cannot fit raises OutOfMemoryException rather than
+# going to disk: /scores/settling completes at 64 MB and fails at 16. On the
+# 1.1.3 this service pins, a sort that raises on 1.5.6 ran to completion
+# instead - so the two do not agree, and only one of them is what production
+# runs. The limit is therefore set at about three times what the heaviest query
+# needs today, so growth has somewhere to go on either - and run_query turns the
+# exception into a 503 should it arrive, because one endpoint degrading is a far
+# better outcome than the container being killed with no error anyone can trace
+# back to a query.
 #
 # Environment-settable so it can be tuned on a running service without a deploy.
 MEMORY_LIMIT = os.environ.get("DUCKDB_MEMORY_LIMIT", "192MB")
