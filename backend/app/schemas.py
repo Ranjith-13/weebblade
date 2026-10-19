@@ -427,6 +427,48 @@ class DailyScores(BaseModel):
     votes_gained: int | None = None
 
 
+class Mover(BaseModel):
+    """One title whose printed score moved over the window, and what moved it."""
+
+    wb_id: str
+    title: str | None = None
+    poster_url: str | None = None
+    format: str | None = None
+    season: str | None = None
+    season_year: int | None = None
+    # Out of 100, as the warehouse stores a score. First reading to last.
+    was: float
+    now: float
+    # The votes that arrived across the whole window, not just the pair that
+    # crossed the boundary: the question is what moved it, and a tenth of a
+    # point is the sum of a week's opinions rather than one of them.
+    votes_gained: int | None = None
+    reasks: int
+    # The newest reading in the window, so a page can say when it last moved.
+    on: str
+
+
+class Moving(BaseModel):
+    """What the season's scores have done lately, across titles rather than down
+    one of them - the live instance of what /scores/settling explains.
+
+    Only airing titles are asked about daily, so this is the current season by
+    construction rather than by a filter.
+    """
+
+    first_day: str | None = None
+    last_day: str | None = None
+    days: int = 0
+    # Pairs of readings where the vote count moved, and the titles they cover.
+    reasks: int = 0
+    titles_reasked: int = 0
+    # Titles whose printed score ended the window where it started. Reported
+    # rather than listed: "most of them did not move" is the finding that makes
+    # the ones that did worth reading.
+    steady: int = 0
+    movers: list[Mover] = []
+
+
 class ArrivalPoint(BaseModel):
     """What the catalogue held about one season on one run date."""
 

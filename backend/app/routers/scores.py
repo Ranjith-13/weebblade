@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import logging
+from datetime import date, timedelta
+
 import duckdb
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from ..db import get_db, run_query
 from ..schemas import (
     ArrivalPoint,
     DailyScorePoint,
     DailyScores,
+    Mover,
+    Moving,
     PrintedMove,
     ScoreArrival,
     ScoreSettling,
@@ -16,6 +21,8 @@ from ..schemas import (
     SourceReasks,
 )
 from ..seasons import PHASE_ORDER, QUARTER, SEASON_START, season_phase
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scores", tags=["scores"])
 
@@ -231,6 +238,139 @@ def daily(wb_id: str, con: duckdb.DuckDBPyConnection = Depends(get_db)) -> Daily
         moves=moves,
         votes_gained=gained,
     )
+
+
+# How much of the daily series a reader is shown at once.
+#
+# A week, because that is the unit the question is asked in - "what has this
+# season's scores done lately" - and because the series is published daily now,
+# so a week of it is seven readings rather than one. Longer would turn a page
+# about what is happening into an archive, and /scores/settling already answers
+# the long question properly.
+MOVING_DAYS = 7
+
+# THE SAME SHAPE AS /settling AND FOR THE SAME REASON: a pair counts only where
+# the vote count moved. The daily check writes a row every morning whether or
+# not anything changed, so without this the page would report the schedule.
+#
+# Aggregated per title rather than per pair. A title that goes 6.8 to 6.9 to 7.0
+# across a week moved once, by two tenths, on the sum of the week's votes - and
+# three rows saying so would read as three shows. FIRST and LAST over the
+# window, so a score that wandered and came back is correctly not a mover.
+_MOVING = f"""
+WITH reading AS (
+  SELECT wb_id, fetched_on, score_100, user_count FROM anime_score_daily
+  WHERE fetched_on > ?
+), paired AS (
+  SELECT wb_id, fetched_on, score_100, user_count,
+         LAG(user_count) OVER (PARTITION BY wb_id ORDER BY fetched_on) AS was_votes,
+         LAG(score_100)  OVER (PARTITION BY wb_id ORDER BY fetched_on) AS was_score
+  FROM reading
+), reask AS (
+  SELECT * FROM paired WHERE was_votes IS NOT NULL AND user_count <> was_votes
+), moved AS (
+  SELECT wb_id,
+         FIRST(was_score ORDER BY fetched_on) AS was,
+         LAST(score_100 ORDER BY fetched_on) AS now,
+         SUM(user_count - was_votes) AS votes_gained,
+         COUNT(*) AS reasks,
+         MAX(fetched_on) AS on
+  FROM reask GROUP BY wb_id
+)
+"""
+
+
+@router.get("/moving", response_model=Moving)
+def moving(
+    limit: int = Query(40, ge=1, le=100),
+    con: duckdb.DuckDBPyConnection = Depends(get_db),
+) -> Moving:
+    """Which of the season's scores have moved lately, and on how many votes.
+
+    THE FRONT DOOR THE MEASUREMENT DID NOT HAVE. /settling explains how a score
+    behaves over its life and is read once; this is the same instrument pointed
+    at this week, and is the only page here that answers "what is happening" with
+    titles rather than with rates. Before it, the daily series could be seen only
+    by landing on the right title's page and knowing to look.
+
+    RANKED BY THE VOTES BEHIND THE MOVE, not by its size. A score stored out of
+    100 and shown out of 10 crosses a rounding boundary on a single vote, so the
+    biggest-looking change on a page sorted by size is routinely the least
+    meaningful one. Sorted by weight, the top of the list is where the most
+    people actually changed their minds.
+
+    Empty rather than an error on a warehouse with no daily readings - one
+    published before the series existed, or a catalogue with nothing airing.
+    """
+    rows = _optional(
+        con,
+        _MOVING + """
+        SELECT d.wb_id, d.was, d.now, d.votes_gained, d.reasks, d.on,
+               COALESCE(m.title_english, m.title_romaji) AS title,
+               m.poster_url, m.format, m.season, m.season_year
+        FROM moved d JOIN anime_media_latest m ON m.wb_id = d.wb_id
+        WHERE ROUND(d.now / 10, 1) <> ROUND(d.was / 10, 1)
+        ORDER BY d.votes_gained DESC NULLS LAST, d.wb_id
+        LIMIT ?
+        """,
+        [_since(), limit],
+    )
+    window = _optional(
+        con,
+        _MOVING + """
+        SELECT (SELECT MIN(fetched_on) FROM reading) AS first_day,
+               (SELECT MAX(fetched_on) FROM reading) AS last_day,
+               (SELECT COUNT(DISTINCT fetched_on) FROM reading) AS days,
+               (SELECT COUNT(*) FROM reask) AS reasks,
+               (SELECT COUNT(DISTINCT wb_id) FROM reask) AS titles_reasked,
+               COUNT(*) FILTER (WHERE ROUND(now / 10, 1) = ROUND(was / 10, 1)) AS steady
+        FROM moved
+        """,
+        [_since()],
+    )
+    head = window[0] if window else {}
+    return Moving(
+        first_day=head.get("first_day"),
+        last_day=head.get("last_day"),
+        days=head.get("days") or 0,
+        reasks=head.get("reasks") or 0,
+        titles_reasked=head.get("titles_reasked") or 0,
+        steady=head.get("steady") or 0,
+        movers=[Mover(**row) for row in rows],
+    )
+
+
+def _since() -> str:
+    """The first day of the window, exclusive.
+
+    Counted back from today rather than from the newest reading, deliberately:
+    if the pipeline stops, "this week" should empty out and say so rather than
+    quietly becoming the last week it managed to run.
+    """
+    return (date.today() - timedelta(days=MOVING_DAYS)).isoformat()
+
+
+def _optional(con: duckdb.DuckDBPyConnection, sql: str, params: list) -> list[dict]:
+    """A query against the daily series, which a warehouse may not carry.
+
+    anime_score_daily appears only once a dated status file holds score_100, so
+    an older published warehouse has no such view - and the API and the site
+    deploy separately, so a build can reach a container serving one. An empty
+    answer, never the 503 that would take the block down.
+
+    AND IT SAYS WHAT IT SWALLOWED. A BinderException is usually the view being
+    absent, but it is equally what a column this query names and the warehouse
+    does not raises - and that failure looks exactly like "nothing moved this
+    week". It cost twenty minutes of reading a correct query while a missing
+    poster_url returned an empty page in silence. An empty answer is still the
+    right answer for a reader; a log line is the difference between knowing why
+    and guessing.
+    """
+    try:
+        return con.execute(sql, params).fetch_arrow_table().to_pylist()
+    except (duckdb.CatalogException, duckdb.BinderException) as exc:
+        logger.info("Daily series unavailable, answering empty: %s", str(exc).splitlines()[0])
+        return []
 
 
 def _series(con: duckdb.DuckDBPyConnection, wb_id: str) -> list[dict]:

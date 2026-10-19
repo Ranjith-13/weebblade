@@ -16,6 +16,7 @@ Toaru Anbu no ITEM went 6.9 to 7.0 on 521. Both are real readings and only one
 is news, so the votes behind a move travel with it.
 """
 
+from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
@@ -205,3 +206,141 @@ def test_a_title_rated_on_only_one_morning_has_a_point_and_no_pairs(world):
 
     assert len(body["points"]) == 6
     assert body["reasks"] == 3  # the 21st brought no new votes either
+
+
+# GET /scores/moving: the same instrument pointed across titles instead of down
+# one, and the front door the measurement did not have. Before it, the daily
+# series could be seen only by landing on the right title's page and knowing to
+# look - 308 re-asks over three days with no route to any of them.
+
+
+def _morning_for(data, day, readings):
+    """readings: {anilist_id: (score_100, user_count)}"""
+    _morning(data, day, [_reading(i, day, s, v) for i, (s, v) in readings.items()])
+
+
+@pytest.fixture
+def season(tmp_path):
+    """Four airing titles over three mornings, one of each case the page has to
+    tell apart: moved up on real weight, moved down, wandered and came back, and
+    gained votes without the printed score budging."""
+    data = tmp_path / "data"
+    ids, registry, _ = assign([[f"anilist:{i}", f"kitsu:{i}"] for i in (1, 2, 3, 4)],
+                              Registry(), "2026-10-16")
+    save(data, registry)
+    catalogue = [
+        {"source": "kitsu", "source_id": str(i), "wb_id": ids[i - 1],
+         "source_keys": [f"anilist:{i}", f"kitsu:{i}"], "title_english": name,
+         "title_romaji": None,
+         "format": "TV", "status": "current", "season": "FALL", "season_year": 2026,
+         "poster_url": f"https://kitsu/{i}.jpg",
+         "score_100": 70.0, "user_count": 500, "run_date": "2026-10-16"}
+        for i, name in enumerate(["Climber", "Slider", "Wanderer", "Steady"], start=1)
+    ]
+    path = data / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-10-16" / "p.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist(catalogue), path)
+
+    today = date.today()
+    days = [(today - timedelta(days=n)).isoformat() for n in (2, 1, 0)]
+    _morning_for(data, days[0], {1: (69, 1000), 2: (72, 1000), 3: (69, 1000), 4: (70, 1000)})
+    _morning_for(data, days[1], {1: (70, 1300), 2: (71, 1050), 3: (70, 1400), 4: (70, 1600)})
+    _morning_for(data, days[2], {1: (71, 1900), 2: (70, 1120), 3: (69, 1900), 4: (70, 2000)})
+
+    db = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data, db)
+
+    def override():
+        con = duckdb.connect(str(db), read_only=True)
+        try:
+            yield con
+        finally:
+            con.close()
+
+    app.dependency_overrides[get_db] = override
+    yield TestClient(app), ids
+    app.dependency_overrides.clear()
+
+
+def test_a_title_whose_printed_score_moved_is_listed(season):
+    client, ids = season
+
+    movers = {m["title"]: m for m in client.get("/scores/moving").json()["movers"]}
+
+    assert set(movers) == {"Climber", "Slider"}
+    assert (movers["Climber"]["was"], movers["Climber"]["now"]) == (69.0, 71.0)
+    assert (movers["Slider"]["was"], movers["Slider"]["now"]) == (72.0, 70.0)
+
+
+def test_the_votes_are_the_whole_window_not_the_pair_that_crossed(season):
+    """A tenth of a point is the sum of a week's opinions, not one of them."""
+    client, _ = season
+
+    climber = next(m for m in client.get("/scores/moving").json()["movers"]
+                   if m["title"] == "Climber")
+
+    assert climber["votes_gained"] == 900  # 1000 -> 1300 -> 1900
+    assert climber["reasks"] == 2
+
+
+def test_a_score_that_wandered_and_came_back_is_not_a_mover(season):
+    """FIRST and LAST over the window. Wanderer went 6.9 to 7.0 to 6.9, which is
+    two readings and no news - and three rows saying otherwise would read as
+    three shows."""
+    client, _ = season
+    body = client.get("/scores/moving").json()
+
+    assert "Wanderer" not in [m["title"] for m in body["movers"]]
+    assert body["steady"] == 2  # Wanderer and Steady
+
+
+def test_votes_without_a_printed_move_are_counted_but_not_listed(season):
+    """Most titles do not move, and saying so is what makes the ones that did
+    worth reading."""
+    client, _ = season
+    body = client.get("/scores/moving").json()
+
+    assert "Steady" not in [m["title"] for m in body["movers"]]
+    assert body["titles_reasked"] == 4
+    assert body["reasks"] == 8
+
+
+def test_they_are_ranked_by_the_votes_behind_the_move(season):
+    """Not by its size. A score shown out of 10 crosses a rounding boundary on a
+    single vote, so the biggest-looking change on a page sorted by size is
+    routinely the least meaningful one. Slider moved two tenths on 120 votes and
+    Climber two on 900."""
+    client, _ = season
+
+    movers = client.get("/scores/moving").json()["movers"]
+
+    assert [m["title"] for m in movers] == ["Climber", "Slider"]
+
+
+def test_a_warehouse_with_no_daily_series_is_empty_rather_than_an_error(tmp_path):
+    data = tmp_path / "data"
+    ids, registry, _ = assign([["kitsu:1"]], Registry(), "2026-10-16")
+    save(data, registry)
+    path = data / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-10-16" / "p.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist([
+        {"source": "kitsu", "source_id": "1", "wb_id": ids[0], "source_keys": ["kitsu:1"],
+         "title_english": "X", "format": "TV", "run_date": "2026-10-16"}]), path)
+    db = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data, db)
+
+    def override():
+        con = duckdb.connect(str(db), read_only=True)
+        try:
+            yield con
+        finally:
+            con.close()
+
+    app.dependency_overrides[get_db] = override
+    try:
+        response = TestClient(app).get("/scores/moving")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["movers"] == []
