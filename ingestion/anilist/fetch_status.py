@@ -33,7 +33,7 @@ import pyarrow as pa
 
 from ..storage import write_daily, write_raw_json
 from .client import AniListClient
-from .resolve_ids import resolved_ids
+from .resolve_ids import RETRY_DAYS, resolved_ids, searched_and_missed
 
 logger = logging.getLogger(__name__)
 
@@ -165,8 +165,10 @@ def candidates(data_dir: Path) -> tuple[list[int], list[int]]:
         con.close()
 
     found = resolved_ids(data_dir)
+    missed = searched_and_missed(data_dir)
     anilist: set[int] = set()
     mal_only: set[int] = set()
+    futile = 0
     for wb_id, keys, mal_id in rows:
         ids = {int(k.split(":", 1)[1]) for k in keys or [] if k.startswith("anilist:")}
         searched = found.get(wb_id)
@@ -176,6 +178,21 @@ def candidates(data_dir: Path) -> tuple[list[int], list[int]]:
             anilist |= ids
         elif mal_id is not None:
             mal_only.add(int(mal_id))
+            if wb_id in missed:
+                futile += 1
+    if futile:
+        # Reported, not predicted. These have been searched by NAME and not
+        # found, which is a different question from whether AniList has an
+        # entry carrying their MAL id - the strict matching rules refuse an
+        # ambiguous name that idMal answers for anyway. On 2026-10-18, 88
+        # titles here were name-search misses and 78 went unanswered, so ten
+        # of them were answered by id. land_status counts what actually came
+        # back; this only says how many were already known to be hard.
+        logger.info(
+            "Of the %s asked by MAL id, %s have also been searched by name without "
+            "finding an AniList entry (retried every %s days).",
+            len(mal_only), futile, RETRY_DAYS,
+        )
     return sorted(anilist), sorted(mal_only)
 
 
@@ -222,8 +239,25 @@ def land_status(data_dir: Path, run_date: str, client: AniListClient | None = No
 
     rows = [flatten_status(m, run_date) for m in raw]
     write_daily(rows, SCHEMA, data_dir, "anilist_status", run_date)
+
+    # WHY THE TWO NUMBERS DIFFER, said here rather than left as a subtraction.
+    # "asked about 435 titles, 357 answered" reads like 78 failures and is not
+    # one: a title with no AniList key is asked about by its MAL id, and where
+    # no AniList entry carries that idMal there is simply nothing to return.
+    # Every one of the 78 on 2026-10-18 was that, and establishing it cost an
+    # hour of reading parquet. Counted from the answers rather than guessed at
+    # beforehand, because only the response knows which ids landed.
+    answered_mal = {m.get("idMal") for m in raw if m.get("idMal") is not None}
+    unanswered = len([i for i in mal_ids if i not in answered_mal])
     logger.info(
         "AniList status: asked about %s titles (%s by MAL id), %s answered",
         len(anilist_ids) + len(mal_ids), len(mal_ids), len(rows),
     )
+    if unanswered:
+        logger.info(
+            "AniList status: %s of the %s asked by MAL id went unanswered - AniList "
+            "carries no entry with that id. Not a failure; see ingestion/anilist/"
+            "resolve_ids.py, which searches such titles by name and records the misses.",
+            unanswered, len(mal_ids),
+        )
     return len(rows)

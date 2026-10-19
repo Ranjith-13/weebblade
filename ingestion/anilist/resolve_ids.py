@@ -244,6 +244,41 @@ def land_resolved(
     return found
 
 
+def searched_and_missed(data_dir: Path) -> set[str]:
+    """Titles searched by name and not found on AniList, newest answer per title.
+
+    The counterpart to resolved_ids below, and it exists so the status check can
+    say WHY it will go unanswered. A title with no AniList key is asked about by
+    its MAL id, AniList has no entry carrying that idMal, and the fetch returns
+    nothing - which in a log reads exactly like a failure. On 2026-10-18 that
+    was 78 of the 161 asked by MAL id, every one of them already searched here
+    and recorded as a miss, and the shape of it ("asked about 435, 357
+    answered") cost an hour to establish.
+
+    Read from the files rather than the warehouse view, and that is not a style
+    choice: anime_anilist_resolved is declared WHERE anilist_id IS NOT NULL -
+    matches only - so a miss cannot appear in it by construction and a query
+    against it returns zero however many were recorded. That exact mistake was
+    made while diagnosing this.
+
+    A miss is not permanent. It is retried after RETRY_DAYS, so this set is what
+    is known today rather than a verdict.
+    """
+    files = sorted((data_dir / "processed" / "anilist_resolved").glob("*.parquet"))
+    if not files:
+        return set()
+    con = duckdb.connect()
+    try:
+        rows = con.execute(
+            f"SELECT wb_id FROM read_parquet({[str(p) for p in files]}) "
+            "QUALIFY ROW_NUMBER() OVER (PARTITION BY wb_id ORDER BY searched_on DESC) = 1 "
+            "AND anilist_id IS NULL"
+        ).fetchall()
+    finally:
+        con.close()
+    return {wb_id for (wb_id,) in rows}
+
+
 def resolved_ids(data_dir: Path) -> dict[str, int]:
     """Every title that has been given an AniList id by search, newest answer
     per title. Read straight from the files rather than the warehouse view, so

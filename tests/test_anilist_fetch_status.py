@@ -249,3 +249,77 @@ def test_without_the_archive_the_cohort_is_what_it_always_was(tmp_path):
     ])
 
     assert fs.candidates(data_dir) == ([1], [])
+
+
+def test_a_title_already_searched_and_not_found_is_counted_as_such(tmp_path, caplog):
+    """"asked about 435 titles, 357 answered" reads like a failure and is not.
+    A title with no AniList key is asked by its MAL id, and where no AniList
+    entry carries that idMal nothing comes back - on 2026-10-18, 78 of the 161
+    asked that way, every one already searched by name and recorded as absent.
+    The log says so rather than leaving the subtraction to be investigated."""
+    import logging
+    from ingestion.anilist.resolve_ids import SCHEMA as RESOLVED
+
+    data_dir = _warehouse(tmp_path, [
+        ("wb_1", ["kitsu:1"], 10, "current"),   # no AniList key: asked by MAL id
+        ("wb_2", ["kitsu:2"], 20, "current"),   # likewise, but never searched
+    ])
+    path = data_dir / "processed" / "anilist_resolved" / "2026-10-01.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist(
+        [{"wb_id": "wb_1", "anilist_id": None, "matched_by": "no match",
+          "title": "X", "searched_on": "2026-10-01"}], schema=RESOLVED), path)
+
+    with caplog.at_level(logging.INFO):
+        assert fs.candidates(data_dir) == ([], [10, 20])
+
+    assert "1 have also been searched by name" in caplog.text
+
+
+def test_a_title_whose_search_later_succeeded_is_not_counted_as_missed(tmp_path, caplog):
+    """A miss is retried, so a title can hold both records. Only the newest
+    counts - and once it is a match the title is asked by that id, not by MAL."""
+    import logging
+    from ingestion.anilist.resolve_ids import SCHEMA as RESOLVED
+
+    data_dir = _warehouse(tmp_path, [("wb_1", ["kitsu:1"], 10, "current")])
+    path = data_dir / "processed" / "anilist_resolved" / "2026-10-01.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist([
+        {"wb_id": "wb_1", "anilist_id": None, "matched_by": "no match",
+         "title": "X", "searched_on": "2026-10-01"},
+        {"wb_id": "wb_1", "anilist_id": 99, "matched_by": "romaji",
+         "title": "X", "searched_on": "2026-11-01"},
+    ], schema=RESOLVED), path)
+
+    with caplog.at_level(logging.INFO):
+        assert fs.candidates(data_dir) == ([99], [])
+
+    assert "also been searched by name" not in caplog.text
+
+
+def test_the_unanswered_count_is_taken_from_the_answers_not_predicted(tmp_path, caplog):
+    """The honest version of the same line. Whether a title is answerable by its
+    MAL id is a different question from whether its NAME can be found: the
+    search rules refuse an ambiguous name that idMal answers for anyway. On
+    2026-10-18, 88 titles were name-search misses and 78 went unanswered, so a
+    line that predicted from the misses would have overstated it by ten. This
+    one counts what came back."""
+    import logging
+
+    data_dir = _warehouse(tmp_path, [
+        ("wb_1", ["kitsu:1"], 10, "current"),
+        ("wb_2", ["kitsu:2"], 20, "current"),
+    ])
+
+    class OnlyOneAnswers:
+        def query(self, q, variables):
+            ids = variables["ids"]
+            return {"Page": {"media": [_media(99, 10, "RELEASING")] if 10 in ids else []}}
+
+    with caplog.at_level(logging.INFO):
+        fs.land_status(data_dir, "2026-10-18", client=OnlyOneAnswers())
+
+    assert "asked about 2 titles (2 by MAL id), 1 answered" in caplog.text
+    assert "1 of the 2 asked by MAL id went unanswered" in caplog.text
+    assert "Not a failure" in caplog.text
