@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { MovingSection } from "@/components/Moving";
 import { getScoreSettling, seasonKey, seasonLabel } from "@/lib/api";
 import {
   calendarDate,
@@ -265,6 +266,16 @@ async function Settling() {
         {calendarDate(last)} {last.slice(0, 4)}. This page reads them down the dates instead of
         across the titles.
       </p>
+
+      {/* ABOVE THE METHOD, not below it. Everything under this is the argument
+          for why these numbers mean anything, and an argument is worth reading
+          after the thing it is about - a reader who stops at the first screen
+          should still leave with the one fact no other site prints. Its own
+          boundary because it is a second request and this page must not wait
+          on it. */}
+      <Suspense fallback={<span data-footer-waits hidden />}>
+        <MovingSection />
+      </Suspense>
 
       <section className="mt-10 border-t-2 border-ink pt-5">
         <h2 className="font-display text-[1.5rem] font-black leading-none">

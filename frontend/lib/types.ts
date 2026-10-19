@@ -304,10 +304,24 @@ export const WB_ID = /^wb_[0-9a-f]{10}$/;
  *  answered to. The identity does not move. The source-key form remains only for
  *  a title that has no identity, and proxy.ts turns any such address into the
  *  identity one. */
-export function titleHref(a: { wb_id?: string | null; source: string; source_id: string }): string {
-  return a.wb_id
-    ? `/anime/${a.wb_id}`
-    : `/anime/${encodeURIComponent(a.source)}/${encodeURIComponent(a.source_id)}`;
+export function titleHref(a: {
+  wb_id?: string | null;
+  // Optional, because a row that already HAS an identity has no reason to
+  // carry the source keys as well - /scores/moving returns exactly that, and
+  // requiring them would mean widening a response to satisfy a signature.
+  // They are still what the fallback needs, so a row with neither is the one
+  // case this cannot address.
+  source?: string | null;
+  source_id?: string | null;
+}): string {
+  if (a.wb_id) return `/anime/${a.wb_id}`;
+  if (a.source && a.source_id) {
+    return `/anime/${encodeURIComponent(a.source)}/${encodeURIComponent(a.source_id)}`;
+  }
+  // Nothing can address this row. The season index rather than a link that
+  // 404s: proxy.ts turns an unknown source key into a real 404, and inventing
+  // one here would send a reader to it on purpose.
+  return "/browse";
 }
 
 /** Best title to show, in the order a mostly-English-reading audience wants it.
@@ -768,6 +782,59 @@ export const VOTES_WORTH_CALLING_A_MOVE = 20;
 export function realMoves(daily: DailyScores | null): PrintedMove[] {
   if (!daily) return [];
   return daily.moves.filter(
+    (m) => m.votes_gained !== null && m.votes_gained >= VOTES_WORTH_CALLING_A_MOVE,
+  );
+}
+
+/** Mirrors backend/app/schemas.py:Mover. Scores are out of 100, as stored. */
+export type Mover = {
+  wb_id: string;
+  title: string | null;
+  poster_url: string | null;
+  format: string | null;
+  season: string | null;
+  season_year: number | null;
+  was: number;
+  now: number;
+  /** Votes that arrived across the whole window, not just the reading that
+   *  crossed the boundary: a tenth of a point is a week of opinions. */
+  votes_gained: number | null;
+  reasks: number;
+  on: string;
+};
+
+/** Mirrors backend/app/schemas.py:Moving - what the season's scores have done
+ *  lately, read across titles rather than down one of them. */
+export type Moving = {
+  first_day: string | null;
+  last_day: string | null;
+  days: number;
+  reasks: number;
+  titles_reasked: number;
+  /** Titles re-asked whose printed score ended where it started. The number
+   *  that makes the movers worth reading: most of them do not move. */
+  steady: number;
+  movers: Mover[];
+};
+
+/** Which way a score went, as a word rather than a glyph.
+ *
+ *  An arrow would need a legend and reads as decoration at this size; the
+ *  design's rule against appended glyphs applies to a leading one as much. */
+export function moveDirection(m: Mover): "up" | "down" {
+  return m.now > m.was ? "up" : "down";
+}
+
+/** The movers worth printing as movement rather than as arithmetic.
+ *
+ *  Same threshold and the same reason as realMoves: a score shown out of ten
+ *  crosses a rounding boundary on a single vote, so a list sorted by weight
+ *  still has to draw the line somewhere. Below it the move is real and the
+ *  cause is the boundary, which is a different claim from "people changed
+ *  their minds" and must not be printed as if it were the same. */
+export function weightedMovers(data: Moving | null): Mover[] {
+  if (!data) return [];
+  return data.movers.filter(
     (m) => m.votes_gained !== null && m.votes_gained >= VOTES_WORTH_CALLING_A_MOVE,
   );
 }

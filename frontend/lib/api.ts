@@ -16,6 +16,7 @@ import {
   type DailyScores,
   type Digest,
   type Franchise,
+  type Moving,
   type Schedule,
   type ScheduledEpisode,
   type ScoreSettling,
@@ -321,6 +322,27 @@ export async function getDailyScores(wbId: string): Promise<DailyScores | null> 
     return await getJson<DailyScores>(
       buildUrl(`/scores/daily/${encodeURIComponent(wbId)}`),
     );
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 503)) return null;
+    throw err;
+  }
+}
+
+/** What the season's scores have done lately: GET /scores/moving.
+ *
+ *  The front door the daily series did not have. /scores/settling explains how
+ *  a score behaves over its life and is read once; this is the same instrument
+ *  pointed at this week, and the only read here that answers "what is
+ *  happening" with titles rather than with rates.
+ *
+ *  Null rather than a throw on 404 or 503, like getScoreSettling: the site and
+ *  the API deploy separately, so a build can reach a container running an older
+ *  commit, and a section is not worth a page. */
+export async function getMoving(): Promise<Moving | null> {
+  "use cache";
+  cacheLife("hours");
+  try {
+    return await getJson<Moving>(buildUrl("/scores/moving"));
   } catch (err) {
     if (err instanceof ApiError && (err.status === 404 || err.status === 503)) return null;
     throw err;
