@@ -9,6 +9,8 @@ import json
 import tarfile
 from pathlib import Path
 
+from datetime import date
+
 import pytest
 
 from pipeline import state
@@ -277,3 +279,88 @@ def test_the_archive_holds_plain_relative_paths(gh, tmp_path):
 
     assert all(not n.startswith("/") and ".." not in n for n in names)
     assert {n.split("/")[0] for n in names} == {"processed", "identity", "raw", "digests"}
+
+
+# RAW RETENTION
+#
+# raw/ is two thirds of the state archive and the dated half of it compounds:
+# mal_relations writes a directory of batches per run, the AniList schedule and
+# status a file each per morning, and the weekly refetch of the current season
+# leaves another dated file beside the one the backfill put there. Measured on
+# 2026-10-19 that was ~0.7 MB a day against a 73 MB archive the GitLab mirror
+# keeps twenty copies of.
+#
+# The danger is not deleting too little. raw/kitsu holds one dated file per
+# season back to 2017-FALL, put there by a single 40-season crawl and never
+# refetched, so "older than ninety days" applied without care would delete the
+# only copy of the most expensive thing in the lake.
+
+
+def _fetch(data_dir, relative: str, body: bytes = b"{}") -> Path:
+    path = data_dir / "raw" / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(body)
+    return path
+
+
+def test_the_only_copy_of_a_season_is_never_pruned(tmp_path):
+    """The whole safety of the rule. These were fetched once, years ago by their
+    own dates and months ago by the fetch's, and nothing will fetch them again."""
+    old = [_fetch(tmp_path, f"kitsu/{season}/2026-01-01.json")
+           for season in ("2017-FALL", "2018-SPRING", "2019-SUMMER")]
+
+    removed = state.prune_raw(tmp_path, today=date(2026, 10, 19))
+
+    assert removed == []
+    assert all(p.exists() for p in old)
+
+
+def test_an_older_refetch_of_the_same_season_goes(tmp_path):
+    """What the rule is actually for: the current season is fetched again every
+    week, and last quarter's copies of it say nothing the newest does not."""
+    stale = _fetch(tmp_path, "kitsu/2026-FALL/2026-01-01.json")
+    recent = _fetch(tmp_path, "kitsu/2026-FALL/2026-10-11.json")
+    newest = _fetch(tmp_path, "kitsu/2026-FALL/2026-10-18.json")
+
+    removed = state.prune_raw(tmp_path, today=date(2026, 10, 19))
+
+    assert removed == [stale]
+    assert recent.exists() and newest.exists()
+
+
+def test_a_daily_fetch_older_than_the_window_goes(tmp_path):
+    kept = [_fetch(tmp_path, f"anilist_airing/2026-10-{d:02d}.json") for d in (1, 18)]
+    stale = _fetch(tmp_path, "anilist_airing/2026-05-01.json")
+
+    removed = state.prune_raw(tmp_path, today=date(2026, 10, 19))
+
+    assert removed == [stale]
+    assert all(p.exists() for p in kept)
+
+
+def test_a_dated_directory_of_batches_is_pruned_whole(tmp_path):
+    """mal_relations writes raw/mal_relations/<date>/from-*.json, so the fetch
+    is the directory. The batch files inside carry no date of their own and must
+    not be mistaken for one."""
+    stale = _fetch(tmp_path, "mal_relations/2026-01-05/from-1006.json").parent
+    _fetch(tmp_path, "mal_relations/2026-01-05/from-2000.json")
+    newest = _fetch(tmp_path, "mal_relations/2026-10-18/from-1006.json").parent
+
+    removed = state.prune_raw(tmp_path, today=date(2026, 10, 19))
+
+    assert removed == [stale]
+    assert not stale.exists()
+    assert newest.exists()
+
+
+def test_nothing_is_pruned_inside_the_window(tmp_path):
+    kept = [_fetch(tmp_path, f"anilist_status/2026-{m:02d}-01.json") for m in (8, 9, 10)]
+
+    assert state.prune_raw(tmp_path, today=date(2026, 10, 19)) == []
+    assert all(p.exists() for p in kept)
+
+
+def test_an_empty_or_absent_lake_is_not_an_error(tmp_path):
+    assert state.prune_raw(tmp_path, today=date(2026, 10, 19)) == []
+    (tmp_path / "raw").mkdir()
+    assert state.prune_raw(tmp_path, today=date(2026, 10, 19)) == []

@@ -80,6 +80,10 @@ jobs:
           from pathlib import Path
           from datetime import datetime, timezone
           import pipeline.state as s
+          # Before the archive is built, so what is dropped is not carried
+          # another week. Safe ahead of a publish that may not happen: the next
+          # run restores the PREVIOUS state, which still holds them.
+          s.prune_raw(Path('data'))
           s.publish_state(Path('data'), datetime.now(timezone.utc).strftime('%Y-%m-%d'))
           s.prune()
           "

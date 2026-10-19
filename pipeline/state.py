@@ -27,8 +27,13 @@ WHAT IS STATE AND WHAT IS NOT
 
 Kept: processed/ (every source snapshot, the catalogue, the ledgers), identity/
 (the registry - the one irreplaceable thing here, since a lost registry means
-every title changes address), raw/ (the archived API responses, which cost
-10 MB compressed and are what makes reprocessing possible), and digests/.
+every title changes address), raw/ (the archived API responses, which are what
+makes reprocessing possible), and digests/.
+
+Raw was "10 MB compressed" when that was written and is now two thirds of a
+73 MB archive, because the dated part of it compounds - see RAW_KEEP_DAYS and
+prune_raw, which keep ninety days of it and the newest fetch of everything for
+ever.
 
 The digests were on the "not kept" list, described as something any run rebuilds
 in seconds. That was wrong, and it took publishing a warehouse to notice: a
@@ -47,9 +52,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import shutil
 import subprocess
 import tarfile
 import tempfile
+from datetime import date, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -69,6 +77,31 @@ KEPT = ("processed", "identity", "raw", "digests")
 # project becomes the "significantly excessive" usage its acceptable use policy
 # reserves the right to throttle.
 KEEP_RELEASES = 8
+
+# How long a raw fetch is kept before the newer copies of the same thing make it
+# redundant.
+#
+# WHY RAW IS KEPT AT ALL: it is what lets a transform be fixed and the lake
+# rebuilt without asking four upstreams for a year of history again
+# (processing/reprocess.py). That is worth real space. What it is NOT worth is
+# keeping every copy for ever: raw is two thirds of the state archive, and the
+# dated part of it grows about 0.7 MB a day - mal_relations writes a directory
+# of batch files per run, the AniList schedule and status one file each, and the
+# weekly refetch of the current season adds another dated file beside the one
+# the backfill left.
+#
+# Ninety days is a season and a half: long enough that a transform shipped last
+# month can still be re-run over what it mishandled, short enough that the dated
+# half stops compounding. It bounds that half at roughly 60 MB instead of the
+# ~250 MB a year it would otherwise reach, which is the figure the GitLab mirror
+# multiplies by twenty (see pipeline/mirror.KEEP_RECENT).
+RAW_KEEP_DAYS = 90
+
+# A fetch date, as every raw path spells one: raw/anilist_airing/2026-09-14.json,
+# raw/mal_relations/2026-09-11/from-1006.json, raw/kitsu/2017-FALL/2026-10-17.json.
+# A SEASON is not a date - "2017-FALL" cannot match this - and that distinction
+# is the whole safety of the rule below.
+_FETCH_DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})(\..+)?$")
 
 
 def _gh(*args: str, check: bool = True) -> str:
@@ -200,6 +233,71 @@ def publish_warehouse(data_dir: Path, run_date: str) -> str | None:
         logger.info("Published %s to %s (%.1f MB)", WAREHOUSE_ASSET, tag,
                     out.stat().st_size / 1e6)
     return tag
+
+
+def _dated_raw(data_dir: Path) -> dict[Path, dict[str, Path]]:
+    """Every dated raw fetch, grouped by the thing it is a fetch OF.
+
+    Raw is written in three shapes and this flattens all of them to the same
+    question - "which fetches of this exist, and when":
+
+        raw/anilist_airing/2026-09-14.json        one file per day
+        raw/mal_relations/2026-09-11/from-*.json  a directory of batches per run
+        raw/kitsu/2017-FALL/2026-10-17.json       a dated fetch OF a season
+
+    The third is why this groups by parent rather than scanning for old files.
+    A season is fetched once by the backfill and then only while it is current,
+    so most season directories hold exactly one dated file - and that file is
+    the only raw copy of a season that may be years past and expensive, or
+    impossible, to fetch again.
+    """
+    found: dict[Path, dict[str, Path]] = {}
+    root = data_dir / "raw"
+    if not root.is_dir():
+        return found
+    for path in root.rglob("*"):
+        match = _FETCH_DATE.match(path.name)
+        if not match:
+            continue
+        # A dated directory is one fetch; the files inside it are not dated and
+        # must not be walked into as if they were.
+        if path.parent.name and _FETCH_DATE.match(path.parent.name):
+            continue
+        found.setdefault(path.parent, {})[match.group(1)] = path
+    return found
+
+
+def prune_raw(
+    data_dir: Path, keep_days: int = RAW_KEEP_DAYS, today: date | None = None
+) -> list[Path]:
+    """Delete raw fetches older than `keep_days`, never the newest of anything.
+
+    THE NEWEST FETCH OF EVERY THING SURVIVES, whatever its age, and that is not
+    a nicety. raw/kitsu holds a dated file per season going back to 2017-FALL,
+    put there by one backfill and never refetched, so an unqualified "older than
+    ninety days" would quietly delete the only copy of eighty megabytes that
+    took a 40-season crawl to collect. What this removes is the SECOND and later
+    copy of the same thing: the current season refetched every week, the
+    schedule asked for again every morning.
+
+    Returns what it deleted so a run can say so. Deleting nothing is the normal
+    answer for a young lake and not worth mentioning.
+    """
+    cutoff = ((today or date.today()) - timedelta(days=keep_days)).isoformat()
+    removed: list[Path] = []
+    for _parent, fetches in sorted(_dated_raw(data_dir).items()):
+        newest = max(fetches)
+        for when, path in sorted(fetches.items()):
+            if when == newest or when >= cutoff:
+                continue
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                path.unlink(missing_ok=True)
+            removed.append(path)
+    if removed:
+        logger.info("Pruned %s raw fetch(es) older than %s days", len(removed), keep_days)
+    return removed
 
 
 def prune(keep: int = KEEP_RELEASES) -> list[str]:
