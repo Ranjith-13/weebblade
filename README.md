@@ -292,6 +292,28 @@ which is exactly the kind of code that looks right and behaves differently at ru
 PySpark and has a JVM, so any change to `processing/consolidate.py` is proved there on the push
 rather than anywhere local.
 
+**On the DuckDB the service actually runs:**
+
+```bash
+scripts/pinned-tests.sh setup    # once
+scripts/pinned-tests.sh
+```
+
+`airflow/requirements.txt` pins `duckdb==1.1.3`, because a warehouse written by a newer DuckDB is
+one the API cannot open. 1.1.3 ships no wheel for Python 3.14, so a machine running that tests
+against whatever it *can* install - and the two do not always agree. On 2026-10-19 that cost three
+round trips through CI in a day: two index tests assumed the row order `anime_media_latest` returns
+(1.5.6 gives key order, 1.1.3 does not), and a memory test provoked a real exhaustion with a sort
+that 1.5.6 raises on and 1.1.3 completes in twelve seconds. All three were green locally and red in
+CI.
+
+The script builds a venv on any CPython 3.10-3.13 - the versions duckdb 1.1.3 has wheels for - and
+unpacks the distro's own `python313` package into `.venv-pinned/` without root if none is on PATH.
+Reinstating both bugs above, 1.5.6 passes 21 tests and 1.1.3 fails exactly the two CI caught.
+
+It is not a replacement for CI, which installs `requirements-dev.txt` in full: three tests skip
+here for want of the embedding backends.
+
 The frontend is separate — see [frontend/README.md](frontend/README.md).
 
 ## Deploying

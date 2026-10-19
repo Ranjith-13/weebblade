@@ -58,3 +58,7 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
 
+
+# The pinned-DuckDB test environment (scripts/pinned-tests.sh). Local only:
+# it holds an unpacked CPython and a venv, both machine-specific.
+.venv-pinned/
