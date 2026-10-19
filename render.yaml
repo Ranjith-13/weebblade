@@ -62,6 +62,15 @@ services:
     # test with a commit that changes ONLY backend/ so the result cannot be
     # confounded by a blueprint sync.
     envVars:
+      # DUCKDB_MEMORY_LIMIT and DUCKDB_THREADS are deliberately NOT set here.
+      # backend/app/db.py carries the defaults and the measurements behind them
+      # (192MB and 2 threads, against a reader's path that peaked at 505 of the
+      # 512 MB this plan allows before they were bounded). They are read from
+      # the environment so that a service which starts logging "Query exceeded
+      # DUCKDB_MEMORY_LIMIT" can be given more here, from the dashboard, without
+      # a deploy - and setting them in this file would duplicate the number that
+      # the reasoning lives beside.
+      #
       # Where to find the published warehouse. Setting this is what switches the
       # API from "read a mounted file" to "fetch the newest release asset".
       - key: WAREHOUSE_REPO

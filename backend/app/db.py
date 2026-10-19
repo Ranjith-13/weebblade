@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Iterator
@@ -7,8 +8,55 @@ from typing import Any, Iterator
 import duckdb
 from fastapi import HTTPException
 
+logger = logging.getLogger(__name__)
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 DB_PATH = DATA_DIR / "warehouse.duckdb"
+
+# WHAT DUCKDB IS ALLOWED TO TAKE, because by default it is "most of the machine"
+# and this machine is 512 MB that something else is already using.
+#
+# DuckDB sizes its buffer pool at ~80% of the memory it can SEE, and a container
+# sees the host's /proc/meminfo rather than its own cgroup limit - on the box
+# this was measured it read 11.9 GiB. Threads default to the host's core count
+# (12 there) on a container billed at 0.1 CPU, and each one carries buffers.
+# So the pool was sized from a number with nothing to do with what Render will
+# actually allow before killing the process.
+#
+# Measured against the live 11,992-title warehouse, peak RSS over one reader's
+# path - catalogue, a season, a search, then /scores:
+#
+#   /health             87 MB
+#   /catalogue         238 MB   (+151, the buffer pool)
+#   /search, first     391 MB   (+153, the ONNX embedder)
+#   /scores/settling   505 MB   (+114, 66k dated rows and window functions)
+#
+# against a 512 MB limit. Seven megabytes, and the input to the last one grows
+# every week. Bounded to the values below the same path peaks at 402 MB.
+#
+# NOT AS LOW AS IT WILL GO. Under real pressure DuckDB raises rather than
+# quietly spilling: /scores/settling completes at 64 MB and fails at 16. The
+# limit is therefore set at about three times what the heaviest query needs
+# today, so growth has somewhere to go - and run_query turns the failure into a
+# 503 if it ever arrives, because one endpoint degrading is a far better outcome
+# than the container being killed with no error anyone can trace to a query.
+#
+# Environment-settable so it can be tuned on a running service without a deploy.
+MEMORY_LIMIT = os.environ.get("DUCKDB_MEMORY_LIMIT", "192MB")
+THREADS = os.environ.get("DUCKDB_THREADS", "2")
+
+
+def _connect() -> duckdb.DuckDBPyConnection:
+    """A read-only connection that cannot outgrow the container.
+
+    Set per connection, because that is the only scope DuckDB has for these:
+    every request opens its own, so an unbounded one anywhere is an unbounded
+    one everywhere.
+    """
+    con = duckdb.connect(str(DB_PATH), read_only=True)
+    con.execute(f"SET memory_limit='{MEMORY_LIMIT}'")
+    con.execute(f"SET threads={THREADS}")
+    return con
 
 
 def get_db() -> Iterator[duckdb.DuckDBPyConnection]:
@@ -20,7 +68,7 @@ def get_db() -> Iterator[duckdb.DuckDBPyConnection]:
     """
     if not DB_PATH.exists():
         raise HTTPException(503, "Warehouse not built yet - the pipeline hasn't run successfully")
-    con = duckdb.connect(str(DB_PATH), read_only=True)
+    con = _connect()
     try:
         yield con
     finally:
@@ -41,7 +89,7 @@ def get_db_optional() -> Iterator[duckdb.DuckDBPyConnection | None]:
     if not DB_PATH.exists():
         yield None
         return
-    con = duckdb.connect(str(DB_PATH), read_only=True)
+    con = _connect()
     try:
         yield con
     finally:
@@ -62,4 +110,17 @@ def run_query(
     except duckdb.CatalogException as exc:
         raise HTTPException(
             503, "No data available yet - the pipeline hasn't produced results"
+        ) from exc
+    except duckdb.OutOfMemoryException as exc:
+        # A 503, not the 500 this would otherwise be. The limit above is what
+        # stops the container being killed outright, and this is what makes
+        # hitting it survivable: 503 is the status the frontend already treats
+        # as "this block has nothing to say" rather than as a broken page (see
+        # getScoreSettling in frontend/lib/api.ts), so the one heavy endpoint
+        # goes quiet and the site stays up. If this starts appearing in logs the
+        # query needs narrowing, or DUCKDB_MEMORY_LIMIT needs raising - and the
+        # log line is the only warning that will come.
+        logger.warning("Query exceeded DUCKDB_MEMORY_LIMIT=%s: %s", MEMORY_LIMIT, sql[:120])
+        raise HTTPException(
+            503, "That query needs more memory than this service has - try a narrower one"
         ) from exc
