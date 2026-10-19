@@ -46,6 +46,14 @@ class _GitLab:
         if method == "GET" and "/packages?" in path:
             import json
             return 200, json.dumps(self.packages).encode()
+        if method == "GET" and path.endswith("/package_files"):
+            import json
+            package_id = int(path.split("/packages/")[1].split("/")[0])
+            version = next(
+                (p["version"] for p in self.packages if p["id"] == package_id), None
+            )
+            size = len(self.store.get(version, b""))
+            return 200, json.dumps([{"size": size}]).encode()
         if method == "DELETE":
             package_id = int(path.rsplit("/", 1)[1])
             self.deleted.append(package_id)
@@ -174,3 +182,70 @@ def test_verify_reports_a_disagreement_between_gitlab_and_the_ledger(gitlab, mon
 
     assert not result.ok
     assert "DISAGREE" in result.detail
+
+
+# WHAT GITLAB IS HOLDING, said on every run.
+#
+# The comment above KEEP_RECENT used to put a state tarball at ~39 MB and twenty
+# of them at "~800 MB and never grows". Within a fortnight a tarball was 73 MB -
+# the 40-season backfill added 12 and persisting the search vectors 21 - so
+# twenty is ~1.4 GiB, and it tracks the catalogue rather than standing still.
+#
+# The quota is years away at that rate, which is exactly why it needs saying out
+# loud: the failure is a rejected upload on a step that is not allowed to fail
+# the run, so nothing would report it. These check the run says what is held,
+# and shouts before it matters rather than after.
+
+
+def test_a_run_reports_what_gitlab_is_holding(gitlab, tmp_path):
+    gitlab()
+    ledger = tmp_path / "MIRROR.md"
+
+    result = m.mirror("2026-10-19", ledger=ledger)
+
+    assert result.ok
+    assert "GitLab holds 1 version(s)" in result.detail
+    assert "GiB" in result.detail
+
+
+def test_the_note_shouts_only_once_the_namespace_is_filling(monkeypatch):
+    """Below the threshold it is a fact on a line nobody needs to read; above it
+    the line has to be the thing that gets noticed."""
+    monkeypatch.setattr(m, "QUOTA_BYTES", 1000)
+
+    assert "RUNNING OUT" not in m.quota_note(600, 8)
+    assert "RUNNING OUT" in m.quota_note(700, 20)
+    assert "60%" in m.quota_note(600, 8)
+
+
+def test_occupied_sums_every_version_gitlab_still_has(gitlab, tmp_path):
+    """Asked of GitLab, not summed from the ledger: MIRROR.md records every run
+    ever mirrored, including the ones since pruned."""
+    api = gitlab()
+    for day in ("2026-10-05", "2026-10-12", "2026-10-19"):
+        m.mirror(day, ledger=tmp_path / "MIRROR.md")
+
+    held, kept = m.occupied("a-token")
+
+    assert kept == 3
+    assert held == sum(len(v) for v in api.store.values())
+
+
+def test_accounting_that_fails_does_not_fail_the_backup(gitlab, monkeypatch, tmp_path):
+    """A report is not worth a mirror. If GitLab will not say what it holds, the
+    copy that was just verified still stands and the run says so.
+
+    Patched at occupied rather than at the request underneath it: prune() asks
+    the same endpoint first, so breaking that one tests prune's error handling
+    and never reaches this. The first version of this test did exactly that,
+    and asserted a disjunction that was true either way - it passed against the
+    bug it was written to catch.
+    """
+    gitlab()
+    monkeypatch.setattr(m, "occupied", lambda token: (_ for _ in ()).throw(RuntimeError("no")))
+
+    result = m.mirror("2026-10-19", ledger=tmp_path / "MIRROR.md")
+
+    assert result.ok, "a verified copy must not be reported lost over its own accounting"
+    assert "could not read the namespace total" in result.detail
+    assert "verified" in result.detail

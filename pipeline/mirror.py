@@ -66,13 +66,32 @@ PACKAGE = "state"
 # digest of what GitLab holds lives somewhere GitLab does not.
 LEDGER = Path("MIRROR.md")
 
-# Keep the last eight weeks outright, then one a month for a year. The namespace
-# quota on GitLab's free tier is 5 GiB and a state tarball is ~39 MB, so an
-# unpruned mirror would fill it in about two and a half years - quietly, since
-# the failure would be a rejected upload on a step that is not allowed to fail
-# the run. Twenty snapshots is ~800 MB and never grows.
+# Keep the last eight weeks outright, then one a month for a year.
+#
+# WHAT THIS ACTUALLY COSTS, re-measured 2026-10-19, because the figures here
+# were written when a state tarball was ~39 MB and said twenty snapshots came
+# to ~800 MB "and never grows". Both were wrong within a fortnight. A tarball
+# is 73 MB now - the 40-season backfill added 12 and persisting the search
+# vectors added 21 (ai/search/build_index.LAKE_PATH) - so twenty of them is
+# ~1.4 GiB against the free tier's 5 GiB namespace quota.
+#
+# It grows because the catalogue does: ~0.4 MB a day in steady state, plus
+# whatever a backfill adds at once. "Never grows" was the claim of a snapshot
+# mistaken for a constant.
+#
+# 3.5 GiB of headroom is years away from being a problem, and that is exactly
+# the danger this comment already named: the failure would be a rejected upload
+# on a step that is not allowed to fail the run, so nothing would say so. Hence
+# occupied() below, which reports what GitLab holds on every run.
 KEEP_RECENT = 8
 KEEP_MONTHLY = 12
+
+# The free tier's namespace quota, and the share past which the run says so
+# rather than leaving it to be discovered. 70% of 5 GiB is years of warning at
+# the current rate, which is the point: a backup that fills its quota silently
+# is not a backup, and the only cheap moment to notice is long before.
+QUOTA_BYTES = 5 * 1024**3
+WARN_ABOVE = 0.7
 
 TIMEOUT = 120
 
@@ -183,6 +202,42 @@ def _package_ids(token: str) -> dict[str, int]:
         for p in json.loads(body or b"[]")
         if p.get("name") == PACKAGE and p.get("version") and p.get("id")
     }
+
+
+def occupied(token: str) -> tuple[int, int]:
+    """How many bytes and versions GitLab is holding for this package.
+
+    Asked of GitLab rather than summed from MIRROR.md, which records every run
+    ever mirrored including the ones since pruned - a ledger of what was sent,
+    not of what is still there. The question here is only answerable by the
+    side that stores it.
+
+    One request per package on top of the run's own, so twenty on a full
+    mirror, weekly. Any failure counts as zero rather than raising: this is a
+    report, and a backup must not fail over its own accounting.
+    """
+    total = 0
+    ids = _package_ids(token)
+    for package_id in ids.values():
+        status, body = _request(
+            "GET", f"projects/{PROJECT_ID}/packages/{package_id}/package_files", token
+        )
+        if status != 200:
+            continue
+        total += sum(int(f.get("size") or 0) for f in json.loads(body or b"[]"))
+    return total, len(ids)
+
+
+def quota_note(held: int, kept: int) -> str:
+    """One clause for the run's own line, and a loud one past WARN_ABOVE."""
+    share = held / QUOTA_BYTES if QUOTA_BYTES else 0
+    note = (
+        f"; GitLab holds {kept} version(s), "
+        f"{held / 1024**3:.2f} of {QUOTA_BYTES / 1024**3:.0f} GiB ({share:.0%})"
+    )
+    if share >= WARN_ABOVE:
+        note += " - RUNNING OUT, raise the quota or thin KEEP_MONTHLY"
+    return note
 
 
 def keepers(all_versions: list[str], recent: int = KEEP_RECENT,
@@ -298,6 +353,24 @@ def mirror(run_date: str, ledger: Path = LEDGER) -> Result:
         detail = f"Mirrored {run_date} to GitLab, verified {sent[:12]} ({size / 1e6:.1f} MB)"
         if removed:
             detail += f"; pruned {len(removed)} old version(s)"
+        # After the prune, so it reports what is kept rather than the high-water
+        # mark of a run that has not tidied up yet.
+        #
+        # AND IT CANNOT COST THE BACKUP. This is bookkeeping about a copy that
+        # has already been uploaded and read back; if GitLab will not say what
+        # it holds, the verified copy still stands and the run should say so.
+        # Written without this guard it took the whole mirror down, because the
+        # enclosing handler turns any exception into "Mirror failed" - a backup
+        # reported lost over an accounting request is the worst possible trade.
+        try:
+            held, kept = occupied(token)
+            if kept:
+                detail += quota_note(held, kept)
+                if held / QUOTA_BYTES >= WARN_ABOVE:
+                    logger.warning("The mirror's namespace is %.0f%% full", held / QUOTA_BYTES * 100)
+        except Exception:  # noqa: BLE001 - see above
+            logger.warning("Could not read what GitLab holds", exc_info=True)
+            detail += "; could not read the namespace total"
         return Result(True, detail, version=run_date, digest=sent)
     except Exception as exc:  # noqa: BLE001 - a backup must not fail the run
         logger.warning("Mirror failed", exc_info=True)
