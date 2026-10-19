@@ -231,7 +231,11 @@ def season(tmp_path):
     catalogue = [
         {"source": "kitsu", "source_id": str(i), "wb_id": ids[i - 1],
          "source_keys": [f"anilist:{i}", f"kitsu:{i}"], "title_english": name,
-         "title_romaji": None,
+         # A real string, not None on every row: an all-null column is typed
+         # INTEGER by parquet inference, and DuckDB 1.1.3 refuses to COALESCE
+         # that with a VARCHAR where 1.5.6 allows it. A fixture artifact, but
+         # only the pinned environment ever said so.
+         "title_romaji": f"{name} (romaji)",
          "format": "TV", "status": "current", "season": "FALL", "season_year": 2026,
          "poster_url": f"https://kitsu/{i}.jpg",
          "score_100": 70.0, "user_count": 500, "run_date": "2026-10-16"}
