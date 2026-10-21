@@ -12,8 +12,10 @@ so the schedule and the daily score readings reach a reader the morning after th
 
 ## What it does
 
-Tracks seasonal anime — releases, genre shifts, studio output, scores — pulled weekly from
-three independent sources and reconciled into one queryable warehouse:
+Tracks seasonal anime — releases, genre shifts, studio output, scores — pulled from three
+independent sources and reconciled into one queryable warehouse. The catalogue is refetched
+weekly; the airing schedule, each title's status and its score are asked **every morning**,
+and the warehouse readers serve is republished daily:
 
 - [AniList](https://anilist.co/graphiql) (GraphQL)
 - [MyAnimeList API v2](https://myanimelist.net/apiconfig) (REST, the official one, and the
@@ -199,8 +201,9 @@ Seeded from every snapshot on file: 98 changes back to 30 August 2026, each on i
   `studio` (across every season); `sort` (`score_desc` | `popularity_desc` | `title`),
   `limit`, `offset`.
 - `GET /anime/{wb_id}` — a title by its stable identity, following it if it merged, with its
-  next few episodes from AniList's airing schedule (`upcoming_episodes`) and what its sources
-  have changed about it (`changes`).
+  next few episodes from AniList's airing schedule (`upcoming_episodes`), the ones that have
+  already gone out (`aired_episodes`, from the archive of every schedule ever fetched rather
+  than the current one), and what its sources have changed about it (`changes`).
 - `GET /changes?days=7` — every change recorded in the days up to the newest fetch, with its
   title; one change told by several sources is one entry naming them all.
 - `GET /anime/{wb_id}/franchise` — the title's franchise, oldest first, each entry with its
@@ -221,6 +224,16 @@ Seeded from every snapshot on file: 98 changes back to 30 August 2026, each on i
   axis: when a season acquires its numbers, and how often a re-asked reading comes back
   different. The one endpoint here whose unit is a *re-ask* rather than a row, because most
   rows in most runs are copies of the week before.
+- `GET /scores/daily/{wb_id}` — one title's score as it was asked every morning, with the vote
+  count behind each reading. The dense half of `/scores/settling`: that one reads weekly
+  snapshots, so a score that moves on Tuesday and back on Friday is invisible there and is two
+  readings here. Only titles the catalogue calls airing are asked daily, so a finished show
+  answers empty rather than erroring.
+- `GET /scores/moving` — what the season's scores have done this week, across titles rather
+  than down one of them: which moved, ranked by the votes behind the move rather than its size,
+  and separately which gained an audience. Those are different questions and mostly name
+  different titles - in the first window, 37 of 243 re-asked titles moved the score they print
+  while 78% of the week's votes landed on titles that did not.
 - `GET /search?q=...&n=...` — semantic similarity search over indexed titles; each result
   carries its poster, score, format and `wb_id`.
 - `GET /health` — liveness.
@@ -373,16 +386,30 @@ costs freshness and is not worth delaying a start-up over.
 ## Status
 
 **The pipeline runs itself, for nothing.** Ingestion → merge → warehouse → digest → search
-index all run on GitHub Actions, verified end to end on real data: 22 seasons and 6,359 titles
-from three live sources, a franchise graph, and a weekly digest. A weekly run takes about 13
-minutes and a daily about one, against 2,000 free minutes a month, and with no payment method on
-the account the workflows stop at the quota rather than billing anything.
+index all run on GitHub Actions, verified end to end on real data: **40 seasons and 11,992
+titles** from three live sources, a franchise graph, and a weekly digest. A weekly run takes
+about **57 minutes** and a daily **93 seconds**, against 2,000 free minutes a month, and with no
+payment method on the account the workflows stop at the quota rather than billing anything.
+
+Those two numbers were "13 minutes" and "about one" here until 2026-10-21, written when the
+catalogue was a third of its size. The weekly grew with it: MAL's related titles alone spend
+~19 minutes at their rate limit. The daily grew for a better reason - it now publishes the
+warehouse as well, which it could not afford to do until the search vectors were kept in the
+lake rather than recomputed every build.
 
 **It is live, for nothing.** It ran on one EC2 box until 7 October 2026, stopped because
 $63/month to host a portfolio site was the wrong trade. It is now a container on a free 512 MB
 instance that downloads the published warehouse at startup — measured rather than assumed before
-being chosen, and measured again in the container: **199 MiB of 512**, searches in 150 ms, all
-6,359 titles and vectors and eight digests. The frontend is on Vercel's free tier.
+being chosen: searches in 150 ms, all **11,992 titles** and their vectors and ten digests. The
+frontend is on Vercel's free tier.
+
+**512 MB is a real ceiling and it was nearly hit.** This said "199 MiB of 512", which was a
+reading taken while the service sat idle. Measured instead along one reader's path - catalogue,
+a season, a search, then `/scores` - peak resident was **505 MB of 512**, because DuckDB sizes
+its buffer pool from the memory it can *see* and a container sees the host's. Bounded to 192 MB
+and two threads (`backend/app/db.py`, which carries the measurements) the same path peaks at
+**406 MB**, and a query that asks for more now answers 503 rather than taking the container
+down with it.
 
 With the API answering, CI's frontend build and Playwright smoke tests run again (they prerender
 against it, and had been gated off since the box stopped) — so a page that renders an empty shell
@@ -394,9 +421,10 @@ is caught on the push rather than by a reader.
   discontinued on 1 October 2026; it has been removed. The pipeline degrading rather than
   failing is why that cost nothing: the catalogue was built from Kitsu, MAL and AniList
   throughout.
-- The frontend has never been deployed. It typechecks and lints in CI on every push; the build
-  and smoke tests are gated behind `API_IS_LIVE`, because they prerender against a live API — so
-  until the API answers, nothing proves a page still renders.
+- The daily score series cannot be backfilled. `score_100` entered the status schema on
+  2026-10-16, so `/scores/daily` and `/scores/moving` start there and thicken a morning at a
+  time; the episode archive, by contrast, was recoverable in full because the raw files had been
+  kept all along.
 - Terraform's state file for the EC2 box was lost, so it was torn down through the API rather
   than by `terraform destroy`. Nothing remains: instance, volume, security group and key pair
   are deleted, and a sweep of all 18 enabled regions found no instance, volume, Elastic IP or
