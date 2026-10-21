@@ -7,6 +7,7 @@ import {
   getCatalogueSummary,
   getChanges,
   getLatestDigest,
+  getMoving,
   getSeason,
   getSeasons,
   getWeekEpisodes,
@@ -16,7 +17,13 @@ import { PinnedAside } from "@/components/motion/PinnedAside";
 import { RegisterReveal } from "@/components/motion/RegisterReveal";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
 import { halftone } from "@/lib/design-tokens";
-import { byScoreThenPopularity, changeSummary, isTv, SEASON_INDEX_ID } from "@/lib/types";
+import {
+  byScoreThenPopularity,
+  changeSummary,
+  compactCount,
+  isTv,
+  SEASON_INDEX_ID,
+} from "@/lib/types";
 
 function dateline(runDate: string): string {
   const parsed = new Date(`${runDate}T00:00:00Z`);
@@ -52,7 +59,7 @@ function HomeSkeleton() {
 }
 
 async function Home() {
-  const [digest, season, seasons, week, changes, summary] = await Promise.all([
+  const [digest, season, seasons, week, changes, summary, moving] = await Promise.all([
     getLatestDigest(),
     getSeason(),
     getSeasons(),
@@ -61,8 +68,18 @@ async function Home() {
     // Already fetched by getSeasons through the same cached call, so this
     // costs nothing upstream.
     getCatalogueSummary(),
+    // One more small request, cached for an hour like the rest. Worth it: the
+    // thing this site can say that no other can was reachable only from a
+    // title page's score arc or a link at the foot of /changes, which is a
+    // side entrance to the best room in the house.
+    getMoving(),
   ]);
   const changed = changeSummary(changes.changes);
+  /* The week's biggest audience gain, which is the concrete hook: a rate is an
+     argument and a named show picking up nine thousand people is a fact. Null
+     on a quiet week or a warehouse older than the daily series, in which case
+     the line is simply not drawn. */
+  const gained = moving?.gaining?.[0] ?? null;
   // Absent on a warehouse built before this existed, or one carrying a single
   // source: nothing can disagree with itself.
   const contested = summary.contested ?? null;
@@ -183,6 +200,29 @@ async function Home() {
               </span>
             ))}
             , each with the source that reported it.
+          </p>
+        )}
+
+        {/* THE SAME KIND OF CLAIM AS THE LINE ABOVE, and it belongs beside it:
+            both say what this week did, and both are only sayable because the
+            pipeline kept what it was told before. This one is the daily series,
+            which until now a reader could reach only by landing on an airing
+            title and noticing the arc beside its score. */}
+        {gained && moving && (
+          <p className="mt-3 max-w-[68ch] text-[1.05rem] leading-[1.65]">
+            <Link
+              href="/scores"
+              className="border-b-2 border-flag pb-0.5 font-medium transition-colors hover:text-flag"
+            >
+              {gained.title} picked up{" "}
+              <span className="tnum">{compactCount(gained.gained)}</span> people this week
+            </Link>
+            {", more than any other show. "}
+            <span className="tnum">{moving.movers.length}</span> titles moved the score they
+            print; the other <span className="tnum">{moving.steady}</span> that were asked again
+            did not, and they took{" "}
+            <span className="tnum">{compactCount(moving.votes_on_steady)}</span> of the week&rsquo;s{" "}
+            <span className="tnum">{compactCount(moving.votes_total)}</span> new votes.
           </p>
         )}
 
