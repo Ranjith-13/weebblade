@@ -66,4 +66,15 @@ EXPOSE 8000
 # directly - behind Caddy on the server, behind Render's proxy now - so the
 # peer is always that proxy and trusting its X-Forwarded-For is what makes
 # rate limiting see real client addresses instead of one internal IP.
+#
+# WHICH PEER TO TRUST IS NOT WHICH ENTRY TO READ, and this comment used to
+# stop at the first. X-Forwarded-For is a list every proxy APPENDS to, so the
+# address Render saw is at the END and anything to the left of it is whatever
+# the caller typed. uvicorn 0.34.0 rewrites scope["client"] from the FIRST
+# entry - verified against the pinned version - so request.client.host was
+# attacker-controlled, and a limit keyed on it was no limit at all.
+#
+# The limiter no longer reads it: backend/app/limiter.client_address counts
+# TRUSTED_PROXY_HOPS back from the right instead. These flags stay because
+# anything else reading request.client.host still wants the proxy parsed.
 CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]

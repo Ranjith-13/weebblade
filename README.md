@@ -383,6 +383,13 @@ costs freshness and is not worth delaying a start-up over.
   every call. On the EC2 box fail2ban sat below this, watching Caddy's log and `sshd`; the
   hosts handle that layer now.
 
+  The address is taken from the **right** of `X-Forwarded-For`, not the left
+  (`backend/app/limiter.py`). Every proxy appends the peer it received from, so the entry
+  Render added is last and everything before it is whatever the caller typed. uvicorn rewrites
+  `request.client.host` from the *first* entry, so until 2026-10-22 a reader could send a
+  different `X-Forwarded-For` on every request and never meet a limit - which mattered most on
+  `/search`, capped precisely because it runs the embedding model on a 0.1-CPU container.
+
 ## Status
 
 **The pipeline runs itself, for nothing.** Ingestion → merge → warehouse → digest → search
