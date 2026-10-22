@@ -428,3 +428,128 @@ def test_a_title_that_lost_votes_is_not_a_gainer(season, tmp_path):
     client, _ = season
 
     assert all(g["gained"] > 0 for g in client.get("/scores/moving").json()["gaining"])
+
+
+# THE WINDOW ROLLS, and nothing had exercised that. The series began on
+# 2026-10-16 and MOVING_DAYS is 7, so the first morning falls out of it on
+# 2026-10-23 - the first time any reading would ever leave. Until then every
+# test above ran against a window that happened to contain everything, which
+# is the kind of coverage that looks complete and proves nothing.
+
+
+@pytest.fixture
+def straddling(tmp_path):
+    """One title read on five mornings, two of them older than the window.
+
+    Scores are chosen so the answer differs depending on whether the old
+    readings are counted: across all five the printed score goes 6.0 to 7.0,
+    and inside the window alone it goes 6.8 to 7.0. A window that quietly
+    included everything would report the first.
+    """
+    data = tmp_path / "data"
+    ids, registry, _ = assign([["anilist:1", "kitsu:1"]], Registry(), "2026-10-16")
+    save(data, registry)
+    path = data / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-10-16" / "p.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist([
+        {"source": "kitsu", "source_id": "1", "wb_id": ids[0],
+         "source_keys": ["anilist:1", "kitsu:1"], "title_english": "Straddler",
+         "title_romaji": "Straddler", "format": "TV", "status": "current",
+         "poster_url": "https://kitsu/1.jpg", "season": "FALL", "season_year": 2026,
+         "score_100": 70.0, "user_count": 500, "run_date": "2026-10-16"}]), path)
+
+    today = date.today()
+    # (days ago, score, votes). 9 and 8 are outside a 7-day window; 2, 1, 0 are in.
+    for ago, score, votes in [(9, 60, 1000), (8, 62, 1200), (2, 68, 5000), (1, 69, 5600), (0, 70, 6000)]:
+        day = (today - timedelta(days=ago)).isoformat()
+        _morning(data, day, [_reading(1, day, score, votes)])
+
+    db = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data, db)
+
+    def override():
+        con = duckdb.connect(str(db), read_only=True)
+        try:
+            yield con
+        finally:
+            con.close()
+
+    app.dependency_overrides[get_db] = override
+    yield TestClient(app), ids
+    app.dependency_overrides.clear()
+
+
+def test_readings_older_than_the_window_are_not_counted(straddling):
+    """The move is measured from the oldest reading INSIDE the window, not from
+    the oldest on file. Counting everything would report 6.0 to 7.0."""
+    client, _ = straddling
+
+    mover = client.get("/scores/moving").json()["movers"][0]
+
+    assert (mover["was"], mover["now"]) == (68.0, 70.0)
+
+
+def test_the_audience_baseline_is_also_the_windows_own_first_reading(straddling):
+    """Same boundary, and it matters more here: growth against the oldest
+    reading on file would read 500% where the week's is 20%."""
+    client, _ = straddling
+
+    g = client.get("/scores/moving").json()["gaining"][0]
+
+    assert (g["started"], g["ended"]) == (5000, 6000)
+    assert g["gained"] == 1000
+    assert g["share"] == 20.0
+
+
+def test_the_window_reports_its_own_span_not_the_series(straddling):
+    """A reader is told which days this is about. Five mornings are on file and
+    three are in the window."""
+    client, _ = straddling
+    body = client.get("/scores/moving").json()
+
+    today = date.today()
+    assert body["first_day"] == (today - timedelta(days=2)).isoformat()
+    assert body["last_day"] == today.isoformat()
+    assert body["days"] == 3
+
+
+def test_a_title_with_one_reading_left_in_the_window_is_in_neither_list(tmp_path):
+    """What happens to a title as it rolls out: its second-to-last reading
+    leaves, it has one row in the window, and one row is not an observation of
+    movement in either sense. It must not appear with a zero, and it must not
+    divide by its own absent baseline."""
+    data = tmp_path / "data"
+    ids, registry, _ = assign([["anilist:1", "kitsu:1"]], Registry(), "2026-10-16")
+    save(data, registry)
+    path = data / "processed" / "anime_media_consolidated" / "_catalogue" / "2026-10-16" / "p.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist([
+        {"source": "kitsu", "source_id": "1", "wb_id": ids[0],
+         "source_keys": ["anilist:1", "kitsu:1"], "title_english": "Lonely",
+         "title_romaji": "Lonely", "format": "TV", "status": "current",
+         "poster_url": "https://kitsu/1.jpg", "season": "FALL", "season_year": 2026,
+         "score_100": 70.0, "user_count": 500, "run_date": "2026-10-16"}]), path)
+    today = date.today()
+    for ago, score, votes in [(9, 60, 1000), (0, 70, 6000)]:
+        day = (today - timedelta(days=ago)).isoformat()
+        _morning(data, day, [_reading(1, day, score, votes)])
+    db = tmp_path / "warehouse.duckdb"
+    refresh_catalog(data, db)
+
+    def override():
+        con = duckdb.connect(str(db), read_only=True)
+        try:
+            yield con
+        finally:
+            con.close()
+
+    app.dependency_overrides[get_db] = override
+    try:
+        body = TestClient(app).get("/scores/moving").json()
+    finally:
+        app.dependency_overrides.clear()
+
+    assert body["movers"] == []
+    assert body["gaining"] == []
+    assert body["reasks"] == 0
+    assert body["votes_total"] == 0
