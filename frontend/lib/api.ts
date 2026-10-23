@@ -92,11 +92,21 @@ function buildUrl(path: string, params: Record<string, unknown> = {}): string {
  * are the proxy with no healthy instance behind it. Network-level failures too,
  * which arrive as a thrown TypeError rather than a response.
  *
- * NOT 503, deliberately. From get_db that means the warehouse is not on disk
- * (backend/app/db.py), which does not clear in seconds and is retried where it
- * can actually be fixed - the API re-fetches its own warehouse before serving
- * (backend/app/warehouse.ensure_warehouse). Retrying it here would only make
- * every page slower on the day the API has nothing to serve.
+ * 503 TOO, SINCE 2026-10-23, AND THE REASON IT WAS EXCLUDED WAS HALF RIGHT.
+ * This said 503 means the warehouse is not on disk (backend/app/db.py), which
+ * does not clear in seconds. That is one source of it. The other is Render's
+ * own edge answering while no instance is healthy, which clears in exactly the
+ * way 502 does - and the build cannot tell them apart from the status alone.
+ *
+ * It went red on f0199cc, a backend-only commit: the API image rebuilt, Render
+ * swapped the container, and the frontend job prerendering alongside it took
+ * 503 on /catalogue, /changes and /_not-found within the same second. Every
+ * route at once is what "no backend" looks like; one app without a warehouse
+ * would have answered /health.
+ *
+ * Retrying costs ~23 seconds on the day the API genuinely has nothing, and
+ * ends in the same red build. Not retrying costs a red build on every push
+ * that touches backend/. The first is the better trade.
  *
  * The budget is about 23 seconds, which is proportionate rather than arbitrary:
  * this app already waits around 32 seconds for a sleeping container to wake,
@@ -108,7 +118,7 @@ function buildUrl(path: string, params: Record<string, unknown> = {}): string {
  * does its own fetch from the client (app/search/SearchClient.tsx) and is
  * untouched: it spends the visitor's own rate-limit budget, where a retry would
  * be spending someone else's. */
-const RETRY_STATUS = new Set([502, 504]);
+const RETRY_STATUS = new Set([502, 503, 504]);
 const RETRY_BACKOFF_MS = [2_000, 6_000, 15_000];
 
 async function getJson<T>(url: string): Promise<T> {

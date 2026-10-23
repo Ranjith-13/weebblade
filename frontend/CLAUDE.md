@@ -400,15 +400,20 @@ Render replaces a free container rather than draining it, so around a deploy its
 API at exactly that moment, and a single 502 took the whole build down twice in two days - the
 second time on the very commit whose deploy it was racing.
 
-`getJson` in `lib/api.ts` retries **502 and 504** and network errors, three times, backing off
+`getJson` in `lib/api.ts` retries **502, 503 and 504** and network errors, three times, backing off
 2s / 6s / 15s. About 23 seconds, which is proportionate rather than arbitrary: this app already
 waits ~32s for a sleeping container with no fetch timeout at all. It is not meant to ride out a
 long outage - a build that waits that long *should* go red, because a Vercel deploy made then
 would have failed too.
 
-**Not 503.** From `get_db` that means the warehouse is not on disk, which does not clear in
-seconds; the API retries its own fetch where it can actually be fixed
-(`backend/app/warehouse.ensure_warehouse`).
+**503 is retried too, since 2026-10-23, and excluding it was half right.** From `get_db` it means
+the warehouse is not on disk, which does not clear in seconds - that is one source. The other is
+Render's edge answering while no instance is healthy, which clears exactly the way 502 does, and
+nothing in the status tells them apart. CI went red on `f0199cc`, a backend-only commit: the API
+image rebuilt, Render swapped the container, and the frontend job took 503 on `/catalogue`,
+`/changes` and `/_not-found` inside the same second. Every route at once is what "no backend"
+looks like. Retrying costs ~23 seconds on the day the API genuinely has nothing and ends in the
+same red build; not retrying costs a red build on every push that touches `backend/`.
 
 **`_retry=N` on the URL is load-bearing and looks like debris.** Next memoises `fetch` by URL
 within a render pass, so retrying the identical URL is answered from that memo and **no request
