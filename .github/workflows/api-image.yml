@@ -40,6 +40,12 @@ on:
 permissions:
   contents: read
 
+# Cancel any running job on this ref if a newer commit is pushed, avoiding
+# burning runner minutes on obsolete commits.
+concurrency:
+  group: api-image-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   image:
     runs-on: ubuntu-latest

@@ -1,0 +1,114 @@
+# Every push to main touching frontend code: the frontend typechecked, linted,
+# built and smoke-tested.
+#
+# Separated from the Python test suite (.github/workflows/ci.yml) so that
+# documentation changes cost zero runner minutes, frontend commits do not
+# run the Python test suite, and backend commits do not trigger a full Next.js
+# build.
+name: Frontend Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+  workflow_dispatch: {}
+
+# Declared rather than inherited. This workflow reads the tree and runs tests;
+# it writes nothing back, and a token that cannot write is one that cannot be
+# turned against it.
+permissions:
+  contents: read
+
+# Cancel any running job on this ref if a newer commit is pushed, avoiding
+# burning runner minutes on obsolete commits.
+concurrency:
+  group: ci-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+# The frontend had no automated check of any kind: 3,200 lines of TypeScript
+# that nothing built, typechecked or linted before it reached main. A file that
+# did not compile could land and nobody would know until someone ran `npm run
+# build` by hand - which is exactly how one got caught during development.
+#
+# Deliberately NOT dependent on the test job: a lint error in a React component
+# is no reason to hide a passing data-pipeline suite. A red check on the commit
+# is the signal, and it is enough.
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      # Where the prerender and the smoke tests point. Set the repository
+      # variable API_BASE_URL to the deployed API's URL; unset, the default in
+      # frontend/lib/types.ts applies.
+      NEXT_PUBLIC_API_BASE_URL: ${{ vars.API_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ci, not install: it installs exactly what package-lock.json pins and fails
+      # if the two have drifted, rather than quietly resolving something newer.
+      - run: npm ci
+
+      # PageProps and friends are GENERATED types - Next writes them into
+      # .next/types, so tsc on a clean checkout cannot resolve them and fails with
+      # "Cannot find name 'PageProps'" in every route file. This step is what makes
+      # the typecheck standalone; a local .next left over from `npm run dev` is
+      # what hid the problem until CI ran on a clean tree.
+      - run: npx next typegen
+
+      # Ordered fastest and most deterministic first, so a type error reports in
+      # seconds rather than after a full build. Neither of these touches the
+      # network, so neither can go red because something unrelated is down.
+      - run: npx tsc --noEmit
+      - run: npm run lint
+
+      # The build catches what the two above cannot - route config, PPR
+      # boundaries, anything that only fails at prerender.
+      #
+      # It DOES reach the network: pages are prerendered at build time and fetch
+      # the live API, so this job goes red when the API is down. Verified by
+      # pointing NEXT_PUBLIC_API_BASE_URL at a dead host - the build exits 1 on
+      # "Error occurred prerendering page /". That is worth keeping, because
+      # Vercel's build fails in exactly the same way: red here means the deploy
+      # would not have worked either.
+      #
+      # Which is why these steps are gated rather than deleted. Set the
+      # repository variable API_IS_LIVE to "true" once the API answers, and this
+      # signal comes back exactly as it was. The typecheck and lint above touch
+      # no network and run on every push regardless.
+      #
+      # The API sleeps when idle and takes about a minute to wake, so the first
+      # fetch of a build can be slow. Next has no default fetch timeout, so it
+      # waits rather than failing.
+      - run: npm run build
+        if: vars.API_IS_LIVE == 'true'
+
+      # Smoke tests against that build (frontend/e2e). Until 2026-09-21 this job
+      # proved the frontend compiled and nothing proved a page rendered anything:
+      # fe28245 deleted a component the schedule still imported and only the build
+      # caught that, while a page rendering an empty shell would have shipped.
+      # Chromium only - both projects, desktop and phone, are Chromium devices.
+      # They assert no title, count or season: the catalogue changes weekly and a
+      # test that goes red when Summer becomes Fall is a test that gets deleted.
+      - run: npx playwright install --with-deps chromium
+        if: vars.API_IS_LIVE == 'true'
+      - run: npm run test:e2e
+        if: vars.API_IS_LIVE == 'true'
+      # Retention reduced to 1 day to stay strictly within the 0.5 GB GitHub Actions
+      # storage quota while still providing test artifacts for debugging failures.
+      - uses: actions/upload-artifact@v4
+        if: failure() && vars.API_IS_LIVE == 'true'
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 1
