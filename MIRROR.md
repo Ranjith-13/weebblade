@@ -4,6 +4,7 @@ SHA-256 of each `state.tar.gz` mirrored to GitLab, newest first. Written
 here so the digest lives somewhere the mirror does not: see pipeline/mirror.py.
 To check a copy by hand: download it and run `sha256sum state.tar.gz`.
 
+- 2026-11-01 `107a656f079ccf3b90673bd3ac4a6e90e52a951a8bc5701ea70c8d0e9bd97628` 85.9 MB
 - 2026-10-25 `8d8d60c167c9ba69fad22b756f08678a9d75c1d1e4af596a3c6ba13476c965a3` 81.7 MB
 - 2026-10-18 `7242a926290e603564b532342644e5d2504d0604f0199e2ec96c760411d1c1e9` 56.3 MB
 - 2026-10-17 `6a548a903acc009f4b5388769cb05e6871033515ebb9dcc98c2e06793c6730c6` 52.3 MB
