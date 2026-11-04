@@ -13,7 +13,7 @@ WeebBlade is documented across modular technical specifications. Consult the rel
 | Specification | Description |
 | :--- | :--- |
 | **[System & Architecture Overview](PROJECT_OVERVIEW.md)** | Core domain challenges, entity resolution heuristics (`wb_id`), field-level precedence merge, and data flow. |
-| **[Deployment & Infrastructure Guide](DEPLOYMENT.md)** | Production hosting across Render and Vercel, 512 MB memory constraints, buffer-pool tuning, environment variables, and backups. |
+| **[Deployment & Infrastructure Guide](DEPLOYMENT.md)** | Production hosting across Render and Vercel, 512 MB memory constraints, buffer-pool tuning, environment variables (token valid through 2027-10-13), and backups. |
 | **[Frontend Engineering Specification](frontend/ARCHITECTURE.md)** | Next.js 16 App Router implementation, caching boundaries, 502/503 retry policies, and Tokyo JST date calculations. |
 | **[Design System Manifesto](frontend/DESIGN.md)** | The "Halftone Almanac" design standard, computed WCAG contrast tokens, and GSAP motion principles. |
 | **[Capacity & Growth Analysis](GROWTH.md)** | Compute economics, monthly runner budgets, memory profiles, and quadratic vector search scaling. |

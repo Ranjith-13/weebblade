@@ -113,9 +113,9 @@ def test_the_message_survives_having_nowhere_to_send_it(monkeypatch):
 
 def test_the_date_matches_what_the_readme_tells_a_reader():
     """Two places name this date and they must not drift: this module decides,
-    README.md's deploying table is what somebody actually reads. A regenerated
+    README.md and DEPLOYMENT.md are what somebody actually reads. A regenerated
     token has to update both."""
-    readme = (TOKEN_EXPIRES.isoformat() in open("README.md", encoding="utf-8").read())
+    docs = open("README.md", encoding="utf-8").read() + open("DEPLOYMENT.md", encoding="utf-8").read()
 
-    assert readme, f"README.md does not mention {TOKEN_EXPIRES}"
+    assert TOKEN_EXPIRES.isoformat() in docs, f"Documentation does not mention {TOKEN_EXPIRES}"
     assert TOKEN_EXPIRES > date(2026, 10, 13), "the date should be in the future when set"
