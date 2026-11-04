@@ -614,5 +614,5 @@ file anywhere, and all three suspend at the quota rather than charging.
 | 6–9. Interface | code only | Vercel Hobby: 100 GB bandwidth, **1M function invocations**, 4h active CPU | hard caps that stop serving, not bill |
 | Social cards | `ImageResponse` per title | same | Measured: the two fonts are **153 KB of the 500 KB** budget, so it fits with room. Posters are fetched at request time rather than bundled, which keeps it there whatever a cover weighs |
 
-One real constraint worth knowing: Vercel's Hobby terms prohibit commercial use. A
-portfolio project is fine; anything that starts earning is not.
+One operational constraint: Vercel's Hobby tier terms prohibit commercial monetization,
+aligning strictly with non-commercial open-source and reference deployments.

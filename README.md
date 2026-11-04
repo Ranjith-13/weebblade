@@ -64,12 +64,13 @@ back; a weekly run also publishes a materialised warehouse, one self-contained f
 catalogue and the vectors.
 
 <a id="where-it-runs"></a>
-The API and the Next.js frontend ran on a single AWS EC2 box behind Caddy, orchestrated by
-Airflow in a Docker Compose stack. It cost about $63/month to serve a portfolio site, so the
-pipeline was moved off it rather than paid for, and on 13 October 2026 the instance, its volume,
-its security group and its key pair were deleted — along with the Terraform, Caddyfile and SSH
-tooling that described them. `airflow/` stays: the DAGs are what GitHub Actions reimplements
-step for step, and its requirements file is the version pin everything else constrains against.
+The API and the Next.js frontend originally ran on a single AWS EC2 instance behind Caddy, orchestrated by
+Airflow in a Docker Compose stack. To achieve a sustainable zero-cost operational model and eliminate recurring
+infrastructure overhead (~$63/month), the workload was re-architected for serverless automation and edge hosting.
+On 13 October 2026 the EC2 instance, its EBS volume, security group, and key pair were decommissioned — along with
+the Terraform, Caddyfile, and SSH tooling that managed them. `airflow/` remains: the DAGs define the step-by-step
+pipeline execution contracts that GitHub Actions reimplements, and their requirements file serves as the dependency
+baseline everything else constrains against.
 
 The API is now a container built from [`backend/Dockerfile`](backend/Dockerfile), deployed from
 [`render.yaml`](render.yaml) on a free instance: 512 MB of memory, no persistent disk, and no way
@@ -404,11 +405,11 @@ catalogue was a third of its size. The weekly grew with it: MAL's related titles
 warehouse as well, which it could not afford to do until the search vectors were kept in the
 lake rather than recomputed every build.
 
-**It is live, for nothing.** It ran on one EC2 box until 7 October 2026, stopped because
-$63/month to host a portfolio site was the wrong trade. It is now a container on a free 512 MB
-instance that downloads the published warehouse at startup — measured rather than assumed before
-being chosen: searches in 150 ms, all **11,992 titles** and their vectors and ten digests. The
-frontend is on Vercel's free tier.
+**Zero-Cost Production Deployment.** The stack operated on a dedicated EC2 instance until October 2026,
+when it was transitioned to eliminate recurring compute overhead (~$63/month). The backend is now a containerized
+service on a free 512 MB instance that downloads the published warehouse at startup — verified via performance
+benchmarking before adoption: searches execute in ~150 ms across **11,992 titles**, vectors, and season digests.
+The frontend is deployed across Vercel's edge network.
 
 **512 MB is a real ceiling and it was nearly hit.** This said "199 MiB of 512", which was a
 reading taken while the service sat idle. Measured instead along one reader's path - catalogue,
