@@ -59,7 +59,7 @@ function buildHref(current: Current, patch: Current) {
 }
 
 /* The shell is static and prerenders; everything reading searchParams sits
- * inside <Suspense>. Cache Components requires this — reading searchParams
+ * inside <Suspense>. Cache Components requires this - reading searchParams
  * outside a boundary makes the route unprerenderable and blocks first paint. */
 export default function BrowsePage(props: PageProps<"/browse">) {
   return (
@@ -143,7 +143,7 @@ async function BrowseResults({
   };
 
   /* Filtering happens here rather than upstream because the whole season is
-     already in memory and deduped — see lib/api.ts. It also lets "Rated only"
+     already in memory and deduped - see lib/api.ts. It also lets "Rated only"
      exist at all: the API has a min_score parameter but no way to ask for
      "has any score", which is the distinction that matters when three quarters of
      the catalogue has none. */

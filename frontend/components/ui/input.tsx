@@ -3,7 +3,7 @@ import { Input as InputPrimitive } from "@base-ui/react/input";
 import { cn } from "cn";
 
 /* Pulled from the shadcn registry, then restyled onto this project's tokens.
- * Stock shipped `rounded-lg`, a ring-offset focus glow and a dark-mode branch —
+ * Stock shipped `rounded-lg`, a ring-offset focus glow and a dark-mode branch  - 
  * all three fight the design (zero radius everywhere, focus is a flat outline,
  * and there is no dark mode by choice). What is kept is the base-ui primitive
  * underneath, which handles the input semantics properly.

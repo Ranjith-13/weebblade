@@ -109,12 +109,12 @@ def _attach_metadata(
     payload: dict[str, Any], season: str, season_year: int
 ) -> list[dict[str, Any]]:
     """Kitsu doesn't echo season/seasonYear or resolved genre/category names on each
-    resource (they're a separate JSON:API relationship) — stitch both back onto each
+    resource (they're a separate JSON:API relationship) - stitch both back onto each
     item so transform.flatten_media can stay a pure function of a single media dict,
     matching the other sources.
 
     Kitsu's old "genres" relationship is present but empty for every title as of
-    2026-09 — confirmed against the live API, not just docs — the taxonomy moved to
+    2026-09 - confirmed against the live API, not just docs - the taxonomy moved to
     "categories" instead (a broader tag set covering genre, setting, and theme).
     """
     included = payload.get("included", [])

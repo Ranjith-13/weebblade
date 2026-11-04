@@ -22,7 +22,7 @@ import {
  *   artwork absent -> diagonal rule fill with the title set large
  *
  * Nearly three quarters of the season has no score, so this is not an edge case being
- * styled — it is the majority state, and the page should look composed when
+ * styled - it is the majority state, and the page should look composed when
  * most of it is unknown. Note the third case is INDEPENDENT of the first: a
  * title can be scored and have no artwork (68.6 with a blank plate), and the
  * design says both things at once instead of collapsing them into one

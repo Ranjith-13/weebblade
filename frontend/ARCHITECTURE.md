@@ -4,7 +4,7 @@ Read `DESIGN.md` before changing anything visual. Most choices here are measured
 
 ## Direction
 
-**Halftone Almanac — colour as certainty.** The design spends its one colour on whether a title
+**Halftone Almanac - colour as certainty.** The design spends its one colour on whether a title
 has a score: scored titles print in full colour with a flag-pink tab, unscored ones drain to
 greyscale and screen back to visible halftone. It was drawn when 39 of 142 titles had one. With
 MAL and AniList beside Kitsu, a settled season's TV is ~88-90% scored - but the default view is
@@ -18,7 +18,7 @@ is for a title with no artwork - a *separate* gap from a missing score, and it m
 separate, though posters now cover 99.9% of the catalogue.
 
 The certainty treatment is driven by `isKnown(anime)` over real data. **Never apply
-`.plate-unknown` decoratively** — the moment it stops meaning "no score upstream", the whole idea
+`.plate-unknown` decoratively** - the moment it stops meaning "no score upstream", the whole idea
 becomes ornament.
 
 ## Where the tokens live
@@ -28,7 +28,7 @@ becomes ornament.
 duplicated. There is no literal hex anywhere in `app/`, `components/` or `lib/`; keep it that way.
 
 Palette: `paper #E9E7E0` · `plate #DFDCD2` · `rule #C6C2B6` · `ink #15151A` · `ink-soft #5E5E66` ·
-`flag #C2005E` · `data #1B3FBF`. Two signal colours only — a third is drift.
+`flag #C2005E` · `data #1B3FBF`. Two signal colours only - a third is drift.
 
 **The reader can choose: System / Light / Dark, in the footer** (`components/ThemeChoice.tsx`),
 with System the default because most people have already told their OS and a site that asks again
@@ -105,7 +105,7 @@ and `opsz` that no rule ever set, costing 82 KB (152 KB to 70 KB) for no visual 
 ## Banned
 
 Inter, Geist, Roboto, Open Sans, Lato, Montserrat, Poppins, and system-font defaults. Purple/indigo
-gradients. Cream-and-terracotta (`#F4F1EA` + `#D97757`). Rounded corners and drop shadows —
+gradients. Cream-and-terracotta (`#F4F1EA` + `#D97757`). Rounded corners and drop shadows  - 
 separation is hairline rules. ALL-CAPS tracked eyebrows used indiscriminately: `.stamp` is
 for structural data labels only and must stay in single digits sitewide, `.meta` carries everything
 else. Em-dashes in visible copy (the null marker on an unscored plate is the one exception).
@@ -141,7 +141,7 @@ to keep matching.
 
 If a change would fit three other products, it is wrong.
 
-## Data layer — three upstream bugs it works around
+## Data layer - three upstream bugs it works around
 
 `lib/api.ts` fetches the whole season once and derives everything locally. Do not "optimise" this
 back into per-view API calls; it is *fewer* upstream requests, and it is the only place these are
@@ -150,7 +150,7 @@ fixable:
 1. **Pagination is unstable under `score_desc`** (103 NULL scores in the one-season catalogue, no
    deterministic tie order; over half of a season's non-TV is still unscored).
    Three identical fetches returned 126 / 116 / 122 distinct titles. **`sort=title` is pinned in
-   `getSeason()` and is load-bearing** — do not remove it.
+   `getSeason()` and is load-bearing** - do not remove it.
 2. **`popularity` is a rank, lower = more popular.** The API's only popularity sort returns the
    least popular first. Sorted locally.
 3. **Genre facets are derived from the data.** A hardcoded list drifted and shipped a `Sci-Fi` chip
@@ -388,7 +388,7 @@ vocabulary - MAL's `pg_13` has no Kitsu equivalent and calling it `PG` would und
 ingest, so anything reaching the client is a usable absolute link.
 
 The trailer is a click-to-load facade (`components/Trailer.tsx`). **Do not swap it for a plain
-iframe** — that ships ~500 KB of third-party JS and sets cookies on every view whether or not
+iframe** - that ships ~500 KB of third-party JS and sets cookies on every view whether or not
 anyone presses play.
 
 ## The API and this app race on every push
@@ -732,7 +732,7 @@ reads "All titles 5, Rated only 4", not the season's 81 and 59.
 ## Motion
 
 GSAP + ScrollTrigger via `@gsap/react`'s `useGSAP`, in `components/motion/`. **Do not add a second
-animation library** — two libraries on the same elements fight over frames.
+animation library** - two libraries on the same elements fight over frames.
 
 Every effect sits inside `gsap.matchMedia("(prefers-reduced-motion: no-preference)")` and uses
 `gsap.from()`, so reduced-motion users get no animation and a JS failure leaves the page complete
@@ -741,8 +741,8 @@ rather than invisible. Transform and opacity only, so CLS stays 0.
 Do not add: horizontal scroll hijack (breaks `/browse`'s filters, pagination and URLs), Three.js
 (no 3D content), or Lenis (overrides native scroll, hurts fast scanning and accessibility).
 
-Motion must be motivated. If you cannot say in one sentence what an animation communicates —
-hierarchy, sequence, feedback, state change — do not add it.
+Motion must be motivated. If you cannot say in one sentence what an animation communicates  - 
+hierarchy, sequence, feedback, state change - do not add it.
 
 ## Verify before claiming
 

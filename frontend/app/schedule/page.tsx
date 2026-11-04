@@ -15,7 +15,7 @@ export const metadata = {
 /* A listing, not a grid.
  *
  * /browse is already a grid of plates, and a schedule answers a different
- * question: not "what exists" but "when". So it is set as broadsheet listings —
+ * question: not "what exists" but "when". So it is set as broadsheet listings  - 
  * a time column you can run your eye down, days as rules across the page. The
  * artwork is present but subordinate, because the time is the thing being
  * looked up.

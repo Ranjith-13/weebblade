@@ -22,7 +22,7 @@ export { gsap, ScrollTrigger, useGSAP };
 export const EASE = "power3.out";
 
 /** Everything animated here is decoration over content that is already
- *  readable. Under reduced-motion we do not "animate faster" — we skip the
+ *  readable. Under reduced-motion we do not "animate faster" - we skip the
  *  animation entirely and leave the final state, which is what the setting
  *  actually asks for. */
 export const REDUCED = "(prefers-reduced-motion: reduce)";

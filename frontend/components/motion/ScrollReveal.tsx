@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { EASE, FULL, gsap, useGSAP } from "./gsap-init";
 
-/* SCROLL TRIGGER — the workhorse.
+/* SCROLL TRIGGER - the workhorse.
  *
  * Wraps server-rendered content and staggers its children in as the block
  * enters the viewport. This is a client island around server children, so

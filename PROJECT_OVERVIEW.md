@@ -1,4 +1,4 @@
-# WeebBlade — System & Architecture Overview
+# WeebBlade - System & Architecture Overview
 
 **WeebBlade** is an automated, multi-source seasonal anime intelligence platform powered by an end-to-end data engineering pipeline. It collects, validates, reconciles, and enriches anime broadcast schedules, rating distributions, and studio catalogues across disparate upstream providers into a unified analytical data warehouse.
 

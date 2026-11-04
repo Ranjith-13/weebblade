@@ -1,4 +1,4 @@
-# WeebBlade — where this grows next
+# WeebBlade - where this grows next
 
 *Working notes on where this grows next. `ROADMAP.md` is the record of what was done and
 why; this is the argument about what to do. Tracked since 2026-10-18 - it was gitignored
@@ -54,12 +54,12 @@ Content-Range: bytes 0-15/41693184      (16 bytes of a 41 MB file)
 ```
 
 DuckDB reads Parquet over HTTP with ranged reads. Publish the catalogue as Parquet
-alongside the warehouse and the API can query it **in place** — fetching the few megabytes
+alongside the warehouse and the API can query it **in place** - fetching the few megabytes
 a query touches instead of the whole file. The size ceiling effectively disappears, and
 with it the reason not to backfill deeply.
 
 *Caveat to test:* a private repo's asset URL is signed and time-limited, so the API would
-mint one per session. On a public repo it is a plain URL and the problem vanishes — which
+mint one per session. On a public repo it is a plain URL and the problem vanishes - which
 is one more argument for going public.
 
 ---
@@ -224,7 +224,7 @@ enough to be worth plotting.
 > does not - and a sequel's neighbours are 69% sequels against a 15% base rate, because sequel
 > synopses say "the second season of".
 
-### 4. [~] Backfill depth — after 1-3, and after the serving shape changes
+### 4. [~] Backfill depth - after 1-3, and after the serving shape changes
 
 > **40 seasons as of 2026-10-17**, 2017-SPRING to 2027-WINTER, up from 22. Two batches
 > through `.github/workflows/backfill.yml`: 2020-WINTER to 2021-SUMMER, then 2017-SPRING to
@@ -295,9 +295,9 @@ case this design lives in.
 
 ### 5. [ ] The known data gaps
 
-- 39 titles `airing_unconfirmed` — nothing upstream can confirm them
+- 39 titles `airing_unconfirmed` - nothing upstream can confirm them
 - 529 with no synopsis (26 fillable, measured)
-- ~~romaji search recall 24/40~~ — **done 2026-10-16** (ROADMAP 13). Blending the keyword
+- ~~romaji search recall 24/40~~ - **done 2026-10-16** (ROADMAP 13). Blending the keyword
   match in worked; adding native titles to the indexed document did not, and was measured
   and reverted. The harness is `ai/search/evaluate.py`, so "measurable before and after" is
   now true rather than aspirational
@@ -308,7 +308,7 @@ case this design lives in.
 ## Deliberately not doing
 
 **A fourth source.** Three that disagree enough to be interesting, and a merge that handles
-it, is the right number. A fourth adds reconciliation work without new questions — and
+it, is the right number. A fourth adds reconciliation work without new questions - and
 Jikan was just removed for good reasons.
 
 **More frequent full runs.** Weekly matches how fast the data actually changes. Daily full

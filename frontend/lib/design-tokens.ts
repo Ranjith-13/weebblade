@@ -1,6 +1,6 @@
 /* Programmatic handles for the design tokens.
  *
- * The VALUES live in exactly one place — the `@theme` block in app/globals.css.
+ * The VALUES live in exactly one place - the `@theme` block in app/globals.css.
  * This module deliberately exports only the variable *names* and the composed
  * patterns built from them, so there is no second copy of a hex code anywhere in
  * the codebase to drift out of sync. If you need a colour in TSX, use a Tailwind
@@ -27,7 +27,7 @@ export const halftone = {
 /** Contrast ratios measured against `--color-paper` (#E9E7E0). Kept here as a
  *  record of why these values and not the first draft's: #FF2E88 scored 2.83,
  *  which fails even large-text AA, and #6E6E75 scored 4.09, which fails body.
- *  If you change a colour, re-measure — do not eyeball it. */
+ *  If you change a colour, re-measure - do not eyeball it. */
 export const CONTRAST_ON_PAPER = {
   ink: 14.71,
   inkSoft: 5.19,

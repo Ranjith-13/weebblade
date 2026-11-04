@@ -376,12 +376,12 @@ export function formatAirDate(a: Anime): string | null {
 
 /* ---------------------------------------------------------------------------
  * Corrections for what the API actually returns. Each of these is a measured
- * problem, not a defensive guess — see DESIGN.md §"What the data actually is".
+ * problem, not a defensive guess - see DESIGN.md §"What the data actually is".
  * ------------------------------------------------------------------------ */
 
 /** Kept as a cheap guard, not because the warehouse is wrong. Apparent
  *  duplicates in a paged fetch turned out to be an unstable ORDER BY, not bad
- *  data — see the note in lib/api.ts. With a stable sort the one-season
+ *  data - see the note in lib/api.ts. With a stable sort the one-season
  *  catalogue came back as 142 rows and 142 distinct ids. This stays so that a
  *  future change of sort, or a
  *  second ingestion source coming back online with an overlapping id, cannot
@@ -399,7 +399,7 @@ export function dedupeAnime(items: Anime[]): Anime[] {
 }
 
 /** `popularity` is a RANK, not a count: lower means MORE popular. Verified
- *  against the live data — the lowest values are Saga of Tanya the Evil II and
+ *  against the live data - the lowest values are Saga of Tanya the Evil II and
  *  Mushoku Tensei S3, the highest are titles with no score and zero favourites.
  *  The API's only popularity sort is `popularity_desc`, which therefore returns
  *  the LEAST popular first. We sort locally instead of using it. */
@@ -965,7 +965,7 @@ export function sourceLabel(source: string): string {
   return SOURCE_LABELS[source] ?? source;
 }
 
-/** "Kitsu and MyAnimeList" — an Oxford-free list, because it reads as prose. */
+/** "Kitsu and MyAnimeList" - an Oxford-free list, because it reads as prose. */
 export function joinSources(sources: string[]): string {
   const names = sources.map(sourceLabel);
   if (names.length === 0) return "no sources";

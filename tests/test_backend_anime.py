@@ -128,7 +128,7 @@ def test_anime_endpoints_503_when_no_warehouse(tmp_path, monkeypatch):
 @pytest.fixture
 def tied_client(tmp_path):
     """A catalogue that is almost entirely one tie block, spread over several
-    parquet files — which is what the real lake looks like, and what it takes to
+    parquet files - which is what the real lake looks like, and what it takes to
     reproduce the bug.
 
     Both details matter. The default fixture above has two rows with distinct

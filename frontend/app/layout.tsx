@@ -127,7 +127,7 @@ export default function RootLayout({
         </main>
 
         {/* The footer states what is actually true today rather than what the
-            architecture allows — and reads it from the data, because the version
+            architecture allows - and reads it from the data, because the version
             that stated it in prose went stale the moment MAL joined and told
             every visitor for days that this was a one-source site. */}
         <footer className="mt-20 border-t border-rule">

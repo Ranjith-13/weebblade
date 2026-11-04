@@ -1,4 +1,4 @@
-# WeebBlade — Roadmap
+# WeebBlade - Roadmap
 
 What is worth doing next, what it costs, and what state each item is actually in.
 
@@ -8,7 +8,7 @@ roadmaps disagree with each other within a week.
 **How this file is kept.** An item moves to Done when something was *checked*, not when
 code was written. The distinction is not pedantry: the round of work that produced the
 first version of this file reported a CORS rule as safe, a test suite as passing, a
-document as updated and a cold-start figure as known — and of those four, one was
+document as updated and a cold-start figure as known - and of those four, one was
 verified live to be unsafe, one was a single file out of 406 tests, one had not been
 touched at all, and one had never been measured by anyone. Every claim below says how
 it was established.
@@ -31,14 +31,14 @@ so without a rule a preview's search box fails while production's works.
 Shipped as `allow_origin_regex`, then **corrected**: the first version was
 `^https://weebblade(-.*)?\.vercel\.app$`, described as supporting previews "without
 exposing the API to unauthorized domains". It did the opposite. `vercel.app` is a shared
-suffix and project names are free-form, so anyone can register a matching name — verified
+suffix and project names are free-form, so anyone can register a matching name - verified
 against the live API, which returned `access-control-allow-origin` for
 `weebblade-malware.vercel.app`.
 
 Now pinned to the `-git-` preview shape, overridable by `ALLOWED_ORIGIN_REGEX`, with a
 test fixing the three origins the first version let through.
 
-*Verified:* live, after deploy — production and `weebblade-git-*` allowed,
+*Verified:* live, after deploy - production and `weebblade-git-*` allowed,
 `weebblade-malware` and `weebblade-anything` denied.
 
 **Honest limit:** no pattern over somebody else's domain is squat-proof. This is tolerable
@@ -50,7 +50,7 @@ is not the control to rely on.
 
 A free instance sleeps after 15 idle minutes. Two halves shipped:
 
-- **Warm-up ping** (`frontend/components/WarmupPing.tsx`) — a background `/health` call on
+- **Warm-up ping** (`frontend/components/WarmupPing.tsx`) - a background `/health` call on
   page load, so the API wakes while the reader is reading rather than when they hit search.
   On-demand deliberately: a 14-minute external pinger would hold the container awake 744
   hours a month against an allowance of 750, which is the whole budget spent on nobody.
@@ -68,7 +68,7 @@ asleep while it was awake. Now half a minute, after 5s.
 
 ---
 
-## Open — measurement
+## Open - measurement
 
 ### 3. [x] Time an actual cold start
 
@@ -97,7 +97,7 @@ were lost and the request woke the container - costing another 17 minutes. curl 
 
 ---
 
-## Open — pipeline
+## Open - pipeline
 
 ### 4. [x] Retire Jikan
 
@@ -130,8 +130,8 @@ true even though the source is gone.
 
 ### 4b. [x] Social cards per title
 
-Every title page sent the site's own card — the same picture and the same
-sentence whichever of 6,359 shows you posted — so a shared link said nothing
+Every title page sent the site's own card - the same picture and the same
+sentence whichever of 6,359 shows you posted - so a shared link said nothing
 about the show. Each title now renders its own: artwork, name, the facts, and
 the certainty treatment, which is the one idea the design runs on (DESIGN.md §2)
 applied in the place strangers see it first. A scored title prints a flag-pink
@@ -158,8 +158,8 @@ also a 200.
 
 ### 5. [x] Warn before the GitHub token expires
 
-The token expires **2027-10-13**. The API already names the failure once it happens — a 401
-logs `GITHUB_TOKEN is expired, revoked or wrong` — but nothing warns beforehand, and the
+The token expires **2027-10-13**. The API already names the failure once it happens - a 401
+logs `GITHUB_TOKEN is expired, revoked or wrong` - but nothing warns beforehand, and the
 symptom (a warehouse that stops updating, then 503s after a restart) is easy to misread.
 
 Done: `pipeline/token_expiry.py`, called by the weekly run with `if: always()` - a run that
@@ -185,32 +185,32 @@ two places name it and a regenerated token has to update both.
 
 ---
 
-## Open — interface
+## Open - interface
 
 Found by reading the live site at 1440 and 375, against `frontend/DESIGN.md`.
 
 ### 6. [x] The best thing on the site is invisible
 
-A title page carries a per-source changelog — *"Score 8.2 to 8.1, per AniList"*, *"Premiere
+A title page carries a per-source changelog - *"Score 8.2 to 8.1, per AniList"*, *"Premiere
 moved from 1 October to 2 October, per MyAnimeList"*, *"Now on Netflix, per Kitsu and
-AniList"* — and an airing block that states its own provenance and freshness. No other
+AniList"* - and an airing block that states its own provenance and freshness. No other
 anime site has this. It is the pipeline made visible, and it sat below a facts table,
 below the fold, reachable only by opening a title and scrolling.
 
 **Done on the title page:** a line under the title says *"6 changes recorded, the latest on
 11 October"* and links to the section, so scrolling for it is a decision rather than an
 accident. Conditional, because the weekly run refetches only the current season and most
-older titles have no history — a pointer to an empty section would promise what the page
+older titles have no history - a pointer to an empty section would promise what the page
 cannot show. The smoke suite asserts it as an implication: where the section exists, so
 does a link to it.
 
 **Done on the home page:** a line under the digest says what the week held and links to
-`/changes` — *"The sources changed their minds 361 times this week — 147 scores, 80
+`/changes` - *"The sources changed their minds 361 times this week - 147 scores, 80
 streaming links and 55 starts and finishes, each with the source that reported it."*
 Counted from the feed, never written down.
 
 **That needed no API change**, which this file previously said it would. `/changes` already
-returns every entry with its `wb_id` in one small cached request — the same shape that made
+returns every entry with its `wb_id` in one small cached request - the same shape that made
 the plate airdates free. The note was written before that was noticed; a marker on an
 individual plate would still need the backend, because `changes` is empty on list rows.
 
@@ -552,7 +552,7 @@ other, and both just doubled their input. Recent weeklies ran 10-14 minutes agai
 `ai/search/similar.py` says "6,359 x 6,359 at 384 dimensions is a few seconds" in a docstring.
 That number is about to be wrong; re-measure it on Sunday rather than guessing a new one.
 
-## Open — carried over, not urgent
+## Open - carried over, not urgent
 
 - **Six poster URLs are dead upstream** at Kitsu (404 at origin, confirmed), and still are:
   a liveness check at ingest would cost 6,359 HEAD requests a week, which is why it has not
@@ -560,11 +560,11 @@ That number is about to be wrong; re-measure it on Sunday rather than guessing a
   every poster rather than instead of it, so a dead URL reveals the no-artwork treatment the
   design already had, and one that dies between runs is covered too. The gap that remains is
   upstream data, not rendering.
-- ~~**Romaji search recall is 24/40**~~ — **fixed 2026-10-16, and the 24/40 was not
+- ~~**Romaji search recall is 24/40**~~ - **fixed 2026-10-16, and the 24/40 was not
   reproducible.** See item 13.
 - **533 titles have no synopsis anywhere** (2026-10-14; 26 were fillable when checked).
   Upstream gap.
-- **40 titles are `airing_unconfirmed`** (2026-10-14) — nothing upstream can confirm them.
+- **40 titles are `airing_unconfirmed`** (2026-10-14) - nothing upstream can confirm them.
 - **State lives in two places**, GitHub releases and one laptop. No third copy.
 - **The repo is private**, so the API needs a token to read its own warehouse. Making it
   public removes that dependency and the 2027 expiry with it. The history scan was clean.
@@ -607,7 +607,7 @@ file anywhere, and all three suspend at the quota rather than charging.
 
 | Item | Mechanism | Allowance | Risk |
 |---|---|---|---|
-| 1. Preview CORS | code only | — | none |
+| 1. Preview CORS | code only | - | none |
 | 2. Warm-up ping | browser calls `/health` on load | Render free: 512 MB, **750 instance-hours/month** | on-demand only; the container sleeps when nobody visits. An always-on pinger would spend 744 of 750 and was rejected for that |
 | 4. Retire Jikan | fewer ingest calls | GitHub Actions: 2,000 min/month, using ~20 | reduces usage |
 | 5. Token warning | date check in the weekly | existing ntfy topic | none |

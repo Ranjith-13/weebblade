@@ -35,7 +35,7 @@ import {
  *
  *   1. PAGINATION IS UNSTABLE under the default sort. `score_desc` orders by
  *      `score_100 DESC NULLS LAST`, and in the one-season catalogue this was
- *      measured on, 103 of 142 rows were NULL — so the tie
+ *      measured on, 103 of 142 rows were NULL - so the tie
  *      block has no deterministic order and LIMIT/OFFSET slices a differently
  *      shuffled result each time. Measured: three identical two-page fetches
  *      returned 126, 116 and 122 distinct titles, differing by 30-40 ids. Rows
@@ -44,14 +44,14 @@ import {
  *      `sort=title` orders by COALESCE(title_english, title_romaji) and is
  *      stable: 142 rows, 142 distinct ids then, identical across runs. That is why
  *      the fetch below pins the sort and reorders locally afterwards.
- *   2. `popularity` is a rank — lower is more popular — and the only sort the
+ *   2. `popularity` is a rank - lower is more popular - and the only sort the
  *      API offers is `popularity_desc`, i.e. least-popular-first.
  *   3. The genre filter list had to be hardcoded, and had drifted: "Sci-Fi"
  *      matched nothing because the real tag is "Science Fiction".
  *
  * A season is two to four hundred titles. Fetching all of it once and deriving
  * every view locally fixes all three, and costs FEWER upstream requests than
- * passing views through — which matters because the API rate limits per IP and
+ * passing views through - which matters because the API rate limits per IP and
  * every visitor shares this app's egress addresses.
  *
  * ONE SEASON, NEVER THE CATALOGUE
@@ -192,7 +192,7 @@ export type Season = {
   items: Anime[];
   /** Which season this is, and its key for links. Null only if nothing is tagged. */
   key: string | null;
-  /** Distinct titles after dedupe — the honest count. */
+  /** Distinct titles after dedupe - the honest count. */
   total: number;
   /** Rows the API returned before dedupe. Surfaced so the UI can be candid
    *  about the discrepancy rather than silently papering over it. */
@@ -530,7 +530,7 @@ export async function getSeason(key?: string): Promise<Season> {
 }
 
 /** Genre and format facets derived from the data, with real counts. Replaces a
- *  hardcoded list that had drifted out of sync — a chip that returns nothing is
+ *  hardcoded list that had drifted out of sync - a chip that returns nothing is
  *  worse than no chip. Only genres with enough titles to be worth a click are
  *  offered; the long tail (131 distinct genres in Summer 2026, 218 across the
  *  catalogue, as of 2026-09-14) is not a usable filter row. */
@@ -577,7 +577,7 @@ export function facetsOf(items: Anime[]): Facets {
        makes a good facet where studios do not: 11 values spread across the
        season (61 original, 35 manga, 27 light novel) against 135 distinct
        studios of which exactly two have four titles. Studio is a filter reached
-       from a title, not a row of chips — see the `studio` param in /browse. */
+       from a title, not a row of chips - see the `studio` param in /browse. */
     materials: tally(items.map((a) => a.source_material)),
   };
 }
@@ -645,7 +645,7 @@ export async function getLatestDigest(): Promise<Digest | null> {
   try {
     return readable(await getJson<Digest>(buildUrl("/digest/latest")));
   } catch (err) {
-    // 503 is the documented "no digest generated yet" state, not a failure —
+    // 503 is the documented "no digest generated yet" state, not a failure  - 
     // the home page renders an honest empty state rather than an error.
     if (err instanceof ApiError && err.status === 503) return null;
     throw err;

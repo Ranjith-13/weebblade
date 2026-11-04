@@ -30,7 +30,7 @@ type State =
 
 /* Deliberately client-side, unlike every other data read in this app. Two
  * reasons: /search is rate-limited at 20/min per client IP, and fetching it
- * server-side would pool every visitor into one shared budget — client-side,
+ * server-side would pool every visitor into one shared budget - client-side,
  * each visitor spends their own. Queries are unique per user, so server caching
  * would buy nothing, and results have no SEO value worth prerendering. */
 export function SearchClient({ total }: { total: number }) {
@@ -111,7 +111,7 @@ export function SearchClient({ total }: { total: number }) {
   /* Distances come back in a narrow band (roughly 1.0–1.5 in practice), so the
      raw float tells a reader almost nothing on its own. Normalising within the
      result set turns it into a visible ranking, while the actual number stays
-     on the row — this is embedding search, and hiding the metric entirely would
+     on the row - this is embedding search, and hiding the metric entirely would
      misrepresent it as something more certain than it is. */
   const closeness = (results: SearchResult[], d: number) => {
     const lo = Math.min(...results.map((r) => r.distance));

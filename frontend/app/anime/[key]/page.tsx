@@ -88,14 +88,14 @@ export async function generateMetadata(props: PageProps<"/anime/[key]">) {
     // through, so the 404 carries its noindex. Swallowing it here served every
     // unknown identity as an indexable page titled "Title".
     unstable_rethrow(err);
-    // Anything else must not be the thing that breaks a page — the page's own
+    // Anything else must not be the thing that breaks a page - the page's own
     // load() will surface a real error on its own.
     return { title: "Title" };
   }
 }
 
 /* Shell prerenders; the params-dependent body streams inside <Suspense>.
- * Required by Cache Components — reading `params` outside a boundary makes the
+ * Required by Cache Components - reading `params` outside a boundary makes the
  * route unprerenderable and blocks first paint on an upstream round-trip. */
 export default function AnimeDetailPage(props: PageProps<"/anime/[key]">) {
   return (
