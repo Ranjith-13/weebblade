@@ -151,7 +151,7 @@ jobs:
       - name: Write the run to RUNS.md
         if: always()
         run: |
-          printf -- '- %s weekly — %s ([log](%s/%s/actions/runs/%s))\n' \
+          printf -- '- %s weekly - %s ([log](%s/%s/actions/runs/%s))\n' \
             "$(date -u +%Y-%m-%d)" "${{ job.status }}" \
             "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" \
             > /tmp/line

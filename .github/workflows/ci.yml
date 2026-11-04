@@ -53,6 +53,12 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
+      # PySpark needs a JVM (Java 17). tests/test_consolidate_merge.py runs Spark.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17" 
+
       # sentence-transformers pulls torch as a dependency, and PyPI's default wheel
       # is the CUDA/GPU build - several GB of unnecessary nvidia-*/triton packages
       # that exhausted disk on both the EC2 build and (found here) the Actions
