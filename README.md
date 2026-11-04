@@ -1,14 +1,19 @@
 # WeebBlade
 
-Anime trend-tracking platform built as an end-to-end data engineering project —
-ingestion, orchestration, processing, storage, an API, a frontend, and two AI-assisted
-features on real pipeline infrastructure, not a one-off notebook.
+An automated seasonal anime trend-tracking and intelligence platform powered by an end-to-end data engineering pipeline — multi-source ingestion, PySpark schema reconciliation, DuckDB analytical storage, a containerized FastAPI service, and a Next.js edge application with dense vector semantic search and LLM trend synthesis.
 
-Live: **[weebblade.vercel.app](https://weebblade.vercel.app)** · API:
-[weebblade-api.onrender.com](https://weebblade-api.onrender.com) — both free, serving the warehouse
-the pipeline publishes. The catalogue is refetched weekly; the warehouse is published daily,
-so the schedule and the daily score readings reach a reader the morning after they are taken. See
-[Where it runs](#where-it-runs).
+Live Application: **[weebblade.vercel.app](https://weebblade.vercel.app)** · Analytical API: **[weebblade-api.onrender.com](https://weebblade-api.onrender.com)**
+
+---
+
+### Documentation Index
+- **[System & Architecture Overview](PROJECT_OVERVIEW.md)** — Domain challenges, cross-source entity resolution, field-level precedence merge, and data flow.
+- **[Frontend Architecture Specification](frontend/ARCHITECTURE.md)** — Next.js 16 App Router implementation, caching boundaries, 502/503 retry policies, and Tokyo JST date calculations.
+- **[Design System Manifesto](frontend/DESIGN.md)** — The 'Halftone Almanac' design standard, computed WCAG contrast tokens, and GSAP motion principles.
+- **[Capacity & Growth Analysis](GROWTH.md)** — Compute economics, monthly runner budgets, memory profiles (512 MB Render ceiling), and quadratic vector search scaling.
+- **[Engineering Decision Ledger](ROADMAP.md)** — Historical decision records, benchmarked cold-start timings, and verified operational boundaries.
+
+---
 
 ## What it does
 
