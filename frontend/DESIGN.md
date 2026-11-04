@@ -25,7 +25,7 @@ Measured against the live API, not assumed. Everything below drove a design deci
 
 This table is from when the warehouse held one season. It now holds twenty-two (Fall 2021 to
 Winter 2027, 6,359 titles from Kitsu, MAL and AniList on 2026-10-14), reached from the season
-index in the header; see frontend/CLAUDE.md, "Getting to a season". The coverage figures below
+index in the header; see frontend/ARCHITECTURE.md, "Getting to a season". The coverage figures below
 were measured on 2026-09-14 over the 6,136 the warehouse held then, and are kept at that date
 rather than refreshed, because what they are evidence for is the shape of the gaps: score
 58% (88% of a season's TV), poster 99.9%, popularity 98.6%, studios 57%, trailer 48%, a streaming

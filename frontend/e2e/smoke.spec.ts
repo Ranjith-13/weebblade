@@ -663,7 +663,7 @@ for (const width of [390, 1440]) {
 }
 
 /* NOTHING MAY PUSH THE PAGE SIDEWAYS. The nav's five sections already take
-   352px of a 390px line, which CLAUDE.md records as a measurement and which,
+   352px of a 390px line, which ARCHITECTURE.md records as a measurement and which,
    until this test, nothing enforced: adding the theme toggle beside them gave
    the site its first horizontal scrollbar and it was caught by hand, which is
    not a process. The toggle rides with the wordmark for this reason. */

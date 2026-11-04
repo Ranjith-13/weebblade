@@ -14,7 +14,7 @@ import nextTs from "eslint-config-next/typescript";
  * need no allowlist and a reader can see that the dash there is deliberate.
  *
  * Comments are not matched: they are not AST nodes these selectors can reach,
- * and this file, DESIGN.md and CLAUDE.md all discuss the character at length.
+ * and this file, DESIGN.md and ARCHITECTURE.md all discuss the character at length.
  * The en-dash is not matched either - "A-Z" in the sort chips is a range, which
  * is what an en-dash is for.
  */

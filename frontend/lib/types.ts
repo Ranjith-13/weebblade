@@ -38,7 +38,7 @@ export const SITE_URL =
 /** Mirrors backend/app/schemas.py:Anime. Almost everything is nullable because
  *  the sources genuinely disagree on what they provide - Kitsu carries no studios
  *  or source material, MAL no slug, cover art, trailer or streaming link. Coverage
- *  per field is in frontend/CLAUDE.md, "Sparse fields". */
+ *  per field is in frontend/ARCHITECTURE.md, "Sparse fields". */
 export type Anime = {
   source: string;
   source_id: string;

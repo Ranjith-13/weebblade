@@ -269,7 +269,7 @@ build.
 Closed by measuring rather than by deciding, because the premise was false.
 
 I wrote that the halftone had stopped doing anything on the default view, reasoning from a
-figure in `CLAUDE.md`: "88% of a season's TV is scored now". That number is real and it is
+figure in `frontend/ARCHITECTURE.md`: "88% of a season's TV is scored now". That number is real and it is
 the wrong one to reason from. It was measured on 2026-09-14, when the default view was a
 Summer season well into its run. **The default is never a settled season** - `startedSeason`
 picks the newest that has STARTED, which is always the one whose titles have had the least

@@ -1,6 +1,4 @@
-@AGENTS.md
-
-# Frontend
+# Frontend Architecture & Engineering Specification
 
 Read `DESIGN.md` before changing anything visual. Most choices here are measured, not preferences.
 
