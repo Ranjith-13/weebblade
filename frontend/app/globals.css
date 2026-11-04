@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   WeebBlade — token layer.  Direction: "Halftone Almanac, colour as certainty".
+   WeebBlade - token layer.  Direction: "Halftone Almanac, colour as certainty".
    See DESIGN.md for the reasoning. Nothing below is decorative-by-accident:
    the palette is the product's honesty about its own data.
 
@@ -14,8 +14,8 @@
    and dithers out to visible halftone. Colour is the reward for known data.
 
    CONTRAST IS COMPUTED, NOT EYEBALLED
-   The first draft of this palette used #FF2E88 (2.83:1 on paper — fails even
-   large-text AA) and #6E6E75 for muted text (4.09:1 — fails body). Both were
+   The first draft of this palette used #FF2E88 (2.83:1 on paper - fails even
+   large-text AA) and #6E6E75 for muted text (4.09:1 - fails body). Both were
    replaced with measured values. Every pair below is >= 4.5:1 against its
    intended background, so there is no "accessible variant" to remember.
    ========================================================================= */
@@ -30,7 +30,7 @@
 
   /* --- ink ----------------------------------------------------------------- */
   --color-ink: #15151a; /* 14.71:1 on paper */
-  --color-ink-soft: #5e5e66; /* 5.19:1 on paper — passes body, unlike #6E6E75 */
+  --color-ink-soft: #5e5e66; /* 5.19:1 on paper - passes body, unlike #6E6E75 */
 
   /* --- the two signal colours ---------------------------------------------
      flag  = "this value is known" (scores, live counts)
@@ -74,7 +74,7 @@
 }
 
 /* ============================================================================
-   DARK — the same ink on a darker stock, not an inverted web page.
+   DARK - the same ink on a darker stock, not an inverted web page.
    ========================================================================= */
 /* The design is an almanac, so the dark palette is a printing decision rather
    than a filter: the stock changes and the ink changes with it. Both signal
@@ -204,7 +204,7 @@ body > * {
 }
 
 /* ---------------------------------------------------------------------------
-   CERTAINTY  — the one idea, expressed as two utilities.
+   CERTAINTY  - the one idea, expressed as two utilities.
    .plate-known    full colour, untouched artwork
    .plate-unknown  drained to grey and screened back to halftone
    Applied from real data (score_100 != null), never decoratively.
@@ -548,7 +548,7 @@ body:has([data-footer-waits]) > footer {
   display: none;
 }
 
-/* Digest prose. Not @tailwindcss/typography — its defaults (rounded code
+/* Digest prose. Not @tailwindcss/typography - its defaults (rounded code
    blocks, its own grey scale) fight this palette, and the digest is plain
    Markdown: headings, paragraphs, lists, emphasis. */
 .digest-prose {

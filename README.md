@@ -131,8 +131,8 @@ scripts/pinned-tests.sh
 
 | Layer | Technologies |
 | :--- | :--- |
-| **Pipeline & Processing** | Python 3.11, Apache Airflow, PySpark, DuckDB, Parquet |
-| **AI & Embeddings** | Groq (Llama 3), ONNX Runtime, sentence-transformers (`all-MiniLM-L6-v2`) |
+| **Pipeline & Processing** | Python 3.11, Apache Airflow (DAGs), PySpark, DuckDB, Parquet |
+| **AI & Embeddings** | Groq API, ONNX Runtime, sentence-transformers (`all-MiniLM-L6-v2`) |
 | **Backend API** | FastAPI, Uvicorn, Pydantic, SlowAPI (Rate Limiting) |
 | **Frontend UI** | Next.js 16 (App Router), React, Tailwind CSS, GSAP, Playwright |
 | **Infrastructure & CI** | GitHub Actions, Render (Docker), Vercel, GitLab Registry (Backup Mirror) |
